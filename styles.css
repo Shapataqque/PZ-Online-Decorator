@@ -34,3 +34,38 @@ body.lightMode .tutorialCard{background:#fff;color:#26343d;border-color:#9eabb5;
 body.lightMode #supportBtn{background:#fff8df;border-color:#b99a3e}body.lightMode #supportBtn:hover{background:#fff1bf}
 body.lightMode .nightModeSwitch{color:#4e626f}body.lightMode .switchTrack{background:#c8d1d7;border-color:#aab6bf}body.lightMode .switchKnob{background:#fff}
 .creditsDialog p{margin:0 0 10px}.creditsDialog a{color:#69baf1}body.lightMode .creditsDialog a{color:#176a9d}
+.versionButton {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 2px 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.versionButton:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.versionHistory section {
+  margin-bottom: 22px;
+}
+
+.versionHistory h4 {
+  margin: 0 0 4px;
+}
+
+.versionHistory small {
+  color: var(--muted);
+}
+
+.versionHistory ul {
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
+.versionHistory li {
+  margin: 5px 0;
+}
