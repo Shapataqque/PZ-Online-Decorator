@@ -1,0 +1,4 @@
+{
+  "compilerOptions": {"target":"ES2020","lib":["DOM","DOM.Iterable","ES2020"],"module":"none","outFile":"dist/app.js","strict":true,"skipLibCheck":true,"removeComments":true,"noEmitOnError":true},
+  "files":["src/types.ts","src/model.ts","src/pack.ts","src/assets.ts","src/furniture-data.ts","src/buildingtiles-data.ts","src/tiledefs.ts","src/catalog.ts","src/pzmap.ts","src/renderer.ts","src/editor.ts","src/app.ts"]
+}

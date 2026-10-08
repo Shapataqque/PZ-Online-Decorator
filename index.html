@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'; media-src 'none'; worker-src 'none'">
+  <title>PZ Online Decoration Tool 1.9.0</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><b>PZ Online Decoration Tool</b><span>1.9.0 Release</span></div>
+  <button id="newMapBtn">New</button>
+  <button id="loadLocationBtn" class="primary">Load PZ Location</button>
+  <span class="sep"></span>
+  <button id="openJsonBtn">Open .json file</button>
+  <button id="saveJsonBtn">Save as .json</button>
+  <span class="grow"></span>
+  <button id="feedbackBtn">Feedback</button>
+  <button id="supportBtn" class="hidden">Support</button>
+  <button id="settingsBtn">Settings</button>
+  <button id="undoBtn">Undo</button>
+  <button id="redoBtn">Redo</button>
+</header>
+
+<div class="toolrow" id="toolrow">
+  <button data-tool="pencil" class="active">1 Pencil</button>
+  <button data-tool="eraser">2 Erase</button>
+  <button data-tool="rect">3 Rectangle</button>
+  <button data-tool="picker">4 Picker</button>
+  <button data-tool="pan">5 Pan</button>
+  <span class="sep"></span>
+  <button id="rotateBtn">R Rotate object</button>
+  <span id="selectionLabel">No tile selected</span>
+</div>
+
+<main class="layout">
+  <aside class="left panel" id="leftPanel">
+    <div class="panelHeader"><span>Assets</span><button id="collapseLeftBtn" class="panelToggle">&lt;&lt;</button></div>
+    <div class="tabs"><button class="tab active" data-tab="tiles">Tiles</button><button class="tab" id="furnitureTabButton" data-tab="furniture">Furniture</button></div>
+    <section id="tilesTab" class="tabbody active">
+      <input id="tileSearch" class="search" placeholder="Search tile or tileset…" autocomplete="off">
+      <select id="tilesetSelect"><option value="">All tilesets</option></select>
+      <div id="assetSummary" class="hint">Load a PZ location to index the media library.</div>
+      <div id="tileList" class="tilelist"></div>
+    </section>
+    <section id="furnitureTab" class="tabbody">
+      <input id="furnitureSearch" class="search" placeholder="Search beds, tables, group, tile…" autocomplete="off">
+      <select id="furnitureCategory"><option value="">All furniture categories</option></select>
+      <label class="check"><input id="availableOnly" type="checkbox" checked> only objects with all required tiles loaded</label>
+      <div id="furnitureList" class="furniturelist"></div>
+    </section>
+  </aside>
+
+  <section class="stage" id="stage">
+    <canvas id="glCanvas"></canvas><canvas id="overlayCanvas"></canvas>
+    <div id="stageBadge">Z 0</div>
+    <div id="performanceStats" class="performanceStats hidden"></div>
+    <button id="openLeftPanelBtn" class="stagePanelToggle leftOpen hidden">&gt;&gt;</button>
+    <button id="openRightPanelBtn" class="stagePanelToggle rightOpen hidden">&lt;&lt;</button>
+  </section>
+
+  <aside class="right panel" id="rightPanel">
+    <div class="panelHeader"><span>Inspector</span><button id="collapseRightBtn" class="panelToggle">&gt;&gt;</button></div>
+    <h3>Selection</h3>
+    <canvas id="previewCanvas" width="260" height="180"></canvas>
+    <div id="selectionInfo" class="selectionInfo">Nothing selected.</div>
+    <div id="orientationButtons" class="orientations"></div>
+    <h3>Map</h3>
+    <div class="row"><button id="centerBtn">Center</button></div>
+    <div class="row"><label>Z level<select id="zLevel"></select></label><button id="addLevelBtn">+ Level</button></div>
+    <h3>View filters</h3>
+    <div id="viewFilters" class="viewFilters"></div>
+    <div class="hint">Display-only filters. Imported object stacks are not rewritten.</div>
+    <h3>Layers</h3>
+    <div class="row"><button id="addLayerBtn">+ Layer</button></div>
+    <div id="layersList" class="layers"></div>
+  </aside>
+</main>
+<footer><span id="status">Ready.</span><span id="coords">x — y —</span></footer>
+
+<dialog id="settingsDialog" class="dialog">
+  <form method="dialog">
+    <div class="dialogTitle"><div><b>Settings</b><small>Display and help</small></div><button id="settingsCloseBtn" type="button">×</button></div>
+    <div class="dialogBody">
+      <section><h4>Graphics</h4>
+        <label>Quality<select id="graphicsQuality"><option value="low">Low — lower render and sprite texture resolution</option><option value="medium">Medium — balanced</option><option value="high">High — full resolution</option></select></label>
+        <div class="hint">Low reduces canvas and GPU sprite-texture resolution for better performance on large imported buildings.</div>
+        <label class="check"><input id="performanceStatsToggle" type="checkbox"> Show Performance Stats</label>
+      </section>
+      <section><h4>Help</h4><button id="startTutorialBtn" type="button">Start tutorial</button></section>
+    </div>
+    <div class="dialogActions"><button id="settingsDoneBtn" class="primary" type="button">Done</button></div>
+  </form>
+</dialog>
+
+<dialog id="loadDialog" class="dialog importDialog">
+  <form method="dialog">
+    <div class="dialogTitle"><div><b>Load PZ Location</b></div><button id="loadCancelBtn" type="button">×</button></div>
+    <div class="dialogBody">
+      <section><h4>1. Project Zomboid media folder</h4>
+        <button id="chooseMediaBtn" type="button">Choose media Folder…</button>
+        <div class="hint">Select <b>...\ProjectZomboid\media</b>. Maps, .lotpack, .pack textures, PNG tilesheets and .tiles object definitions are read locally from this folder.</div>
+        <div id="mediaInfo" class="hint">No media folder selected.</div>
+        <label>Map dataset<select id="datasetSelect"><option value="">Select media folder first</option></select></label>
+      </section>
+      <section><h4>2. Location</h4><div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div></section>
+      <section><h4>3. Load</h4>
+        <label>Mode<select id="loadMode"><option value="building">Building at coordinate</option><option value="area">Area around coordinate</option><option value="cell">Entire map cell</option></select></label>
+        <div id="marginRow"><label>Extra margin<input id="marginInput" type="number" min="0" max="20" value="2"></label></div>
+        <div id="areaRow" class="coords2 hidden"><label>Area width<input id="areaW" type="number" min="1" max="300" value="48"></label><label>Area height<input id="areaH" type="number" min="1" max="300" value="48"></label></div>
+      </section>
+      <div id="loadStatus" class="importStatus">Ready.</div>
+    </div>
+    <div class="dialogActions"><button id="indexMediaBtn" type="button" disabled>Index media only</button><button id="loadBtn" type="button" class="primary" disabled>Load Location</button></div>
+  </form>
+</dialog>
+
+<dialog id="feedbackDialog" class="dialog feedbackDialog">
+  <form method="dialog">
+    <div class="dialogTitle"><div><b>Feedback</b><small>Bug report, feature request, or general feedback</small></div><button id="feedbackCloseBtn" type="button">×</button></div>
+    <div class="dialogBody">
+      <label>Type<select id="feedbackType"><option value="Bug report">Bug report</option><option value="Feature request">Feature request</option><option value="General feedback">General feedback</option></select></label>
+      <label>Message<textarea id="feedbackMessage" maxlength="6000" rows="8" placeholder="Describe what happened or what you would like to see."></textarea></label>
+      <label>Contact (optional)<input id="feedbackContact" maxlength="200" autocomplete="email" placeholder="Email or username"></label>
+      <label class="check"><input id="feedbackTechnical" type="checkbox" checked> Include basic technical information (app version, browser, graphics quality)</label>
+      <div class="hint">Local file paths, map coordinates, and project contents are never included automatically.</div>
+      <div id="feedbackStatus" class="importStatus">Your feedback stays in this browser until you submit or copy it.</div>
+    </div>
+    <div class="dialogActions"><button id="feedbackCopyBtn" type="button">Copy</button><button id="feedbackSendBtn" class="primary" type="button">Send feedback</button></div>
+  </form>
+</dialog>
+
+<div id="tutorialOverlay" class="tutorialOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
+  <div id="tutorialSpotlight" class="tutorialSpotlight"></div>
+  <div class="tutorialCard">
+    <div class="tutorialProgress" id="tutorialProgress">1 / 9</div>
+    <h2 id="tutorialTitle">Welcome</h2>
+    <p id="tutorialText"></p>
+    <label class="tutorialRemember"><input id="tutorialRemember" type="checkbox" checked> Don't show this tutorial automatically again</label>
+    <div class="tutorialActions"><button id="tutorialSkipBtn" type="button">Skip tutorial</button><span class="grow"></span><button id="tutorialBackBtn" type="button">Back</button><button id="tutorialNextBtn" class="primary" type="button">Continue</button></div>
+  </div>
+</div>
+
+<input id="mediaInput" type="file" webkitdirectory multiple hidden>
+<input id="jsonInput" type="file" accept=".json,application/json" hidden>
+<script src="config/release-config.js"></script>
+<script src="dist/app.js"></script>
+</body>
+</html>
