@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'; media-src 'none'; worker-src 'none'">
-  <title>PZ Online Decoration Tool 1.9.0</title>
+  <title>PZ Online Decoration Tool 1.0.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><span>1.9.0 Release</span></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><span>1.0.0</span></div>
   <button id="newMapBtn">New</button>
   <button id="loadLocationBtn" class="primary">Load PZ Location</button>
   <span class="sep"></span>
@@ -18,6 +18,7 @@
   <button id="saveJsonBtn">Save as .json</button>
   <span class="grow"></span>
   <button id="feedbackBtn">Feedback</button>
+  <label class="nightModeSwitch" title="Toggle night mode"><span>Night</span><input id="nightModeToggle" type="checkbox" checked aria-label="Night mode"><span class="switchTrack" aria-hidden="true"><span class="switchKnob"></span></span></label>
   <button id="supportBtn" class="hidden">Support</button>
   <button id="settingsBtn">Settings</button>
   <button id="undoBtn">Undo</button>
@@ -89,9 +90,24 @@
         <div class="hint">Low reduces canvas and GPU sprite-texture resolution for better performance on large imported buildings.</div>
         <label class="check"><input id="performanceStatsToggle" type="checkbox"> Show Performance Stats</label>
       </section>
-      <section><h4>Help</h4><button id="startTutorialBtn" type="button">Start tutorial</button></section>
+      <section><h4>Help</h4><div class="row"><button id="startTutorialBtn" type="button">Start tutorial</button><button id="creditsBtn" type="button">Credits</button></div></section>
     </div>
     <div class="dialogActions"><button id="settingsDoneBtn" class="primary" type="button">Done</button></div>
+  </form>
+</dialog>
+
+<dialog id="creditsDialog" class="dialog creditsDialog">
+  <form method="dialog">
+    <div class="dialogTitle"><div><b>Credits</b><small>PZ Online Decoration Tool is built on years of community mapping work.</small></div><button id="creditsCloseBtn" type="button">×</button></div>
+    <div class="dialogBody">
+      <p><b>Tim Baker</b> — original WorldEd and TileZed foundation.</p>
+      <p><b>Alree / Unjammer</b> — maintained PZ Mapping Tools continuation and Build 42-era work.</p>
+      <p><b>Thorbjørn Lindeijer and the Tiled contributors</b> — upstream Tiled foundation.</p>
+      <p><b>The Project Zomboid mapping and modding community</b> — workflows, testing, reports, tools, and shared knowledge.</p>
+      <p><b>The Indie Stone</b> — creators of Project Zomboid. This tool is unofficial and is not affiliated with or endorsed by The Indie Stone.</p>
+      <p class="hint">The complete attribution list and license provenance are in <a href="CREDITS.md" target="_blank" rel="noopener noreferrer">CREDITS.md</a>.</p>
+    </div>
+    <div class="dialogActions"><button id="creditsDoneBtn" class="primary" type="button">Done</button></div>
   </form>
 </dialog>
 
@@ -138,7 +154,7 @@
     <div class="tutorialProgress" id="tutorialProgress">1 / 9</div>
     <h2 id="tutorialTitle">Welcome</h2>
     <p id="tutorialText"></p>
-    <label class="tutorialRemember"><input id="tutorialRemember" type="checkbox" checked> Don't show this tutorial automatically again</label>
+    <label class="tutorialRemember"><input id="tutorialRemember" type="checkbox" checked> Don't show this tutorial on startup again</label>
     <div class="tutorialActions"><button id="tutorialSkipBtn" type="button">Skip tutorial</button><span class="grow"></span><button id="tutorialBackBtn" type="button">Back</button><button id="tutorialNextBtn" class="primary" type="button">Continue</button></div>
   </div>
 </div>

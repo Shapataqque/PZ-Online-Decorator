@@ -1,3 +1,8 @@
+/*
+ * PZ Online Decoration Tool
+ * Copyright (C) 2026 PZ Online Decoration Tool contributors
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 namespace PZODT {
   class TileDefReader{view:DataView;bytes:Uint8Array;pos=0;constructor(buf:ArrayBuffer){this.view=new DataView(buf);this.bytes=new Uint8Array(buf);}i32():number{if(this.pos+4>this.bytes.length)throw new Error('Truncated .tiles');const v=this.view.getInt32(this.pos,true);this.pos+=4;return v;}u8():number{if(this.pos>=this.bytes.length)throw new Error('Truncated .tiles');return this.bytes[this.pos++];}line():string{let s='';for(let i=0;i<1024*1024;i++){const c=this.u8();if(c===10)return s;s+=String.fromCharCode(c);}throw new Error('Invalid .tiles string');}seek(n:number){this.pos=n;}}
   export class TileDefDatabase{

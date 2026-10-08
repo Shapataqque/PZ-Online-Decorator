@@ -1,3 +1,8 @@
+/*
+ * PZ Online Decoration Tool
+ * Copyright (C) 2026 PZ Online Decoration Tool contributors
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 namespace PZODT {
   interface SheetRecord{name:string;file:File;path:string;scale:number;width:number;height:number;indexed:boolean;sourceId?:string;}
   export class AssetManager{

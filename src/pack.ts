@@ -1,3 +1,8 @@
+/*
+ * PZ Online Decoration Tool
+ * Copyright (C) 2026 PZ Online Decoration Tool contributors
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 namespace PZODT {
   export class BinReader{view:DataView;bytes:Uint8Array;pos=0;constructor(buf:ArrayBuffer){this.view=new DataView(buf);this.bytes=new Uint8Array(buf);}i32():number{if(this.pos+4>this.view.byteLength)throw new Error('Truncated file');const v=this.view.getInt32(this.pos,true);this.pos+=4;return v;}str():string{const n=this.i32();if(n<0||n>1024*1024||this.pos+n>this.bytes.length)throw new Error('Invalid string');const b=this.bytes.subarray(this.pos,this.pos+n);this.pos+=n;let s='';for(let i=0;i<b.length;i+=8192)s+=String.fromCharCode(...b.subarray(i,Math.min(i+8192,b.length)));return s;}slice(n:number):Uint8Array{if(n<0||this.pos+n>this.bytes.length)throw new Error('Truncated data');const b=this.bytes.slice(this.pos,this.pos+n);this.pos+=n;return b;}}
   export function parseTileName(name:string):{tilesetName:string;tileIndex:number}{const m=name.match(/^(.*)_([0-9]+)$/);return m?{tilesetName:m[1],tileIndex:+m[2]||0}:{tilesetName:name,tileIndex:0};}

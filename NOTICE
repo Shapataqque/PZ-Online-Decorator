@@ -1,0 +1,16 @@
+PZ Online Decoration Tool
+Copyright (C) 2026 PZ Online Decoration Tool contributors
+
+This project is distributed under the GNU General Public License, version 2
+or (at your option) any later version (GPL-2.0-or-later).
+
+This project contains source-derived behavior and data-format work based on
+GPL/BSD-licensed Project Zomboid mapping tools and their upstream Tiled roots.
+Upstream attribution is documented in CREDITS.md and applicable license texts
+are preserved under licenses/.
+
+Project Zomboid and its game assets are the property of their respective
+rights holders. No Project Zomboid game assets are distributed here.
+
+This is an unofficial community project and is not affiliated with or endorsed
+by The Indie Stone.

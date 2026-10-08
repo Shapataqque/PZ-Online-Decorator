@@ -1,3 +1,8 @@
+/*
+ * PZ Online Decoration Tool
+ * Copyright (C) 2026 PZ Online Decoration Tool contributors
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 namespace PZODT {
   export type PZImportMode='building'|'area'|'cell';
   export interface PZImportOptions{datasetId:string;x:number;y:number;mode:PZImportMode;margin:number;areaWidth:number;areaHeight:number;}

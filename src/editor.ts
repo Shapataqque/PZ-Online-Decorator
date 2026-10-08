@@ -1,3 +1,8 @@
+/*
+ * PZ Online Decoration Tool
+ * Copyright (C) 2026 PZ Online Decoration Tool contributors
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 namespace PZODT {
   export class EditorController{
     tool:ToolName='pencil';selectedAsset:string|null=null;selectedFurniture:FurnitureDef|null=null;furnitureOrient='N';isDown=false;pan=false;last={x:0,y:0};rectStart:{x:number;y:number}|null=null;changes=new Map<string,EditChange>();

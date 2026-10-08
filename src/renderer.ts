@@ -1,3 +1,8 @@
+/*
+ * PZ Online Decoration Tool
+ * Copyright (C) 2026 PZ Online Decoration Tool contributors
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 namespace PZODT {
   const SPATIAL_CHUNK_SIZE=16;
   interface GLTex{tex:WebGLTexture;width:number;height:number;}
@@ -38,7 +43,7 @@ namespace PZODT {
   export class WebGLMapRenderer{
     gl:WebGL2RenderingContext;program:WebGLProgram;lp:number;lu:number;lc:number;
     ur:WebGLUniformLocation;up:WebGLUniformLocation;uz:WebGLUniformLocation;ut:WebGLUniformLocation;uts:WebGLUniformLocation;ua:WebGLUniformLocation;ufm:WebGLUniformLocation;
-    textures=new Map<string,Promise<GLTex>>();resolved=new Map<string,GLTex>();quality:GraphicsQuality='high';raf=0;
+    textures=new Map<string,Promise<GLTex>>();resolved=new Map<string,GLTex>();quality:GraphicsQuality='high';nightMode=true;raf=0;
     hover:{x:number;y:number}|null=null;
     private chunkCache=new Map<string,ChunkCache>();
     private dirtyChunks=new Set<string>();
@@ -71,6 +76,7 @@ namespace PZODT {
     private prog(v:string,f:string){const p=this.gl.createProgram()!;this.gl.attachShader(p,this.shader(this.gl.VERTEX_SHADER,v));this.gl.attachShader(p,this.shader(this.gl.FRAGMENT_SHADER,f));this.gl.linkProgram(p);if(!this.gl.getProgramParameter(p,this.gl.LINK_STATUS))throw new Error(this.gl.getProgramInfoLog(p)||'link');return p;}
     private qCanvas(){return this.quality==='low'?.55:this.quality==='medium'?.78:1;}private qTex(){return this.quality==='low'?.5:this.quality==='medium'?.75:1;}ratio(){return Math.max(.4,(devicePixelRatio||1)*this.qCanvas());}
     setQuality(q:GraphicsQuality){if(this.quality===q)return;this.quality=q;this.resetTextures();this.resize();this.request();}
+    setNightMode(enabled:boolean){this.nightMode=enabled;this.request();}
     resetTextures(){this.textureEpoch++;for(const t of this.resolved.values())this.gl.deleteTexture(t.tex);this.textures.clear();this.resolved.clear();this.request();}
     assetsChanged(){this.resetTextures();this.invalidateAllGeometry();}
     resize(){const r=this.canvas.getBoundingClientRect(),q=this.ratio(),w=Math.max(1,Math.round(r.width*q)),h=Math.max(1,Math.round(r.height*q));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.overlay.width=w;this.overlay.height=h;}this.gl.viewport(0,0,w,h);}
@@ -132,7 +138,7 @@ namespace PZODT {
 
     render(){
       const started=performance.now();this.resize();const now=started;if(this.lastFrameAt){const inst=1000/Math.max(.1,now-this.lastFrameAt);this.smoothedFps=this.smoothedFps?this.smoothedFps*.85+inst*.15:inst;}this.lastFrameAt=now;
-      const gl=this.gl,m=this.map();gl.clearColor(.065,.075,.082,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(this.ur,this.canvas.width,this.canvas.height);gl.uniform2f(this.up,this.camera.panX,this.camera.panY);gl.uniform1f(this.uz,this.camera.zoom);gl.uniform1i(this.ut,0);
+      const gl=this.gl,m=this.map();if(this.nightMode)gl.clearColor(.065,.075,.082,1);else gl.clearColor(.91,.93,.945,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(this.ur,this.canvas.width,this.canvas.height);gl.uniform2f(this.up,this.camera.panX,this.camera.panY);gl.uniform1f(this.uz,this.camera.zoom);gl.uniform1i(this.ut,0);
       const mask=this.filterMask();gl.uniform1i(this.ufm,mask);
       const chunks=this.visibleChunkCoords(),segments:CachedSegment[]=[],layerMap=new Map(m.layers.map(l=>[l.id,l]));
       let visibleSprites=0;
@@ -143,6 +149,6 @@ namespace PZODT {
       for(const s of segments){const tex=this.resolved.get(s.sourceId);if(!tex){this.ensure(s.sourceId);continue;}const owner=this.ownerState(s.ownerId,layerMap);if(!owner.visible||owner.alpha<=.001)continue;if(s.buffer!==lastBuffer){gl.bindBuffer(gl.ARRAY_BUFFER,s.buffer);gl.vertexAttribPointer(this.lp,2,gl.FLOAT,false,stride,0);gl.vertexAttribPointer(this.lu,2,gl.FLOAT,false,stride,8);gl.vertexAttribPointer(this.lc,1,gl.FLOAT,false,stride,16);lastBuffer=s.buffer;}if(tex.tex!==lastTexture){gl.bindTexture(gl.TEXTURE_2D,tex.tex);gl.uniform2f(this.uts,tex.width,tex.height);lastTexture=tex.tex;}gl.uniform1f(this.ua,owner.alpha);gl.drawArrays(gl.TRIANGLES,s.firstVertex,s.vertexCount);drawCalls++;}
       this.grid();const ended=performance.now();this.stats={fps:this.smoothedFps,frameMs:ended-started,visibleChunks:chunks.length,totalChunks:this.totalChunkCount(),visibleSprites,drawCalls,activeTextures:this.resolved.size,cachedChunkBatches:this.cachedBatchCount,dirtyChunks:this.dirtyChunks.size};if(this.statsEnabled&&this.statsListener)this.statsListener({...this.stats});if(this.statsEnabled)this.request();
     }
-    grid(){const c=this.overlay.getContext('2d')!,m=this.map(),{tw,th}=this.metrics(),b=this.tileBounds(m.currentLevel);c.clearRect(0,0,this.overlay.width,this.overlay.height);c.save();c.setTransform(this.camera.zoom,0,0,this.camera.zoom,this.camera.panX,this.camera.panY);c.strokeStyle='rgba(190,210,220,.20)';c.lineWidth=1/this.camera.zoom;c.beginPath();for(let y=b.minY;y<=b.maxY+1;y++){const a=this.tileToWorld(b.minX,y,m.currentLevel),d=this.tileToWorld(b.maxX+1,y,m.currentLevel);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}for(let x=b.minX;x<=b.maxX+1;x++){const a=this.tileToWorld(x,b.minY,m.currentLevel),d=this.tileToWorld(x,b.maxY+1,m.currentLevel);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}c.stroke();if(this.hover){const p=this.tileToWorld(this.hover.x,this.hover.y,m.currentLevel);c.fillStyle='rgba(60,165,255,.14)';c.strokeStyle='rgba(80,190,255,.9)';c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+tw/2,p.y+th/2);c.lineTo(p.x,p.y+th);c.lineTo(p.x-tw/2,p.y+th/2);c.closePath();c.fill();c.stroke();}c.restore();}
+    grid(){const c=this.overlay.getContext('2d')!,m=this.map(),{tw,th}=this.metrics(),b=this.tileBounds(m.currentLevel);c.clearRect(0,0,this.overlay.width,this.overlay.height);c.save();c.setTransform(this.camera.zoom,0,0,this.camera.zoom,this.camera.panX,this.camera.panY);c.strokeStyle=this.nightMode?'rgba(190,210,220,.20)':'rgba(45,65,75,.20)';c.lineWidth=1/this.camera.zoom;c.beginPath();for(let y=b.minY;y<=b.maxY+1;y++){const a=this.tileToWorld(b.minX,y,m.currentLevel),d=this.tileToWorld(b.maxX+1,y,m.currentLevel);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}for(let x=b.minX;x<=b.maxX+1;x++){const a=this.tileToWorld(x,b.minY,m.currentLevel),d=this.tileToWorld(x,b.maxY+1,m.currentLevel);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}c.stroke();if(this.hover){const p=this.tileToWorld(this.hover.x,this.hover.y,m.currentLevel);c.fillStyle='rgba(60,165,255,.14)';c.strokeStyle='rgba(80,190,255,.9)';c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+tw/2,p.y+th/2);c.lineTo(p.x,p.y+th);c.lineTo(p.x-tw/2,p.y+th/2);c.closePath();c.fill();c.stroke();}c.restore();}
   }
 }

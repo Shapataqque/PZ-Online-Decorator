@@ -1,3 +1,8 @@
+/*
+ * PZ Online Decoration Tool
+ * Copyright (C) 2026 PZ Online Decoration Tool contributors
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 namespace PZODT {
   export class CatalogManager{
     catalog:FurnitureCatalog=BUILTIN_FURNITURE_CATALOG;furnitureTiles=new Set<string>();constructor(public assets:AssetManager){for(const g of this.catalog.groups)for(const d of g.furniture)for(const e of d.entries)for(const c of e.cells)this.furnitureTiles.add(c[2]);}

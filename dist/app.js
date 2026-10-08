@@ -749,6 +749,7 @@ var PZODT;
             this.textures = new Map();
             this.resolved = new Map();
             this.quality = 'high';
+            this.nightMode = true;
             this.raf = 0;
             this.hover = null;
             this.chunkCache = new Map();
@@ -793,6 +794,7 @@ var PZODT;
         ratio() { return Math.max(.4, (devicePixelRatio || 1) * this.qCanvas()); }
         setQuality(q) { if (this.quality === q)
             return; this.quality = q; this.resetTextures(); this.resize(); this.request(); }
+        setNightMode(enabled) { this.nightMode = enabled; this.request(); }
         resetTextures() { this.textureEpoch++; for (const t of this.resolved.values())
             this.gl.deleteTexture(t.tex); this.textures.clear(); this.resolved.clear(); this.request(); }
         assetsChanged() { this.resetTextures(); this.invalidateAllGeometry(); }
@@ -938,7 +940,10 @@ var PZODT;
             }
             this.lastFrameAt = now;
             const gl = this.gl, m = this.map();
-            gl.clearColor(.065, .075, .082, 1);
+            if (this.nightMode)
+                gl.clearColor(.065, .075, .082, 1);
+            else
+                gl.clearColor(.91, .93, .945, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
             gl.useProgram(this.program);
             gl.uniform2f(this.ur, this.canvas.width, this.canvas.height);
@@ -1004,7 +1009,7 @@ var PZODT;
             if (this.statsEnabled)
                 this.request();
         }
-        grid() { const c = this.overlay.getContext('2d'), m = this.map(), { tw, th } = this.metrics(), b = this.tileBounds(m.currentLevel); c.clearRect(0, 0, this.overlay.width, this.overlay.height); c.save(); c.setTransform(this.camera.zoom, 0, 0, this.camera.zoom, this.camera.panX, this.camera.panY); c.strokeStyle = 'rgba(190,210,220,.20)'; c.lineWidth = 1 / this.camera.zoom; c.beginPath(); for (let y = b.minY; y <= b.maxY + 1; y++) {
+        grid() { const c = this.overlay.getContext('2d'), m = this.map(), { tw, th } = this.metrics(), b = this.tileBounds(m.currentLevel); c.clearRect(0, 0, this.overlay.width, this.overlay.height); c.save(); c.setTransform(this.camera.zoom, 0, 0, this.camera.zoom, this.camera.panX, this.camera.panY); c.strokeStyle = this.nightMode ? 'rgba(190,210,220,.20)' : 'rgba(45,65,75,.20)'; c.lineWidth = 1 / this.camera.zoom; c.beginPath(); for (let y = b.minY; y <= b.maxY + 1; y++) {
             const a = this.tileToWorld(b.minX, y, m.currentLevel), d = this.tileToWorld(b.maxX + 1, y, m.currentLevel);
             c.moveTo(a.x, a.y);
             c.lineTo(d.x, d.y);
@@ -1212,7 +1217,7 @@ var PZODT;
 })(PZODT || (PZODT = {}));
 var PZODT;
 (function (PZODT) {
-    const APP_VERSION = '1.9.0';
+    const APP_VERSION = '1.0.0';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1258,15 +1263,16 @@ var PZODT;
             this.tutorialIndex = 0;
             this.tutorialActive = false;
             this.tutorialSteps = [
-                { title: 'Welcome', text: 'This short guide shows the normal workflow: load a Project Zomboid location, choose assets, decorate, and save your plan.' },
-                { title: 'Load a PZ location', text: 'Start here. The importer reads your own local Project Zomboid files; the application does not upload the media folder.', target: 'loadLocationBtn' },
-                { title: 'Choose the media folder', text: 'Select the ProjectZomboid\\media folder. The map data, texture packs, PNG tilesheets, and tile definitions are indexed from this folder.', target: 'chooseMediaBtn', openLoad: true },
-                { title: 'Enter world coordinates', text: 'Enter the World X and World Y coordinates of the building or area you want to plan.', target: 'worldX', openLoad: true },
-                { title: 'Load the building', text: 'Choose Building at coordinate for the usual base-planning workflow, then press Load Location.', target: 'loadBtn', openLoad: true },
-                { title: 'Control what you see', text: 'View Filters hide categories such as walls or roofs without changing the imported object stacks. This is useful for seeing furniture behind walls.', target: 'viewFilters', closeLoad: true },
+                { title: 'Welcome', text: 'This short guide walks through the normal workflow: load a Project Zomboid location, browse assets, decorate the map, and save the project.' },
+                { title: 'Load a PZ location', text: 'Start here. Continue and the location loader will open so you can see the full import workflow.', target: 'loadLocationBtn', closeLoad: true },
+                { title: 'The location loader', text: 'Everything needed for importing a base is in this window: media folder, map dataset, world coordinates, and load mode.', target: 'loadDialog', openLoad: true },
+                { title: 'Choose the media folder', text: 'Choose the ProjectZomboid\\media folder. Map data, texture packs, PNG tilesheets, and tile definitions are indexed locally in the browser.', target: 'chooseMediaBtn', openLoad: true },
+                { title: 'Enter world coordinates', text: 'Enter the World X and World Y coordinates for the building or area you want to load.', target: 'worldX', openLoad: true },
+                { title: 'Load the building', text: 'For the usual base-planning workflow, keep Building at coordinate selected and press Load Location.', target: 'loadBtn', openLoad: true },
+                { title: 'Control what you see', text: 'View Filters hide walls, roofs, furniture, and other categories without rewriting the imported object stacks.', target: 'viewFilters', closeLoad: true },
                 { title: 'Browse furniture', text: 'The Furniture tab contains categorized, searchable multi-tile objects with thumbnails. Select one, then place it on the map.', target: 'furnitureTabButton' },
-                { title: 'Edit the plan', text: 'Use Pencil, Erase, Rectangle, Picker, and Pan. Layers and Z levels are available from the inspector on the right.', target: 'toolrow' },
-                { title: 'Save and share feedback', text: 'Save your work as JSON so it can be opened later. Use Feedback in the top bar for bug reports and feature requests.', target: 'saveJsonBtn' }
+                { title: 'Edit the plan', text: 'Use Pencil, Erase, Rectangle, Picker, and Pan. Layers and Z levels are available in the inspector on the right.', target: 'toolrow' },
+                { title: 'Save the project', text: 'Use Save as .json to keep the plan and Open .json file to continue later. Feedback is available from the top bar.', target: 'saveJsonBtn' }
             ];
             this.status = el('status');
             this.coords = el('coords');
@@ -1288,6 +1294,7 @@ var PZODT;
             this.graphicsQuality = el('graphicsQuality');
             this.performanceStatsToggle = el('performanceStatsToggle');
             this.performanceStatsBox = el('performanceStats');
+            this.nightModeToggle = el('nightModeToggle');
             this.renderer = new PZODT.WebGLMapRenderer(el('glCanvas'), el('overlayCanvas'), this.assets, () => this.map, this.camera, n => this.classify(n), c => this.filters.get(c) !== false);
             this.editor = new PZODT.EditorController(this.renderer, () => this.map, this.catalog, n => this.classify(n), n => this.objectVisible(n), this.history);
             this.editor.onStatus = s => this.setStatus(s);
@@ -1304,6 +1311,9 @@ var PZODT;
             const perf = storeGet('pzodt.performanceStats') === '1';
             this.performanceStatsToggle.checked = perf;
             this.setPerformanceStats(perf);
+            const night = storeGet('pzodt.nightMode') !== '0';
+            this.nightModeToggle.checked = night;
+            this.applyNightMode(night, false);
             setTimeout(() => this.renderer.center(), 50);
             this.configureRelease();
             setTimeout(() => this.maybeStartTutorial(), 250);
@@ -1328,7 +1338,10 @@ var PZODT;
             this.graphicsQuality.onchange = () => { const q = this.graphicsQuality.value; storeSet('pzodt.graphicsQuality', q); this.renderer.setQuality(q); setTimeout(() => this.renderer.center(), 0); this.setStatus(`Graphics: ${q}.`); };
             this.performanceStatsToggle.onchange = () => { storeSet('pzodt.performanceStats', this.performanceStatsToggle.checked ? '1' : '0'); this.setPerformanceStats(this.performanceStatsToggle.checked); };
             el('startTutorialBtn').onclick = () => { el('settingsDialog').close(); this.startTutorial(true); };
+            el('creditsBtn').onclick = () => { el('settingsDialog').close(); el('creditsDialog').showModal(); };
+            el('creditsCloseBtn').onclick = el('creditsDoneBtn').onclick = () => el('creditsDialog').close();
             el('feedbackBtn').onclick = () => this.openFeedback();
+            this.nightModeToggle.onchange = () => this.applyNightMode(this.nightModeToggle.checked, true);
             el('feedbackCloseBtn').onclick = () => el('feedbackDialog').close();
             el('feedbackCopyBtn').onclick = () => this.copyFeedback();
             el('feedbackSendBtn').onclick = () => this.sendFeedback();
@@ -1617,11 +1630,13 @@ var PZODT;
             ctx.drawImage(p.b, a.sx, a.sy, a.sw, a.sh, ox + p.l * fit, oy + p.t * fit, a.sw * p.s * fit, a.sh * p.s * fit);
         } }
         configureRelease() { const cfg = releaseConfig(), support = safeHttpsUrl(cfg.supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
-        maybeStartTutorial() { if (storeGet('pzodt.tutorialDismissed') !== '1')
+        applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (persist)
+            storeSet('pzodt.nightMode', enabled ? '1' : '0'); }
+        maybeStartTutorial() { if (storeGet('pzodt.tutorialDismissed.1.0') !== '1')
             this.startTutorial(false); }
         startTutorial(force = false) { if (this.tutorialActive)
             return; if (force)
-            storeRemove('pzodt.tutorialDismissed'); this.tutorialActive = true; this.tutorialIndex = 0; el('tutorialRemember').checked = true; document.querySelectorAll('header,.toolrow,.layout,footer,dialog').forEach(x => x.inert = true); const overlay = el('tutorialOverlay'); overlay.inert = false; overlay.classList.remove('hidden'); this.showTutorialStep(); setTimeout(() => el('tutorialNextBtn').focus(), 0); }
+            storeRemove('pzodt.tutorialDismissed.1.0'); this.tutorialActive = true; this.tutorialIndex = 0; el('tutorialRemember').checked = true; document.querySelectorAll('header,.toolrow,.layout,footer').forEach(x => x.inert = true); const overlay = el('tutorialOverlay'); overlay.inert = false; overlay.classList.remove('hidden'); this.showTutorialStep(); setTimeout(() => el('tutorialNextBtn').focus(), 0); }
         moveTutorial(delta) { if (!this.tutorialActive)
             return; const next = this.tutorialIndex + delta; if (next < 0)
             return; if (next >= this.tutorialSteps.length) {
@@ -1630,23 +1645,29 @@ var PZODT;
         } this.tutorialIndex = next; this.showTutorialStep(); }
         finishTutorial() { if (!this.tutorialActive)
             return; this.tutorialActive = false; if (el('tutorialRemember').checked)
-            storeSet('pzodt.tutorialDismissed', '1');
+            storeSet('pzodt.tutorialDismissed.1.0', '1');
         else
-            storeRemove('pzodt.tutorialDismissed'); el('tutorialOverlay').classList.add('hidden'); document.querySelectorAll('header,.toolrow,.layout,footer,dialog').forEach(x => x.inert = false); const d = el('loadDialog'); if (d.open)
+            storeRemove('pzodt.tutorialDismissed.1.0'); const overlay = el('tutorialOverlay'); overlay.classList.add('hidden'); overlay.classList.remove('noTarget', 'cardTop'); document.querySelectorAll('header,.toolrow,.layout,footer').forEach(x => x.inert = false); const d = el('loadDialog'); d.classList.remove('tutorialVisibleDialog'); if (d.open)
             d.close(); el('tutorialSpotlight').classList.remove('active'); }
-        showTutorialStep() { const step = this.tutorialSteps[this.tutorialIndex], load = el('loadDialog'); if (step.openLoad && !load.open)
-            load.show(); if (step.closeLoad && load.open)
-            load.close(); if (step.target === 'viewFilters')
+        showTutorialStep() { const step = this.tutorialSteps[this.tutorialIndex], load = el('loadDialog'); if (step.closeLoad && load.open) {
+            load.classList.remove('tutorialVisibleDialog');
+            load.close();
+        } if (step.openLoad) {
+            load.classList.add('tutorialVisibleDialog');
+            if (!load.open)
+                load.show();
+        } if (step.target === 'viewFilters')
             this.collapse('right', false); if (step.target === 'furnitureTabButton')
             this.collapse('left', false); el('tutorialTitle').textContent = step.title; el('tutorialText').textContent = step.text; el('tutorialProgress').textContent = `${this.tutorialIndex + 1} / ${this.tutorialSteps.length}`; el('tutorialBackBtn').disabled = this.tutorialIndex === 0; el('tutorialNextBtn').textContent = this.tutorialIndex === this.tutorialSteps.length - 1 ? 'Finish' : 'Continue'; requestAnimationFrame(() => this.positionTutorial()); }
         positionTutorial() { if (!this.tutorialActive)
-            return; const step = this.tutorialSteps[this.tutorialIndex], spot = el('tutorialSpotlight'); if (!step.target) {
+            return; const step = this.tutorialSteps[this.tutorialIndex], spot = el('tutorialSpotlight'), overlay = el('tutorialOverlay'); overlay.classList.toggle('noTarget', !step.target); overlay.classList.remove('cardTop'); if (!step.target) {
             spot.classList.remove('active');
             return;
         } const target = document.getElementById(step.target); if (!target || target.getClientRects().length === 0) {
             spot.classList.remove('active');
+            overlay.classList.add('noTarget');
             return;
-        } const r = target.getBoundingClientRect(), pad = 8; spot.classList.add('active'); spot.style.left = `${Math.max(4, r.left - pad)}px`; spot.style.top = `${Math.max(4, r.top - pad)}px`; spot.style.width = `${Math.max(24, r.width + pad * 2)}px`; spot.style.height = `${Math.max(24, r.height + pad * 2)}px`; }
+        } const r = target.getBoundingClientRect(), pad = 10; spot.classList.add('active'); spot.style.left = `${Math.max(4, r.left - pad)}px`; spot.style.top = `${Math.max(4, r.top - pad)}px`; spot.style.width = `${Math.max(24, Math.min(innerWidth - 8, r.width + pad * 2))}px`; spot.style.height = `${Math.max(24, Math.min(innerHeight - 8, r.height + pad * 2))}px`; overlay.classList.toggle('cardTop', r.top + r.height / 2 > innerHeight * .58); }
         configureFeedbackText() { const type = el('feedbackType').value, msg = el('feedbackMessage').value.trim().slice(0, 6000), contact = el('feedbackContact').value.trim().slice(0, 200), technical = el('feedbackTechnical').checked; const lines = [`PZ Online Decoration Tool ${APP_VERSION}`, `Type: ${type}`, '', msg]; if (contact)
             lines.push('', `Contact: ${contact}`); if (technical)
             lines.push('', 'Technical information:', `Browser: ${navigator.userAgent.slice(0, 500)}`, `Graphics: ${this.graphicsQuality.value}`); return lines.join('\n'); }
@@ -1696,7 +1717,7 @@ var PZODT;
                     st.textContent = 'Feedback copied; the feedback page was opened in a new tab. Paste the copied text there.';
                 }
                 else
-                    st.textContent = 'Feedback copied. The site owner has not configured a feedback destination yet.';
+                    st.textContent = 'Feedback copied. No feedback destination is configured in this build.';
             }
             catch (err) {
                 st.textContent = String(err.message || err);

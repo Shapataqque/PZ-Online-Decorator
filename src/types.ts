@@ -1,3 +1,8 @@
+/*
+ * PZ Online Decoration Tool
+ * Copyright (C) 2026 PZ Online Decoration Tool contributors
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 namespace PZODT {
   export type ToolName='pencil'|'eraser'|'rect'|'picker'|'pan'|'furniture';
   export type GraphicsQuality='low'|'medium'|'high';
