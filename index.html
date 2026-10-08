@@ -10,7 +10,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><span>1.0.0</span></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton">1.0.0</button>
   <button id="newMapBtn">New</button>
   <button id="loadLocationBtn" class="primary">Load PZ Location</button>
   <span class="sep"></span>
@@ -80,7 +80,34 @@
   </aside>
 </main>
 <footer><span id="status">Ready.</span><span id="coords">x — y —</span></footer>
+<dialog id="versionHistoryDialog" class="dialog">
+  <div class="dialogTitle">
+    <div>
+      <b>Version History</b>
+      <small>PZ Online Decoration Tool updates</small>
+    </div>
+    <button id="versionHistoryCloseBtn" type="button">×</button>
+  </div>
 
+  <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.0.0</h4>
+      <small>October 2026</small>
+      <ul>
+        <li>First public release.</li>
+        <li>Project Zomboid location import.</li>
+        <li>Furniture and tile catalog.</li>
+        <li>Multi-Z-level editing.</li>
+        <li>View filters and editable layers.</li>
+        <li>Graphics quality settings and performance optimizations.</li>
+        <li>Dark and light themes.</li>
+        <li>Feedback integration.</li>
+      </ul>
+    </section>
+
+  </div>
+</dialog>  
 <dialog id="settingsDialog" class="dialog">
   <form method="dialog">
     <div class="dialogTitle"><div><b>Settings</b><small>Display and help</small></div><button id="settingsCloseBtn" type="button">×</button></div>
