@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'; media-src 'none'; worker-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
   <title>PZ Online Decoration Tool 1.0.0</title>
   <link rel="stylesheet" href="styles.css">
   <script async src="https://tally.so/widgets/embed.js"></script>
@@ -18,7 +18,7 @@
   <button id="openJsonBtn">Open .json file</button>
   <button id="saveJsonBtn">Save as .json</button>
   <span class="grow"></span>
-  <button id="feedbackBtn">Feedback</button>
+  <button id="feedbackBtn" data-tally-open="lbPPlB" data-tally-layout="modal" data-tally-width="600" data-tally-hide-title="1">Feedback</button>
   <label class="nightModeSwitch" title="Toggle night mode"><span>Night</span><input id="nightModeToggle" type="checkbox" checked aria-label="Night mode"><span class="switchTrack" aria-hidden="true"><span class="switchKnob"></span></span></label>
   <button id="supportBtn" class="hidden">Support</button>
   <button id="settingsBtn">Settings</button>
