@@ -1366,6 +1366,10 @@ var PZODT;
             el('loadCancelBtn').onclick = () => el('loadDialog').close();
             el('loadMode').onchange = () => this.updateLoadMode();
             el('loadBtn').onclick = () => this.loadLocation();
+            el('versionHistoryBtn').onclick = () =>
+            el('versionHistoryDialog').showModal();
+            el('versionHistoryCloseBtn').onclick = () =>
+            el('versionHistoryDialog').close();
             el('indexMediaBtn').onclick = () => this.indexMediaOnly();
             el('mediaInput').onchange = e => this.mediaSelected(e);
             el('jsonInput').onchange = e => this.jsonSelected(e);
