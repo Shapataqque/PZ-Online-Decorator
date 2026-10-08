@@ -1340,7 +1340,6 @@ var PZODT;
             el('startTutorialBtn').onclick = () => { el('settingsDialog').close(); this.startTutorial(true); };
             el('creditsBtn').onclick = () => { el('settingsDialog').close(); el('creditsDialog').showModal(); };
             el('creditsCloseBtn').onclick = el('creditsDoneBtn').onclick = () => el('creditsDialog').close();
-            el('feedbackBtn').onclick = () => this.openFeedback();
             this.nightModeToggle.onchange = () => this.applyNightMode(this.nightModeToggle.checked, true);
             el('feedbackCloseBtn').onclick = () => el('feedbackDialog').close();
             el('feedbackCopyBtn').onclick = () => this.copyFeedback();
