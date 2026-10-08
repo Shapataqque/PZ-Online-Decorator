@@ -7,7 +7,6 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
   <title>PZ Online Decoration Tool 1.0.0</title>
   <link rel="stylesheet" href="styles.css">
-  <script defer src="https://tally.so/widgets/embed.js"></script>
 </head>
 <body>
 <header class="topbar">
@@ -18,7 +17,7 @@
   <button id="openJsonBtn">Open .json file</button>
   <button id="saveJsonBtn">Save as .json</button>
   <span class="grow"></span>
-  <button id="feedbackBtn" data-tally-open="lbPPlB" data-tally-layout="modal" data-tally-width="600" data-tally-hide-title="1">Feedback</button>
+  <button id="feedbackBtn">Feedback</button>
   <label class="nightModeSwitch" title="Toggle night mode"><span>Night</span><input id="nightModeToggle" type="checkbox" checked aria-label="Night mode"><span class="switchTrack" aria-hidden="true"><span class="switchKnob"></span></span></label>
   <button id="supportBtn" class="hidden">Support</button>
   <button id="settingsBtn">Settings</button>
@@ -135,18 +134,24 @@
 </dialog>
 
 <dialog id="feedbackDialog" class="dialog feedbackDialog">
-  <form method="dialog">
-    <div class="dialogTitle"><div><b>Feedback</b><small>Bug report, feature request, or general feedback</small></div><button id="feedbackCloseBtn" type="button">×</button></div>
-    <div class="dialogBody">
-      <label>Type<select id="feedbackType"><option value="Bug report">Bug report</option><option value="Feature request">Feature request</option><option value="General feedback">General feedback</option></select></label>
-      <label>Message<textarea id="feedbackMessage" maxlength="6000" rows="8" placeholder="Describe what happened or what you would like to see."></textarea></label>
-      <label>Contact (optional)<input id="feedbackContact" maxlength="200" autocomplete="email" placeholder="Email or username"></label>
-      <label class="check"><input id="feedbackTechnical" type="checkbox" checked> Include basic technical information (app version, browser, graphics quality)</label>
-      <div class="hint">Local file paths, map coordinates, and project contents are never included automatically.</div>
-      <div id="feedbackStatus" class="importStatus">Your feedback stays in this browser until you submit or copy it.</div>
+  <div class="dialogTitle">
+    <div>
+      <b>Feedback</b>
+      <small>Bug report, feature request, or general feedback</small>
     </div>
-    <div class="dialogActions"><button id="feedbackCopyBtn" type="button">Copy</button><button id="feedbackSendBtn" class="primary" type="button">Send feedback</button></div>
-  </form>
+    <button id="feedbackCloseBtn" type="button">×</button>
+  </div>
+
+  <iframe
+    src="https://tally.so/embed/lbPPlB?alignLeft=1&hideTitle=1&transparentBackground=1"
+    width="100%"
+    height="650"
+    frameborder="0"
+    marginheight="0"
+    marginwidth="0"
+    title="PZ Online Decoration Tool Feedback"
+    style="display:block;border:0;"
+  ></iframe>
 </dialog>
 
 <div id="tutorialOverlay" class="tutorialOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
