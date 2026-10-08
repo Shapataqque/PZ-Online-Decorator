@@ -1340,6 +1340,18 @@ var PZODT;
             el('startTutorialBtn').onclick = () => { el('settingsDialog').close(); this.startTutorial(true); };
             el('creditsBtn').onclick = () => { el('settingsDialog').close(); el('creditsDialog').showModal(); };
             el('creditsCloseBtn').onclick = el('creditsDoneBtn').onclick = () => el('creditsDialog').close();
+            el('feedbackBtn').onclick = () => {
+                if (window.Tally && typeof window.Tally.openPopup === 'function') {
+                    window.Tally.openPopup('lbPPlB', {
+                        layout: 'modal',
+                        width: 600,
+                        hideTitle: true
+                    });
+                }
+                else {
+                    console.error('Tally failed to load.');
+            }
+            };
             this.nightModeToggle.onchange = () => this.applyNightMode(this.nightModeToggle.checked, true);
             el('feedbackCloseBtn').onclick = () => el('feedbackDialog').close();
             el('feedbackCopyBtn').onclick = () => this.copyFeedback();
