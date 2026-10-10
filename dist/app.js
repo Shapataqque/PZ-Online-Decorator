@@ -1,6 +1,15 @@
 "use strict";
 var PZODT;
 (function (PZODT) {
+    const SEARCH_SYNONYMS = {
+        oil: ['fuel', 'gas', 'petrol'], fuel: ['oil', 'gas', 'petrol'], gas: ['fuel', 'oil', 'petrol'], petrol: ['fuel', 'gas', 'oil'],
+        couch: ['sofa'], sofa: ['couch'], fridge: ['refrigerator'], refrigerator: ['fridge'], tv: ['television'], television: ['tv'],
+        trash: ['garbage', 'bin'], garbage: ['trash', 'bin'], bin: ['trash', 'garbage']
+    };
+    function normalizeSearchText(value) { return String(value ?? '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+    PZODT.normalizeSearchText = normalizeSearchText;
+    function searchMatches(text, query) { const hay = normalizeSearchText(text), tokens = normalizeSearchText(query).split(' ').filter(Boolean); return tokens.every(t => hay.includes(t) || (SEARCH_SYNONYMS[t] ?? []).some(s => hay.includes(s))); }
+    PZODT.searchMatches = searchMatches;
     PZODT.VIEW_CATEGORIES = ['Floor', 'Wall', 'Doors & Windows', 'Furniture', 'Roof', 'Decor / Overlay', 'Roads & Ground', 'Vegetation', 'Fences & Railings', 'Exterior', 'Other'];
 })(PZODT || (PZODT = {}));
 var PZODT;
@@ -327,15 +336,25 @@ var PZODT;
             this.onChanged();
             return { png: pngs.length, packs: packs.length, skipped };
         }
+        installLegacyTreeAliases(tileCount) { if (tileCount <= 0)
+            return 0; const all = [...this.assets.values()].filter(a => !/^vegetation_trees_01_/i.test(a.name)), from = (needle) => all.filter(a => (this.sources.get(a.sourceId)?.label ?? '').toLowerCase().includes(needle)); let candidates = from('jumbotreesbigs2x.pack'); if (!candidates.length)
+            candidates = from('jumbotrees2x.pack'); if (!candidates.length)
+            candidates = all.filter(a => /jumbo/i.test(a.tilesetName)); const seen = new Set(); candidates = candidates.filter(a => { const k = `${a.sourceId}:${a.sx}:${a.sy}:${a.sw}:${a.sh}`; if (seen.has(k))
+            return false; seen.add(k); return true; }).sort((a, b) => a.name.localeCompare(b.name) || a.tileIndex - b.tileIndex); if (!candidates.length)
+            return 0; let added = 0; for (let i = 0; i < tileCount; i++) {
+            const key = `vegetation_trees_01:${i}`;
+            if (this.byKey.has(key))
+                continue;
+            const src = candidates[(i * 13 + 7) % candidates.length];
+            this.addAsset({ ...src, name: `vegetation_trees_01_${i}`, tilesetName: 'vegetation_trees_01', tileIndex: i });
+            added++;
+        } return added; }
         tilesetNames() { const s = new Set(); for (const a of this.assets.values())
             s.add(a.tilesetName); return [...s].sort(); }
-        search(q, limit = 600) { q = q.trim().toLowerCase(); const out = []; for (const a of this.assets.values()) {
-            if (!q || a.name.toLowerCase().includes(q) || a.tilesetName.toLowerCase().includes(q)) {
+        search(q, limit = 600, extra) { const out = []; for (const a of this.assets.values()) {
+            if (!q || PZODT.searchMatches(`${a.name} ${a.tilesetName} ${extra?.(a) ?? ''}`, q))
                 out.push(a);
-                if (out.length >= limit)
-                    break;
-            }
-        } return out.sort((a, b) => a.name.localeCompare(b.name)); }
+        } return out.sort((a, b) => a.name.localeCompare(b.name)).slice(0, limit); }
         assetsForTileset(n) { return [...this.assets.values()].filter(a => a.tilesetName === n).sort((a, b) => a.tileIndex - b.tileIndex); }
         async drawPreview(c, name) { const a = this.asset(name), ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); if (!a)
             return; const b = await this.bitmap(a.sourceId), fit = Math.min(c.width / a.frameW, c.height / a.frameH, 1), x = (c.width - a.frameW * fit) / 2 + a.offsetX * fit, y = (c.height - a.frameH * fit) / 2 + a.offsetY * fit; ctx.imageSmoothingEnabled = false; ctx.drawImage(b, a.sx, a.sy, a.sw, a.sh, x, y, a.sw * fit, a.sh * fit); }
@@ -391,11 +410,12 @@ var PZODT;
     class TileDefDatabase {
         constructor() {
             this.props = new Map();
+            this.tilesetCounts = new Map();
             this.loadedFileKeys = new Set();
         }
         key(name) { const p = PZODT.parseTileName(name); return `${p.tilesetName.toLowerCase()}:${p.tileIndex}`; }
         properties(name) { return this.props.get(this.key(name)) ?? {}; }
-        clear() { this.props.clear(); this.loadedFileKeys.clear(); }
+        clear() { this.props.clear(); this.tilesetCounts.clear(); this.loadedFileKeys.clear(); }
         fileKey(f) { const p = (f.webkitRelativePath || f.name).replace(/\\/g, '/'); return `${p}|${f.size}|${f.lastModified}`; }
         async loadFiles(files, progress) { const list = files.filter(f => /\.tiles$/i.test(f.name) && !this.loadedFileKeys.has(this.fileKey(f))); let total = 0; for (let i = 0; i < list.length; i++) {
             try {
@@ -423,6 +443,7 @@ var PZODT;
             const count = r.i32();
             if (cols < 0 || rows < 0 || count < 0 || count > cols * rows)
                 throw new Error('Invalid tile-definition grid');
+            this.tilesetCounts.set(name.toLowerCase(), Math.max(this.tilesetCounts.get(name.toLowerCase()) ?? 0, count));
             for (let j = 0; j < count; j++) {
                 const np = r.i32(), p = {};
                 if (np < 0 || np > 100000)
@@ -435,6 +456,16 @@ var PZODT;
                 }
             }
         } return stored; }
+        tilesetCount(name) { return this.tilesetCounts.get(name.toLowerCase()) ?? 0; }
+        searchText(name) { const p = this.properties(name), parts = [name]; for (const [k, v] of Object.entries(p)) {
+            parts.push(k);
+            if (v)
+                parts.push(String(v));
+        } return parts.join(' '); }
+        displayName(name) { const p = this.properties(name), entry = (key) => Object.entries(p).find(([k]) => k.toLowerCase() === key)?.[1]?.trim() ?? '', group = entry('groupname'), custom = entry('customname'), named = entry('name'); if (group && custom)
+            return `${group} ${custom}`; if (custom)
+            return custom; if (named && !/^(none|null)$/i.test(named))
+            return named; return name; }
         surfaceInfo(name) {
             const p = this.properties(name), entries = Object.entries(p).map(([k, v]) => [k.toLowerCase(), String(v).trim().toLowerCase()]), value = (k) => entries.find(([x]) => x === k)?.[1], number = (k) => { const n = Number.parseInt(value(k) ?? '0', 10); return Number.isFinite(n) ? Math.max(0, Math.min(512, n)) : 0; }, flag = (k) => { const e = entries.find(([x]) => x === k); if (!e)
                 return false; return !['false', '0', 'no', 'off'].includes(e[1]); };
@@ -462,11 +493,15 @@ var PZODT;
         classify(name, furniture) {
             const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => `_${Number(d)}`);
             const has = (...q) => q.some(x => keys.includes(x.toLowerCase()) || all.includes(x.toLowerCase()));
+            if (/(^|_)roofs?(_|$)/.test(n))
+                return 'Roof';
+            if (n.includes('vegetation_indoor'))
+                return 'Furniture';
             if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
                 return 'Furniture';
             if (/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))
                 return 'Fences & Railings';
-            if (n.includes('appliances') || n.includes('furniture') || furniture.has(name))
+            if (n.includes('appliances') || n.includes('furniture') || furniture.has(n) || furniture.has(canonical))
                 return 'Furniture';
             if (has('solidfloor') || /(^|_)(floor|floors|flooring)(_|$)/.test(n) || PZODT.BUILDING_TILE_CATEGORIES['Floors']?.has(name))
                 return 'Floor';
@@ -494,8 +529,9 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     class CatalogManager {
-        constructor(assets) {
+        constructor(assets, tileDefs) {
             this.assets = assets;
+            this.tileDefs = tileDefs;
             this.catalog = PZODT.BUILTIN_FURNITURE_CATALOG;
             this.furnitureTiles = new Set();
             this.tileMatches = new Map();
@@ -506,13 +542,14 @@ var PZODT;
                     const d = g.furniture[fi];
                     for (const e of d.entries)
                         for (const cell of e.cells) {
-                            const name = cell[2];
-                            this.furnitureTiles.add(name);
+                            const name = cell[2], p = PZODT.parseTileName(name), canonical = `${p.tilesetName.toLowerCase()}_${p.tileIndex}`;
+                            this.furnitureTiles.add(name.toLowerCase());
+                            this.furnitureTiles.add(canonical);
                             const match = { group: g, def: d, groupIndex: gi, furnitureIndex: fi, orient: e.orient, dx: cell[0], dy: cell[1], tileName: name };
                             const a = this.tileMatches.get(name) ?? [];
                             a.push(match);
                             this.tileMatches.set(name, a);
-                            const p = PZODT.parseTileName(name), k = `${p.tilesetName.toLowerCase()}:${p.tileIndex}`, b = this.tileMatchesByKey.get(k) ?? [];
+                            const k = `${p.tilesetName.toLowerCase()}:${p.tileIndex}`, b = this.tileMatchesByKey.get(k) ?? [];
                             b.push(match);
                             this.tileMatchesByKey.set(k, b);
                         }
@@ -520,13 +557,24 @@ var PZODT;
             }
         }
         categories() { return this.catalog.groups.map(g => g.label).filter((v, i, a) => a.indexOf(v) === i).sort(); }
-        search(query, category = '', limit = 350) { query = query.trim().toLowerCase(); category = category.toLowerCase(); const out = []; for (let gi = 0; gi < this.catalog.groups.length; gi++) {
+        displayName(d, g) { const counts = new Map(), seen = new Set(); for (const e of d.entries)
+            for (const c of e.cells) {
+                const tile = c[2];
+                if (seen.has(tile))
+                    continue;
+                seen.add(tile);
+                const name = this.tileDefs.displayName(tile);
+                if (name && name !== tile)
+                    counts.set(name, (counts.get(name) ?? 0) + 1);
+            } const best = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0]; if (best)
+            return best; const group = (g?.label ?? 'Furniture').replace(/^Location\s*-\s*/i, '').replace(/\s*-\s*/g, ' · '); return `${group} #${d.index}`; }
+        search(query, category = '', limit = 350) { category = category.toLowerCase(); const out = []; for (let gi = 0; gi < this.catalog.groups.length; gi++) {
             const g = this.catalog.groups[gi];
             if (category && g.label.toLowerCase() !== category)
                 continue;
             for (let fi = 0; fi < g.furniture.length; fi++) {
                 const d = g.furniture[fi], seen = new Set();
-                let total = 0, available = 0, text = '';
+                let total = 0, available = 0, text = `${g.label} ${d.layer} ${this.displayName(d, g)} #${d.index}`;
                 for (const e of d.entries)
                     for (const c of e.cells)
                         if (!seen.has(c[2])) {
@@ -534,10 +582,9 @@ var PZODT;
                             total++;
                             if (this.assets.asset(c[2]))
                                 available++;
-                            if (text.length < 400)
-                                text += ' ' + c[2].toLowerCase();
+                            text += ' ' + this.tileDefs.searchText(c[2]);
                         }
-                if (query && !g.label.toLowerCase().includes(query) && !d.layer.toLowerCase().includes(query) && !text.includes(query))
+                if (query && !PZODT.searchMatches(text, query))
                     continue;
                 out.push({ group: g, def: d, groupIndex: gi, furnitureIndex: fi, available, total });
                 if (out.length >= limit)
@@ -1484,7 +1531,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.9';
+    const APP_VERSION = '1.1.10';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1512,7 +1559,7 @@ var PZODT;
             this.map = new PZODT.PZMapModel(64, 64);
             this.assets = new PZODT.AssetManager();
             this.tileDefs = new PZODT.TileDefDatabase();
-            this.catalog = new PZODT.CatalogManager(this.assets);
+            this.catalog = new PZODT.CatalogManager(this.assets, this.tileDefs);
             this.importer = new PZODT.PZWorldImportManager();
             this.history = new PZODT.History();
             this.camera = { panX: 0, panY: 0, zoom: .72 };
@@ -1750,7 +1797,7 @@ var PZODT;
         async ensureMediaReady(progress) { if (this.mediaReadySignature === this.importer.mediaSignature && this.mediaReadySignature) {
             progress('Media library already indexed — reusing cached tiles, .pack textures and .tiles properties.');
             return;
-        } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress); this.classificationCache.clear(); this.refreshHeightPresets(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
+        } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress), treeAliases = this.assets.installLegacyTreeAliases(this.tileDefs.tilesetCount('vegetation_trees_01')); this.classificationCache.clear(); this.refreshHeightPresets(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${treeAliases ? ` · ${treeAliases} legacy tree previews restored` : ''}${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
         async loadLocation() { const ds = el('datasetSelect').value, x = +el('worldX').value, y = +el('worldY').value, mode = el('loadMode').value, margin = +el('marginInput').value, aw = +el('areaW').value, ah = +el('areaH').value, st = el('loadStatus'), btn = el('loadBtn'); if (!this.mediaReadySignature) {
             st.textContent = 'Choose and finish indexing the media folder first.';
             return;
@@ -1831,10 +1878,8 @@ var PZODT;
             this.tilesetSelect.appendChild(o);
         } if ([...this.tilesetSelect.options].some(o => o.value === old))
             this.tilesetSelect.value = old; this.assetSummary.textContent = this.assets.assets.size ? `${this.assets.assets.size.toLocaleString()} sprites · ${this.tileDefs.props.size.toLocaleString()} tile definitions` : 'Choose the Project Zomboid media folder to index the media library.'; }
-        renderTiles() { const token = ++this.tileToken; this.tileList.replaceChildren(); let a = this.tilesetSelect.value ? this.assets.assetsForTileset(this.tilesetSelect.value) : this.assets.search(this.tileSearch.value, 500); if (this.tilesetSelect.value && this.tileSearch.value.trim()) {
-            const q = this.tileSearch.value.toLowerCase();
-            a = a.filter(x => x.name.toLowerCase().includes(q));
-        } const f = document.createDocumentFragment(); for (const x of a.slice(0, 500)) {
+        renderTiles() { const token = ++this.tileToken; this.tileList.replaceChildren(); const q = this.tileSearch.value; let a = this.tilesetSelect.value ? this.assets.assetsForTileset(this.tilesetSelect.value) : this.assets.search(q, 500, x => this.tileDefs.searchText(x.name)); if (this.tilesetSelect.value && q.trim())
+            a = a.filter(x => PZODT.searchMatches(`${x.name} ${this.tileDefs.searchText(x.name)}`, q)); const f = document.createDocumentFragment(); for (const x of a.slice(0, 500)) {
             const d = document.createElement('div');
             d.className = 'tilecard' + (this.editor.selectedAsset === x.name ? ' selected' : '');
             const c = document.createElement('canvas');
@@ -1842,7 +1887,9 @@ var PZODT;
             c.height = 82;
             const n = document.createElement('div');
             n.className = 'name';
-            n.textContent = x.name;
+            const friendly = this.tileDefs.displayName(x.name);
+            n.textContent = friendly !== x.name ? `${friendly} · ${x.name}` : x.name;
+            n.title = this.tileDefs.searchText(x.name);
             d.append(c, n);
             d.onclick = () => { this.editor.selectAsset(x.name); this.renderTiles(); };
             f.appendChild(d);
@@ -1871,10 +1918,11 @@ var PZODT;
             c.height = 72;
             const t = document.createElement('div');
             t.className = 'furnituretext';
-            const title = document.createElement('b');
-            title.textContent = `${h.group.label} · #${h.def.index}`;
+            const title = document.createElement('b'), friendly = this.catalog.displayName(h.def, h.group);
+            title.textContent = friendly;
+            title.title = `${h.group.label} · #${h.def.index}`;
             const meta = document.createElement('small');
-            meta.textContent = `${h.def.entries.length} alternative appearance${h.def.entries.length === 1 ? '' : 's'} · ${h.available}/${h.total} tiles`;
+            meta.textContent = `${h.group.label} · #${h.def.index} · ${h.def.entries.length} alternative appearance${h.def.entries.length === 1 ? '' : 's'} · ${h.available}/${h.total} tiles`;
             t.append(title, meta);
             d.append(c, t);
             d.onclick = () => { this.selectedFurnitureHit = h; this.editor.selectFurniture(h.def); this.renderFurniture(); };
@@ -1917,9 +1965,9 @@ var PZODT;
                 h = this.catalog.search('', '', 5000).find(x => x.def === d) ?? null;
                 this.selectedFurnitureHit = h;
             }
-            const orientations = this.catalog.orientations(d), appearanceIndex = Math.max(0, orientations.indexOf(this.editor.furnitureOrient));
-            this.selectionLabel.textContent = `${h?.group.label || 'Furniture'} · Appearance ${appearanceIndex + 1}`;
-            this.selectionInfo.textContent = `${h?.group.label || 'Furniture'} · #${d.index}\nHeight: H${this.editor.placementHeight}`;
+            const orientations = this.catalog.orientations(d), appearanceIndex = Math.max(0, orientations.indexOf(this.editor.furnitureOrient)), friendly = this.catalog.displayName(d, h?.group ?? null);
+            this.selectionLabel.textContent = `${friendly} · Appearance ${appearanceIndex + 1}`;
+            this.selectionInfo.textContent = `${friendly}${h ? `\n${h.group.label} · #${d.index}` : `\n#${d.index}`}\nHeight: H${this.editor.placementHeight}`;
             const appearanceLabel = document.createElement('span');
             appearanceLabel.className = 'orientationLabel';
             appearanceLabel.textContent = 'Alternative appearance';
