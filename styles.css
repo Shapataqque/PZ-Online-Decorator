@@ -4,16 +4,9 @@
 /* Release onboarding, feedback, and security-conscious UI helpers */
 textarea{font:inherit;color:inherit;background:#141a1f;border:1px solid #3b4650;border-radius:4px;width:100%;padding:8px;resize:vertical}
 .feedbackDialog input[type=text],.feedbackDialog input[type=email],.feedbackDialog #feedbackContact{width:100%;padding:7px}
-.tutorialOverlay{position:fixed;inset:0;z-index:6000;background:transparent;display:flex;align-items:flex-end;justify-content:center;padding:28px;pointer-events:none;transition:background .15s}
-.tutorialOverlay.noTarget{background:rgba(4,8,11,.28)}
-.tutorialOverlay.cardTop{align-items:flex-start}
-.tutorialCard{position:relative;z-index:2;width:min(680px,calc(100vw - 32px));padding:18px;background:#1a2228;border:1px solid #4c5c68;border-radius:10px;box-shadow:0 18px 52px #0008;pointer-events:auto}
-.tutorialCard h2{margin:2px 0 8px;font-size:20px}.tutorialCard p{margin:0 0 14px;color:#c2cdd5;font-size:14px;line-height:1.5}.tutorialProgress{font-size:11px;color:#8294a1;text-transform:uppercase;letter-spacing:.08em}.tutorialRemember{display:flex;align-items:center;gap:7px;color:#9eacb6;font-size:12px;margin-top:8px}.tutorialActions{display:flex;align-items:center;gap:7px;margin-top:16px}
-.tutorialSpotlight{position:fixed;z-index:1;border:2px solid #63c1ff;border-radius:9px;box-shadow:0 0 0 9999px rgba(4,8,11,.34),0 0 0 3px rgba(99,193,255,.16),0 0 22px rgba(57,168,239,.5);pointer-events:none;opacity:0;transition:left .15s,top .15s,width .15s,height .15s,opacity .12s}
-.tutorialSpotlight.active{opacity:1}.tutorialOverlay.hidden .tutorialSpotlight{display:none}
-.dialog.tutorialVisibleDialog{position:fixed;z-index:5500}.clipboardFallback{position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0}
+.clipboardFallback{position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0}
 #supportBtn{border-color:#735f2c;background:#3a321d}#supportBtn:hover{background:#4a4025}
-@media(max-width:700px){.tutorialOverlay{padding:12px}.tutorialCard{width:100%}.topbar{overflow-x:auto}.tutorialActions{flex-wrap:wrap}}
+@media(max-width:700px){.topbar{overflow-x:auto}}
 
 .nightModeSwitch{display:inline-flex;align-items:center;gap:6px;padding:0 3px;color:#aebbc4;font-size:11px;cursor:pointer;user-select:none;white-space:nowrap}.nightModeSwitch input{position:absolute;opacity:0;pointer-events:none}.switchTrack{position:relative;width:34px;height:18px;border-radius:999px;background:#48535c;border:1px solid #596671;transition:background .15s,border-color .15s}.switchKnob{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#d9e4eb;transition:transform .15s}.nightModeSwitch input:checked+.switchTrack{background:#176a9d;border-color:#319edc}.nightModeSwitch input:checked+.switchTrack .switchKnob{transform:translateX(16px)}
 
@@ -30,7 +23,6 @@ body.lightMode .stage{background:#e8edf1}body.lightMode #stageBadge{background:#
 body.lightMode .right h3,body.lightMode .dialogBody h4{color:#50636f}body.lightMode .viewFilter.off{opacity:.5}
 body.lightMode .dialog{background:#f7f9fa;color:#26343d;border-color:#aebbc5;box-shadow:0 18px 60px #40505a33}body.lightMode .dialogTitle,body.lightMode .dialogActions{background:#e8edf1;border-color:#c4ced5}body.lightMode .dialogTitle small,body.lightMode .dialogBody label{color:#5f707b}body.lightMode .dialogBody section{border-color:#ccd5db}body.lightMode .importStatus{background:#fff;border-color:#c7d1d8;color:#43545f}
 body.lightMode .performanceStats{background:#ffffffeb;color:#2e414d;border-color:#b5c2ca;box-shadow:0 3px 14px #40505a22}
-body.lightMode .tutorialCard{background:#fff;color:#26343d;border-color:#9eabb5;box-shadow:0 18px 52px #44545f33}body.lightMode .tutorialCard p{color:#465965}body.lightMode .tutorialProgress,body.lightMode .tutorialRemember{color:#62747f}body.lightMode .tutorialOverlay.noTarget{background:rgba(55,70,80,.18)}body.lightMode .tutorialSpotlight{box-shadow:0 0 0 9999px rgba(55,70,80,.24),0 0 0 3px rgba(45,142,202,.14),0 0 22px rgba(45,142,202,.4)}
 body.lightMode #supportBtn{background:#fff8df;border-color:#b99a3e}body.lightMode #supportBtn:hover{background:#fff1bf}
 body.lightMode .nightModeSwitch{color:#4e626f}body.lightMode .switchTrack{background:#c8d1d7;border-color:#aab6bf}body.lightMode .switchKnob{background:#fff}
 .creditsDialog p{margin:0 0 10px}.creditsDialog a{color:#69baf1}body.lightMode .creditsDialog a{color:#176a9d}
@@ -88,18 +80,13 @@ body.lightMode .versionHistory small {
 
 /* v1.1 picker and world-coordinate map */
 .coordPickerRow{align-items:center}.coordPickerRow .hint{margin:0;flex:1}
-.worldMapDialog{width:min(1040px,96vw)}.worldMapBody{padding-bottom:10px}.worldMapCanvas{display:block;width:100%;height:min(64vh,640px);min-height:360px;background:#101519;border:1px solid #394750;border-radius:6px;cursor:crosshair;touch-action:none}.worldMapCanvas:active{cursor:grabbing}.worldMapToolbar{display:flex;align-items:center;gap:8px;margin-top:9px}.worldMapCoords{font-size:11px;color:#9fb0bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.worldMapToolbar .grow{min-width:10px}
+.worldMapDialog{width:min(720px,92vw)}.worldMapBody{padding-bottom:10px}.worldMapBody p{margin:4px 0 10px}.pzmapHelperActions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.pzmapCoordPreview{margin-top:12px}
 .pickerDialog{width:min(680px,92vw)}.pickerChoices{display:flex;flex-direction:column;gap:6px}.pickerChoice{display:grid;grid-template-columns:68px minmax(0,1fr);gap:10px;align-items:center;width:100%;padding:7px;text-align:left;background:#22292f}.pickerChoice:hover{background:#2c3740;border-color:#4a90bb}.pickerChoice canvas{width:68px;height:64px;background:#14191d;border:1px solid #303941;border-radius:4px;image-rendering:pixelated}.pickerChoice span,.pickerChoice b,.pickerChoice small{display:block;min-width:0}.pickerChoice b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pickerChoice small{margin-top:3px;color:#8fa1ad;font-size:10px}
-body.lightMode .worldMapCanvas{background:#e8edf1;border-color:#b6c3cc}body.lightMode .worldMapCoords{color:#586b77}body.lightMode .pickerChoice{background:#fff;border-color:#c3cdd5}body.lightMode .pickerChoice:hover{background:#e6f1f8;border-color:#4a98c8}body.lightMode .pickerChoice canvas{background:#f5f7f8;border-color:#c5cfd6}body.lightMode .pickerChoice small{color:#60717d}
-@media(max-width:700px){.worldMapCanvas{min-height:300px;height:55vh}.worldMapToolbar{flex-wrap:wrap}.worldMapCoords{width:100%;white-space:normal}.coordPickerRow{align-items:flex-start;flex-direction:column}}
+body.lightMode .pickerChoice{background:#fff;border-color:#c3cdd5}body.lightMode .pickerChoice:hover{background:#e6f1f8;border-color:#4a98c8}body.lightMode .pickerChoice canvas{background:#f5f7f8;border-color:#c5cfd6}body.lightMode .pickerChoice small{color:#60717d}
+@media(max-width:700px){.coordPickerRow{align-items:flex-start;flex-direction:column}.pzmapHelperActions{flex-direction:column}.pzmapHelperActions button{width:100%}}
 
 /* v1.1.1 controls, picker hierarchy, map legend and tutorial target */
 .zLevelCaption{font-size:11px;color:#8fa1ad;margin:4px 0 2px}.zLevelRow{align-items:center;margin-top:0}.zLevelRow #zLevel{flex:1 1 auto;min-width:70px;height:30px;margin:0;padding:4px 7px}.zStepBtn{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px!important;width:30px;height:30px;padding:0;font-size:16px;line-height:1}.zLevelRow #addLevelBtn{height:30px;white-space:nowrap}
-.tutorialTargetInteractive{position:relative!important;z-index:7000!important;pointer-events:auto!important}
 .pickerGroup{display:flex;flex-direction:column;gap:4px;padding:5px;border:1px solid #34414a;border-radius:6px;background:#1b2228}.pickerFurnitureChoice{border-color:#4c7693}.pickerChildChoice{width:calc(100% - 24px);margin-left:24px;position:relative}.pickerChildChoice:before{content:"↳";position:absolute;left:-18px;top:50%;transform:translateY(-50%);color:#7e94a2;font-size:16px}
-.worldMapLegend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px;font-size:11px;color:#9fb0bc}.worldMapLegend span{display:inline-flex;align-items:center;gap:5px}.worldMapLegend i{display:inline-block;width:12px;height:12px;border:1px solid #ffffff35;border-radius:2px}.legendVegetation{background:#304920}.legendRoad{background:#808080}.legendUrban{background:#84514c}.legendWater{background:#6c7f83}
-body.lightMode .pickerGroup{background:#f6f8f9;border-color:#c3cdd5}body.lightMode .pickerFurnitureChoice{border-color:#73a4c3}body.lightMode .pickerChildChoice:before{color:#748793}body.lightMode .worldMapLegend{color:#586b77}body.lightMode .zLevelCaption{color:#60717d}
+body.lightMode .pickerGroup{background:#f6f8f9;border-color:#c3cdd5}body.lightMode .pickerFurnitureChoice{border-color:#73a4c3}body.lightMode .pickerChildChoice:before{color:#748793}body.lightMode .zLevelCaption{color:#60717d}
 
-.placementModes{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.placementModes button{padding:4px 7px;font-size:11px}.placementModes button.active{background:#185b8d;border-color:#318aca}
-body.lightMode .placementModes button.active{color:#fff;background:#176a9d;border-color:#176a9d}
-.dialog.tutorialVisibleDialog[open]{display:block}
