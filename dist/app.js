@@ -44,7 +44,7 @@ var PZODT;
             this.properties = {};
             this.baseVisible = true;
             this.baseOpacity = 1;
-            this.baseLocked = true;
+            this.baseLocked = false;
             this.baseStacks = new Map();
             this.layers = [];
             this.activeTarget = 'base';
@@ -82,8 +82,8 @@ var PZODT;
             n++;
             name = `${category} ${n}`;
         } return this.addLayer(name, level, category); }
-        toJSON() { return { format: 'PZOnlineDecorationTool', version: 4, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: true, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementHeights: [...l.placementHeights] })) }; }
-        static fromJSON(o) { const m = new PZMapModel(o.width || 64, o.height || 64); m.tileWidth = o.tileWidth || 64; m.tileHeight = o.tileHeight || 32; m.cellsPerLevelY = o.cellsPerLevelY || 3; m.currentLevel = o.currentLevel || 0; m.properties = o.properties || {}; m.baseVisible = o.baseVisible !== false; m.baseOpacity = Number.isFinite(o.baseOpacity) ? o.baseOpacity : 1; m.baseLocked = true; m.activeTarget = o.activeTarget || 'base'; m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])])); m.layers = []; for (const q of o.layers || []) {
+        toJSON() { return { format: 'PZOnlineDecorationTool', version: 4, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: this.baseLocked, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementHeights: [...l.placementHeights] })) }; }
+        static fromJSON(o) { const m = new PZMapModel(o.width || 64, o.height || 64); m.tileWidth = o.tileWidth || 64; m.tileHeight = o.tileHeight || 32; m.cellsPerLevelY = o.cellsPerLevelY || 3; m.currentLevel = o.currentLevel || 0; m.properties = o.properties || {}; m.baseVisible = o.baseVisible !== false; m.baseOpacity = Number.isFinite(o.baseOpacity) ? o.baseOpacity : 1; m.baseLocked = o.baseLocked === true; m.activeTarget = o.activeTarget || 'base'; m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])])); m.layers = []; for (const q of o.layers || []) {
             const imported = /^(Imported Base|Imported ·|Base ·)/.test(q.name || '');
             if (imported && !o.baseStacks) {
                 const z = q.level || 0;
@@ -1245,7 +1245,7 @@ var PZODT;
                 this.updatePlacementGhost(p);
                 return;
             }
-            if (this.tool === 'furniture') {
+            if (this.selectedFurniture && (this.tool === 'furniture' || this.tool === 'pencil')) {
                 this.placeFurniture(p);
                 this.commit();
                 this.updatePlacementGhost(p);
@@ -1284,7 +1284,8 @@ var PZODT;
             this.updatePlacementGhost(p);
         } this.commit(); }
         wheel(e) { e.preventDefault(); const r = this.renderer.overlay.getBoundingClientRect(), q = this.renderer.ratio(), sx = (e.clientX - r.left) * q, sy = (e.clientY - r.top) * q, old = this.renderer.camera.zoom, n = Math.max(.12, Math.min(5, old * Math.exp(-e.deltaY * .0015))), wx = (sx - this.renderer.camera.panX) / old, wy = (sy - this.renderer.camera.panY) / old; this.renderer.camera.zoom = n; this.renderer.camera.panX = sx - wx * n; this.renderer.camera.panY = sy - wy * n; this.renderer.request(); }
-        key(e) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        key(e) { const t = e.target, typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable); if (typing)
+            return; if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
             e.preventDefault();
             e.shiftKey ? this.redo() : this.undo();
             return;
@@ -1293,13 +1294,24 @@ var PZODT;
             this.redo();
             return;
         } if (e.key.toLowerCase() === 'r' && this.selectedFurniture) {
+            e.preventDefault();
             this.rotateFurniture(e.shiftKey ? -1 : 1);
+            return;
+        } if ((e.key === '+' || e.code === 'NumpadAdd') && (this.selectedAsset || this.selectedFurniture)) {
+            e.preventDefault();
+            this.setPlacementHeight(this.placementHeight + 1);
+            this.onStatus(`Placement height H${this.placementHeight}.`);
+            return;
+        } if ((e.key === '-' || e.code === 'NumpadSubtract') && (this.selectedAsset || this.selectedFurniture)) {
+            e.preventDefault();
+            this.setPlacementHeight(this.placementHeight - 1);
+            this.onStatus(`Placement height H${this.placementHeight}.`);
             return;
         } const k = { '1': 'pencil', '2': 'eraser', '3': 'rect', '4': 'picker', '5': 'pan' }; if (k[e.key])
             this.setTool(k[e.key]); }
         updatePlacementGhost(p) {
             const m = this.map();
-            if (this.tool === 'furniture' && this.selectedFurniture) {
+            if ((this.tool === 'furniture' || this.tool === 'pencil') && this.selectedFurniture) {
                 const e = this.catalog.entry(this.selectedFurniture, this.furnitureOrient);
                 if (!e) {
                     this.renderer.clearPlacementGhost();
@@ -1335,7 +1347,7 @@ var PZODT;
         else
             this.changes.set(key, { kind: 'base', z, x, y, before, after: [...after] }); m.setStack(z, x, y, after); this.renderer.invalidateCell(z, x, y); }
         targetLocked() { const m = this.map(); if (m.activeTarget === 'base')
-            return false; return m.activeLayer()?.locked ?? false; }
+            return m.baseLocked; return m.activeLayer()?.locked ?? false; }
         paint(p, notify = true) {
             const m = this.map();
             if (this.targetLocked()) {
@@ -1349,10 +1361,20 @@ var PZODT;
                 this.strokeCells.add(strokeKey);
             if (m.activeTarget === 'base') {
                 if (this.tool === 'eraser') {
-                    this.onStatus('Imported Base is read-only. Select a user layer to erase placed objects.');
-                    return;
+                    const before = [...m.stack(m.currentLevel, p.x, p.y)], s = [...before];
+                    let removed = null;
+                    for (let i = s.length - 1; i >= 0; i--)
+                        if (this.visible(s[i])) {
+                            removed = s[i];
+                            s.splice(i, 1);
+                            break;
+                        }
+                    if (removed) {
+                        this.baseChange(m.currentLevel, p.x, p.y, s);
+                        this.onDebugLog({ type: 'erase', strokeId: this.strokeId, target: 'base', z: m.currentLevel, x: p.x, y: p.y, removed, before, after: [...s], time: new Date().toISOString() });
+                    }
                 }
-                if (this.selectedAsset) {
+                else if (this.selectedAsset) {
                     const cat = this.classifier(this.selectedAsset), target = m.findStackLayer(cat, m.currentLevel, [p], true, true);
                     this.layerChange(target, p.x, p.y, this.selectedAsset, this.placementHeight);
                     m.activeTarget = target.id;
@@ -1408,9 +1430,16 @@ var PZODT;
                 this.onStatus('Nothing visible to pick on this cell.');
                 return;
             }
-            if (items.length === 1 && !this.catalog.matchesTile(items[0].name, true).length) {
-                this.applyPickCandidate(items[0]);
-                return;
+            if (items.length === 1) {
+                const matches = this.catalog.matchesTile(items[0].name, false);
+                if (matches.length === 1) {
+                    this.applyPickFurniture(matches[0], items[0]);
+                    return;
+                }
+                if (!matches.length) {
+                    this.applyPickCandidate(items[0]);
+                    return;
+                }
             }
             this.onPickCandidates(items, p);
         }
@@ -1470,7 +1499,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.7';
+    const APP_VERSION = '1.1.8';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1635,10 +1664,10 @@ var PZODT;
         showPickerChoices(items, p) {
             const box = el('pickerChoices');
             box.replaceChildren();
-            el('pickerInfo').textContent = `${items.length} objects at ${p.x}, ${p.y}, Z ${this.map.currentLevel}. Multi-tile furniture is grouped above its individual tile.`;
+            el('pickerInfo').textContent = `${items.length} objects at ${p.x}, ${p.y}, Z ${this.map.currentLevel}. Catalog-matched sprites are selected as rotatable furniture objects.`;
             const seen = new Set();
             for (const item of items) {
-                const matches = this.catalog.matchesTile(item.name, true);
+                const matches = this.catalog.matchesTile(item.name, false);
                 for (const match of matches) {
                     const key = `${match.groupIndex}:${match.furnitureIndex}:${match.orient}:${item.targetId}`;
                     if (seen.has(key))
@@ -1654,26 +1683,12 @@ var PZODT;
                     pc.height = 64;
                     const pt = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small');
                     title.textContent = `${match.group.label} · #${match.def.index}`;
-                    meta.textContent = `Multi-tile furniture · ${match.orient} · ${this.catalog.entry(match.def, match.orient)?.cells.length ?? 0} tiles`;
+                    meta.textContent = `Furniture object · ${match.orient} · ${this.catalog.entry(match.def, match.orient)?.cells.length ?? 0} tile(s)`;
                     pt.append(title, meta);
                     parent.append(pc, pt);
-                    parent.onclick = () => { this.editor.applyPickFurniture(match, item); el('pickerDialog').close(); };
+                    parent.onclick = () => { this.selectedFurnitureHit = this.furnitureHitFromMatch(match); this.editor.applyPickFurniture(match, item); el('pickerDialog').close(); };
                     group.appendChild(parent);
                     this.drawFurniture(pc, match.def, match.orient).catch(() => { });
-                    const child = document.createElement('button');
-                    child.type = 'button';
-                    child.className = 'pickerChoice pickerChildChoice';
-                    const cc = document.createElement('canvas');
-                    cc.width = 68;
-                    cc.height = 64;
-                    const ct = document.createElement('span'), ctitle = document.createElement('b'), cmeta = document.createElement('small');
-                    ctitle.textContent = item.name;
-                    cmeta.textContent = `${item.sourceLabel} · individual tile`;
-                    ct.append(ctitle, cmeta);
-                    child.append(cc, ct);
-                    child.onclick = () => { this.editor.applyPickCandidate(item); el('pickerDialog').close(); };
-                    group.appendChild(child);
-                    this.assets.drawPreview(cc, item.name).catch(() => { });
                     box.appendChild(group);
                 }
                 if (matches.length)
@@ -1697,6 +1712,16 @@ var PZODT;
             if (!d.open)
                 d.showModal();
         }
+        furnitureHitFromMatch(match) { const seen = new Set(); let total = 0, available = 0; for (const e of match.def.entries)
+            for (const cell of e.cells) {
+                const name = cell[2];
+                if (seen.has(name))
+                    continue;
+                seen.add(name);
+                total++;
+                if (this.assets.asset(name))
+                    available++;
+            } return { group: match.group, def: match.def, groupIndex: match.groupIndex, furnitureIndex: match.furnitureIndex, available, total }; }
         collapse(side, yes) { const l = document.querySelector('.layout'); l.classList.toggle(`${side}-collapsed`, yes); el(side === 'left' ? 'openLeftPanelBtn' : 'openRightPanelBtn').classList.toggle('hidden', !yes); setTimeout(() => { this.renderer.resize(); this.renderer.request(); }, 0); }
         setTab(t) { document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === t)); el('tilesTab').classList.toggle('active', t === 'tiles'); el('furnitureTab').classList.toggle('active', t === 'furniture'); t === 'tiles' ? this.renderTiles() : this.renderFurniture(); }
         newMap() { if ((this.map.layers.some(l => l.cells.size) || [...this.map.baseStacks.values()].some(m => m.size)) && !confirm('Start a new map? Unsaved edits will be lost.'))
@@ -1820,16 +1845,14 @@ var PZODT;
         } this.zLevel.value = String(this.map.currentLevel); this.stageBadge.textContent = `Z ${this.map.currentLevel} · perspective`; this.updateZButtons(); }
         renderLayers() {
             this.layersList.replaceChildren();
-            this.map.baseLocked = true;
             const base = document.createElement('div');
             base.className = 'layer' + (this.map.activeTarget === 'base' ? ' active' : '');
             const eye = this.icon(this.map.baseVisible ? '●' : '○', 'Visibility', () => { this.map.baseVisible = !this.map.baseVisible; this.renderLayers(); this.renderer.request(); });
-            const lock = this.icon('🔒', 'Imported Base is read-only', () => { });
-            lock.disabled = true;
+            const lock = this.icon(this.map.baseLocked ? '🔒' : '🔓', 'Lock / unlock Imported Base', () => { this.map.baseLocked = !this.map.baseLocked; this.renderLayers(); });
             const name = document.createElement('div');
             name.className = 'lname';
             name.textContent = 'Imported Base';
-            name.title = 'Read-only. New decorations are automatically placed on user layers.';
+            name.title = 'Imported game objects. Unlock to erase or edit the imported stack.';
             name.onclick = () => { this.map.activeTarget = 'base'; this.renderLayers(); };
             const op = document.createElement('input');
             op.type = 'range';
@@ -1933,20 +1956,20 @@ var PZODT;
             } }, { root: this.furnitureList, rootMargin: '120px' }); for (const q of previews)
             this.furnitureObserver.observe(q.c); }
         selectionChanged() { document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === this.editor.tool)); this.renderSelection(); }
-        refreshHeightPresets() { const values = this.tileDefs.placementHeightValues(5), n = values.length, labels = n <= 1 ? ['Surface'] : n === 2 ? ['Low', 'Table'] : n === 3 ? ['Low', 'Table', 'Counter'] : n === 4 ? ['Low', 'Table', 'Counter', 'High'] : ['Low', 'Table', 'High table', 'Countertop', 'Upper']; this.heightPresets = [{ label: 'Floor', height: 0, count: 0 }, ...values.map((v, i) => ({ label: labels[i] ?? `Height ${i + 1}`, height: v.height, count: v.count }))]; }
+        refreshHeightPresets() { const values = this.tileDefs.placementHeightValues(5); this.heightPresets = [{ label: 'H0', height: 0, count: 0 }, ...values.map(v => ({ label: `H${v.height}`, height: v.height, count: v.count }))]; }
         renderPlacementHeights() { this.placementHeightControls.replaceChildren(); if (!this.editor.selectedAsset && !this.editor.selectedFurniture)
-            return; const title = document.createElement('div'); title.className = 'placementHeightTitle'; title.textContent = 'Placement height'; this.placementHeightControls.appendChild(title); const buttons = document.createElement('div'); buttons.className = 'placementHeightButtons'; for (const p of this.heightPresets) {
+            return; const title = document.createElement('div'); title.className = 'placementHeightTitle'; title.textContent = 'Placement height'; const hint = document.createElement('div'); hint.className = 'placementHeightHint'; hint.textContent = "Adjust the object's placement height here. Use + / − on the keyboard for fine adjustment."; this.placementHeightControls.append(title, hint); const buttons = document.createElement('div'); buttons.className = 'placementHeightButtons'; for (const p of this.heightPresets) {
             const b = document.createElement('button');
             b.type = 'button';
-            b.textContent = `${p.label} · H${p.height}`;
-            b.title = p.count ? `Derived from ${p.count} matching surface definitions in the loaded media` : 'Floor height';
+            b.textContent = `H${p.height}`;
+            b.title = p.count ? `Common height found in ${p.count} surface definitions from the loaded media` : 'Floor height';
             b.classList.toggle('active', this.editor.placementHeight === p.height);
             b.onclick = () => this.editor.setPlacementHeight(p.height);
             buttons.appendChild(b);
-        } this.placementHeightControls.appendChild(buttons); const custom = document.createElement('div'); custom.className = 'placementHeightCustom'; const label = document.createElement('span'); label.textContent = 'Custom'; const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.max = '128'; input.step = '1'; input.value = String(this.editor.placementHeight); input.setAttribute('aria-label', 'Custom placement height'); const apply = () => this.editor.setPlacementHeight(+input.value); input.onchange = apply; input.onkeydown = e => { if (e.key === 'Enter') {
+        } this.placementHeightControls.appendChild(buttons); const custom = document.createElement('div'); custom.className = 'placementHeightCustom'; const minus = document.createElement('button'); minus.type = 'button'; minus.textContent = '−'; minus.title = 'Decrease placement height (-)'; minus.onclick = () => this.editor.setPlacementHeight(this.editor.placementHeight - 1); const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.max = '128'; input.step = '1'; input.value = String(this.editor.placementHeight); input.setAttribute('aria-label', 'Custom placement height'); const apply = () => this.editor.setPlacementHeight(+input.value); input.onchange = apply; input.onkeydown = e => { if (e.key === 'Enter') {
             e.preventDefault();
             apply();
-        } }; custom.append(label, input); this.placementHeightControls.appendChild(custom); }
+        } }; const plus = document.createElement('button'); plus.type = 'button'; plus.textContent = '+'; plus.title = 'Increase placement height (+)'; plus.onclick = () => this.editor.setPlacementHeight(this.editor.placementHeight + 1); custom.append(minus, input, plus); this.placementHeightControls.appendChild(custom); }
         async renderSelection() { const ctx = this.preview.getContext('2d'); ctx.clearRect(0, 0, this.preview.width, this.preview.height); this.orientationButtons.replaceChildren(); this.renderPlacementHeights(); if (this.editor.selectedAsset) {
             this.selectionLabel.textContent = this.editor.selectedAsset;
             const a = this.assets.asset(this.editor.selectedAsset), cat = this.classify(this.editor.selectedAsset);
@@ -1955,9 +1978,13 @@ var PZODT;
                 await this.assets.drawPreview(this.preview, a.name);
             return;
         } const d = this.editor.selectedFurniture; if (d) {
-            const h = this.selectedFurnitureHit;
+            let h = this.selectedFurnitureHit;
+            if (!h || h.def !== d) {
+                h = this.catalog.search('', '', 5000).find(x => x.def === d) ?? null;
+                this.selectedFurnitureHit = h;
+            }
             this.selectionLabel.textContent = `${h?.group.label || 'Furniture'} · ${this.editor.furnitureOrient}`;
-            this.selectionInfo.textContent = `Furniture\n${h?.group.label || ''} · #${d.index}\n${d.layer}\nHeight: H${this.editor.placementHeight}`;
+            this.selectionInfo.textContent = `${h?.group.label || 'Furniture'} · #${d.index}\nHeight: H${this.editor.placementHeight}`;
             for (const o of this.catalog.orientations(d)) {
                 const b = document.createElement('button');
                 b.textContent = o;
