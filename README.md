@@ -12,7 +12,7 @@ The tool reads the Project Zomboid `media` folder locally in the browser. I do n
 - Browse searchable furniture categories with thumbnails and multi-tile placement.
 - Edit with Pencil, Erase, Rectangle, Picker, and Pan tools.
 - Preview tiles and furniture before placement and choose between stacked objects with Picker.
-- Choose Ground, Surface, or OnTable placement for tiles/furniture: Ground stays on the floor, Surface uses the existing destination object's ItemHeight, and OnTable uses the destination table/counter height.
+- Choose Ground, Surface, or OnTable placement for tiles/furniture: Ground targets floor height, Surface targets the destination object's ItemHeight, and OnTable targets the destination table/counter surface. Sprites with `IsSurfaceOffset` are compensated so their authored tabletop offset is not applied twice.
 - Save projects as JSON and open them later.
 
 ## Quick start
