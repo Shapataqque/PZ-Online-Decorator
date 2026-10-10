@@ -89,7 +89,7 @@ namespace PZODT {
       for(let i=m.layers.length-1;i>=0;i--){const l=m.layers[i];if(!l.visible||l.opacity<=.001||l.level!==m.currentLevel)continue;const n=l.get(p.x,p.y,m.width);if(n&&this.visible(n))items.push({name:n,targetId:l.id,sourceLabel:l.name,category:this.classifier(n),z:m.currentLevel,x:p.x,y:p.y});}
       if(m.baseVisible&&m.baseOpacity>.001){const s=m.stack(m.currentLevel,p.x,p.y);for(let i=s.length-1;i>=0;i--)if(this.visible(s[i]))items.push({name:s[i],targetId:'base',sourceLabel:`Imported Base · stack ${i+1}`,category:this.classifier(s[i]),z:m.currentLevel,x:p.x,y:p.y});}
       if(!items.length){this.onStatus('Nothing visible to pick on this cell.');return;}
-      if(items.length===1){this.applyPickCandidate(items[0]);return;}
+      if(items.length===1&&!this.catalog.matchesTile(items[0].name,true).length){this.applyPickCandidate(items[0]);return;}
       this.onPickCandidates(items,p);
     }
     applyPickCandidate(c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedAsset=c.name;this.selectedFurniture=null;this.tool='pencil';this.refreshPlacementGhost();this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`);this.onSelection();}
