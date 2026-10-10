@@ -6,8 +6,8 @@ The tool reads the Project Zomboid `media` folder locally in the browser. I do n
 
 ## What it can do
 
-- Load an existing Project Zomboid building, area, or map cell from `.lotheader` / `.lotpack` data.
-- Index local `.pack`, PNG, and `.tiles` data from the selected `media` folder.
+- Choose the local Project Zomboid `media` folder once and index `.pack`, PNG, and `.tiles` resources without loading a world location.
+- Optionally load an existing Project Zomboid building, area, or map cell from `.lotheader` / `.lotpack` data.
 - Preserve imported squares as ordered sprite/object stacks.
 - Browse searchable furniture categories with thumbnails and multi-tile placement.
 - Edit with Pencil, Erase, Rectangle, Picker, and Pan tools.
@@ -18,12 +18,11 @@ The tool reads the Project Zomboid `media` folder locally in the browser. I do n
 ## Quick start
 
 1. Open the site.
-2. Click **Load PZ Location**.
-3. Select the local `steamapps/common/ProjectZomboid/media` folder. under 
-4. Enter the World X and World Y coordinates of the location you want.
-5. Load the building or area.
-6. Browse **Tiles** or **Furniture**, use **View Filters** when walls or roofs are in the way, and decorate the map.
-7. Use **Save as .json** to keep the project.
+2. Click **Choose Media Folder…** next to **New** and select `steamapps/common/ProjectZomboid/media`.
+3. Wait for the media library to finish indexing. You can now open an existing project JSON immediately without loading a world location.
+4. To import part of the game world, click **Load World Location**, enter World X / Y, and choose an area, building, or map cell.
+5. Browse **Tiles** or **Furniture**, use **View Filters** when walls or roofs are in the way, and decorate the map.
+6. Use **Save as .json** to keep the project.
 
 ## Privacy
 
