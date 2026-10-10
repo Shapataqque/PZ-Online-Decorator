@@ -92,3 +92,11 @@ body.lightMode .pickerGroup{background:#f6f8f9;border-color:#c3cdd5}body.lightMo
 .placementModes button{padding:4px 7px;font-size:11px}
 .placementModes button.active{background:#185b8d;border-color:#318aca}
 body.lightMode .placementModes button.active{color:#fff;background:#176a9d;border-color:#176a9d}
+
+/* v1.1.6 media-first workflow */
+.mediaNotice{display:none;height:36px;align-items:center;justify-content:center;gap:10px;padding:4px 10px;background:#26333b;border-bottom:1px solid #41515d;color:#d4e0e7;font-size:12px}
+.mediaNotice button{padding:4px 8px}
+body.mediaNeeded .mediaNotice{display:flex}
+body.mediaNeeded .layout{height:calc(100% - 142px)}
+body.lightMode .mediaNotice{background:#dce8ef;border-color:#b2c3ce;color:#324650}
+@media(max-width:700px){.mediaNotice{justify-content:flex-start;overflow-x:auto;white-space:nowrap}}
