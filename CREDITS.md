@@ -2,6 +2,12 @@
 
 I built PZ Online Decoration Tool on top of years of work by people in the Project Zomboid and open-source mapping communities. I want those contributions to stay visible in this repository and in forks of it.
 
+## AI-assisted development
+
+PZ Online Decoration Tool and its public website were developed with substantial assistance from generative AI. AI assistance has been used for code generation, debugging, refactoring, documentation, and UI implementation. The project owner defines the requirements, reviews and tests changes, and is responsible for publishing and maintaining the project.
+
+This disclosure applies to the PZ Online Decoration Tool implementation and website, not to the upstream Project Zomboid mapping tools, Tiled, or the work of the contributors credited below.
+
 ## Project Zomboid mapping tools
 
 - **Tim Baker** — creator of the original WorldEd and TileZed foundation used by the Project Zomboid mapping workflow. A large part of the file-format behavior and editor concepts I relied on ultimately comes from this work.
