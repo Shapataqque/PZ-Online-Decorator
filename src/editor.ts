@@ -106,7 +106,7 @@ namespace PZODT {
       if(!cells.length){this.onStatus('Furniture assets are not available.');return;}
       const target=m.findStackLayer('Furniture',m.currentLevel,cells,true,true)!;for(const c of cells)this.layerChange(target,c.x,c.y,c.name,this.placementHeight);this.onStatus(`${cells.length} furniture tile(s) placed${missing?` · ${missing} missing`:''}.`);this.renderer.request();this.onChanged();
     }
-    private commit(){const c=[...this.changes.values()];this.changes.clear();this.history.push(c);if(c.length)}
+    private commit(){const c=[...this.changes.values()];this.changes.clear();this.history.push(c);}
     undo(){const c=this.history.undo(this.map());if(c){this.renderer.invalidateChanges(c);this.renderer.request();this.onChanged();}}
     redo(){const c=this.history.redo(this.map());if(c){this.renderer.invalidateChanges(c);this.renderer.request();this.onChanged();}}
   }
