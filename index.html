@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.0</title>
+  <title>PZ Online Decoration Tool 1.1.1</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.0</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.1</button></div>
   <button id="newMapBtn">New</button>
   <button id="loadLocationBtn" class="primary">Load PZ Location</button>
   <span class="sep"></span>
@@ -70,10 +70,9 @@
     <div id="orientationButtons" class="orientations"></div>
     <h3>Map</h3>
     <div class="row"><button id="centerBtn">Center</button></div>
-    <div class="row"><label>Z level<select id="zLevel"></select></label><button id="addLevelBtn">+ Level</button></div>
+    <div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><label>Z level<select id="zLevel"></select></label><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
     <h3>View filters</h3>
     <div id="viewFilters" class="viewFilters"></div>
-    <div class="hint">Display-only filters for the current Z level. Lower visible levels remain unfiltered; imported object stacks are not rewritten.</div>
     <h3>Layers</h3>
     <div class="row"><button id="addLayerBtn">+ Layer</button></div>
     <div id="layersList" class="layers"></div>
@@ -83,8 +82,8 @@
 <dialog id="versionHistoryDialog" class="dialog">
   <div class="dialogTitle">
     <div>
-      <b>Version History</b>
-      <small>PZ Online Decoration Tool updates</small>
+      <b>Changelog</b>
+      <small>PZ Online Decoration Tool changes</small>
     </div>
     <button id="versionHistoryCloseBtn" type="button">×</button>
   </div>
@@ -92,8 +91,23 @@
   <div class="dialogBody versionHistory">
 
     <section>
+      <h4>1.1.1</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Reworked the coordinate map into a colored terrain overview with roads, vegetation, water, urban areas, and building footprints.</li>
+        <li>Added a heuristic tabletop-placement fallback for TVs, radios, computers, lamps, and similar small objects.</li>
+        <li>Added Z-level up/down buttons next to the existing Z dropdown.</li>
+        <li>Refined View Filters with separate Roads &amp; Ground, Vegetation, and Fences &amp; Railings categories.</li>
+        <li>Rectangle now shows the same semi-transparent placement preview while dragging.</li>
+        <li>Fixed repeated erasing of the same cell during a single drag stroke and added an exportable edit log for debugging.</li>
+        <li>Picker can now select a complete multi-tile furniture object from one of its component tiles.</li>
+        <li>Adjusted tutorial interaction and simplified tutorial wording.</li>
+      </ul>
+    </section>
+
+    <section>
       <h4>1.1.0</h4>
-      <small>October 2026</small>
+      <small>10 October 2026</small>
       <ul>
         <li>Improved the interactive tutorial flow around Load PZ Location.</li>
         <li>View Filters now affect only the currently selected Z level.</li>
@@ -107,7 +121,7 @@
 
     <section>
       <h4>1.0.0</h4>
-      <small>October 2026</small>
+      <small>10 October 2026</small>
       <ul>
         <li>First public release.</li>
         <li>Project Zomboid location import.</li>
@@ -130,6 +144,10 @@
         <label>Quality<select id="graphicsQuality"><option value="low">Low — lower render and sprite texture resolution</option><option value="medium">Medium — balanced</option><option value="high">High — full resolution</option></select></label>
         <div class="hint">Low reduces canvas and GPU sprite-texture resolution for better performance on large imported buildings.</div>
         <label class="check"><input id="performanceStatsToggle" type="checkbox"> Show Performance Stats</label>
+      </section>
+      <section><h4>Debug log</h4>
+        <div class="hint">Records recent edit actions locally in this browser so erase/stacking bugs can be reproduced. No log is uploaded automatically.</div>
+        <div class="row"><button id="copyEditLogBtn" type="button">Copy log</button><button id="downloadEditLogBtn" type="button">Download log</button><button id="clearEditLogBtn" type="button">Clear</button></div>
       </section>
       <section><h4>Help</h4><div class="row"><button id="startTutorialBtn" type="button">Start tutorial</button><button id="creditsBtn" type="button">Credits</button></div></section>
     </div>
@@ -186,6 +204,7 @@
   <div class="dialogBody worldMapBody">
     <div id="worldMapInfo" class="hint">Select a media folder and map dataset first.</div>
     <canvas id="worldMapCanvas" class="worldMapCanvas" width="900" height="560" aria-label="Project Zomboid world overview"></canvas>
+    <div class="worldMapLegend" aria-label="Map legend"><span><i class="legendVegetation"></i>Vegetation</span><span><i class="legendRoad"></i>Road / ground</span><span><i class="legendUrban"></i>Urban / buildings</span><span><i class="legendWater"></i>Water</span></div>
     <div class="worldMapToolbar"><span id="worldMapCoords" class="worldMapCoords">Click a point to select a coordinate.</span><span class="grow"></span><button id="worldMapFitBtn" type="button">Fit map</button></div>
   </div>
   <div class="dialogActions"><button id="worldMapCancelBtn" type="button">Cancel</button><button id="worldMapUseBtn" class="primary" type="button" disabled>Use selected coordinate</button></div>
