@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.5 — 10 October 2026
+
+- Fixed vertical placement for sprites that use `IsSurfaceOffset`.
+- Placement now treats a sprite's own `Surface` offset separately from the destination height.
+- **Ground** targets height 0, so tabletop-authored sprites can be moved down to the floor correctly.
+- **Surface** targets the current destination object's world `ItemHeight`.
+- **OnTable** targets the destination table/counter surface height.
+- Final render offset is calculated as **destination target height - source surface offset**, preventing table-height values from being added twice.
+- Imported base objects retain their original game alignment; only user-placed objects are compensated according to Ground / Surface / OnTable.
+- Placement previews use the same corrected calculation as committed objects.
+
 ## 1.1.4 — 10 October 2026
 
 - Removed **Choose with PZmap.org** and the coordinate-map workflow completely. World X / Y are now entered directly.
