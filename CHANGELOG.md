@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.6 — 10 October 2026
+
+- Moved **Choose Media Folder** to the main toolbar next to **New**.
+- Added a first-run prompt asking the user to select the Project Zomboid media folder.
+- Selecting the media folder now automatically indexes `.pack`, PNG, and `.tiles` resources in the background without loading a world location.
+- Renamed **Load PZ Location** to **Load World Location** and reduced that dialog to map dataset, coordinates, and load-mode controls.
+- Changed the default world-load mode to **Area around coordinate**.
+- Removed the Inspector's raw `Properties:` line.
+- Fixed another tabletop-placement case: some vanilla movable sprites have their vertical placement baked into the packed 128×256 sprite frame even when their `.tiles` entry does not expose `IsSurfaceOffset`. For Furniture / Decor sprites, the renderer now infers that authored vertical offset from the packed frame and compensates it when using Ground / Surface / OnTable.
+- Ground now moves these raised-art sprites back to floor height; Surface and OnTable target the destination support height rather than adding that height on top of the baked art position.
+
 ## 1.1.5 — 10 October 2026
 
 - Fixed vertical placement for sprites that use `IsSurfaceOffset`.
