@@ -14,7 +14,7 @@ var PZODT;
             this.opacity = 1;
             this.locked = false;
             this.cells = new Map();
-            this.placementModes = new Map();
+            this.placementHeights = new Map();
             this.name = name;
             this.level = level;
             this.category = category;
@@ -24,13 +24,13 @@ var PZODT;
             this.cells.set(k, v);
         else {
             this.cells.delete(k);
-            this.placementModes.delete(k);
+            this.placementHeights.delete(k);
         } }
-        placementMode(x, y, w) { return this.placementModes.get(y * w + x) ?? 'ground'; }
-        setPlacementMode(x, y, w, mode = 'ground') { const k = y * w + x; if (mode === 'ground')
-            this.placementModes.delete(k);
+        placementHeight(x, y, w) { return this.placementHeights.get(y * w + x) ?? 0; }
+        setPlacementHeight(x, y, w, height = 0) { const k = y * w + x, h = Math.max(0, Math.min(512, Math.round(Number(height) || 0))); if (h === 0)
+            this.placementHeights.delete(k);
         else
-            this.placementModes.set(k, mode); }
+            this.placementHeights.set(k, h); }
     }
     PZODT.UserLayerModel = UserLayerModel;
     class PZMapModel {
@@ -44,7 +44,7 @@ var PZODT;
             this.properties = {};
             this.baseVisible = true;
             this.baseOpacity = 1;
-            this.baseLocked = false;
+            this.baseLocked = true;
             this.baseStacks = new Map();
             this.layers = [];
             this.activeTarget = 'base';
@@ -82,8 +82,8 @@ var PZODT;
             n++;
             name = `${category} ${n}`;
         } return this.addLayer(name, level, category); }
-        toJSON() { return { format: 'PZOnlineDecorationTool', version: 3, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: this.baseLocked, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementModes: [...l.placementModes] })) }; }
-        static fromJSON(o) { const m = new PZMapModel(o.width || 64, o.height || 64); m.tileWidth = o.tileWidth || 64; m.tileHeight = o.tileHeight || 32; m.cellsPerLevelY = o.cellsPerLevelY || 3; m.currentLevel = o.currentLevel || 0; m.properties = o.properties || {}; m.baseVisible = o.baseVisible !== false; m.baseOpacity = Number.isFinite(o.baseOpacity) ? o.baseOpacity : 1; m.baseLocked = o.baseLocked === true; m.activeTarget = o.activeTarget || 'base'; m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])])); m.layers = []; for (const q of o.layers || []) {
+        toJSON() { return { format: 'PZOnlineDecorationTool', version: 4, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: true, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementHeights: [...l.placementHeights] })) }; }
+        static fromJSON(o) { const m = new PZMapModel(o.width || 64, o.height || 64); m.tileWidth = o.tileWidth || 64; m.tileHeight = o.tileHeight || 32; m.cellsPerLevelY = o.cellsPerLevelY || 3; m.currentLevel = o.currentLevel || 0; m.properties = o.properties || {}; m.baseVisible = o.baseVisible !== false; m.baseOpacity = Number.isFinite(o.baseOpacity) ? o.baseOpacity : 1; m.baseLocked = true; m.activeTarget = o.activeTarget || 'base'; m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])])); m.layers = []; for (const q of o.layers || []) {
             const imported = /^(Imported Base|Imported ·|Base ·)/.test(q.name || '');
             if (imported && !o.baseStacks) {
                 const z = q.level || 0;
@@ -105,7 +105,17 @@ var PZODT;
             l.opacity = Number.isFinite(q.opacity) ? q.opacity : 1;
             l.locked = q.locked === true;
             l.cells = new Map(q.cells || []);
-            l.placementModes = new Map((q.placementModes || []).filter((x) => x && x.length >= 2 && ['ground', 'surface', 'ontable'].includes(x[1])).map((x) => [+x[0], x[1]]));
+            const heights = Array.isArray(q.placementHeights) ? q.placementHeights : [];
+            l.placementHeights = new Map(heights.filter((x) => x && x.length >= 2 && Number.isFinite(+x[1])).map((x) => [+x[0], Math.max(0, Math.min(512, Math.round(+x[1])))]));
+            if (!heights.length && Array.isArray(q.placementModes)) {
+                for (const x of q.placementModes) {
+                    if (!x || x.length < 2)
+                        continue;
+                    const legacy = x[1], h = legacy === 'ontable' ? 32 : legacy === 'surface' ? 16 : 0;
+                    if (h)
+                        l.placementHeights.set(+x[0], h);
+                }
+            }
             m.layers.push(l);
         } if (m.activeTarget !== 'base' && !m.layers.some(l => l.id === m.activeTarget))
             m.activeTarget = 'base'; return m; }
@@ -127,7 +137,7 @@ var PZODT;
                 const l = map.layers.find(x => x.id === ch.layerId);
                 if (l) {
                     l.set(ch.x, ch.y, map.width, reverse ? ch.before : ch.after);
-                    l.setPlacementMode(ch.x, ch.y, map.width, reverse ? (ch.beforeMode ?? 'ground') : (ch.afterMode ?? 'ground'));
+                    l.setPlacementHeight(ch.x, ch.y, map.width, reverse ? (ch.beforeHeight ?? 0) : (ch.afterHeight ?? 0));
                 }
             }
         } }
@@ -430,6 +440,25 @@ var PZODT;
                 return false; return !['false', '0', 'no', 'off'].includes(e[1]); };
             return { surface: number('surface'), itemHeight: number('itemheight'), isSurfaceOffset: flag('issurfaceoffset') || flag('ontable') || flag('attachedsurface'), isTable: flag('istable'), isTableTop: flag('istabletop') };
         }
+        placementHeightValues(limit = 5) { const hist = new Map(), add = (h, w) => { if (!Number.isFinite(h) || h <= 0 || h > 128)
+            return; const n = Math.round(h); hist.set(n, (hist.get(n) ?? 0) + w); }; for (const [key, p] of this.props) {
+            const entries = Object.entries(p).map(([k, v]) => [k.toLowerCase(), String(v).trim().toLowerCase()]), value = (k) => entries.find(([x]) => x === k)?.[1], num = (k) => { const n = Number.parseInt(value(k) ?? '0', 10); return Number.isFinite(n) ? n : 0; }, flag = (k) => { const e = entries.find(([x]) => x === k); return !!e && !['false', '0', 'no', 'off'].includes(e[1]); }, tableLike = flag('istable') || flag('istabletop') || /(table|counter|desk|workbench|cabinet|dresser|vanity|shelf)/.test(key), surface = num('surface'), item = num('itemheight');
+            if (tableLike) {
+                add(surface, 5);
+                add(item, 2);
+            }
+            else if (surface > 0)
+                add(surface, 1);
+        } const raw = [...hist].sort((a, b) => a[0] - b[0]), clusters = []; for (const [height, count] of raw) {
+            const last = clusters[clusters.length - 1];
+            if (last && height - last.height <= 2) {
+                last.sum += height * count;
+                last.count += count;
+                last.height = Math.round(last.sum / last.count);
+            }
+            else
+                clusters.push({ height, count, sum: height * count });
+        } return clusters.sort((a, b) => b.count - a.count).slice(0, Math.max(1, limit)).sort((a, b) => a.height - b.height).map(({ height, count }) => ({ height, count })); }
         classify(name, furniture) {
             const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => `_${Number(d)}`);
             const has = (...q) => q.some(x => keys.includes(x.toLowerCase()) || all.includes(x.toLowerCase()));
@@ -916,35 +945,7 @@ var PZODT;
         inferredArtOffset(a) { const scale = Math.max(1, a.scale || 1), floorCenter = a.frameH - 16 * scale, trimBottom = a.offsetY + a.sh; return Math.max(0, (floorCenter - trimBottom) / scale); }
         authoredPlacementOffset(a) { const explicit = this.sourceSurfaceOffset(a.name); if (explicit > 0)
             return explicit; const cat = this.classify(a.name); return cat === 'Furniture' || cat === 'Decor / Overlay' ? this.inferredArtOffset(a) : 0; }
-        itemHeight(name) { return this.surfaceInfo(name).itemHeight; }
-        tableHeight(name) {
-            const i = this.surfaceInfo(name), n = name.toLowerCase(), tableLike = i.isTable || /(furniture_tables|table_|tables_|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n);
-            if (!tableLike)
-                return 0;
-            if (i.surface > 0)
-                return i.surface;
-            if (i.itemHeight > 0)
-                return i.itemHeight;
-            if (/(furniture_tables_high|table_high|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n))
-                return 32;
-            if (/(furniture_tables_low|table_low|coffee_table|coffee_?table|side_?table|end_?table|nightstand)/.test(n))
-                return 18;
-            if (/(^|_)table(s)?(_|$)/.test(n) || n.includes('furniture_table'))
-                return 26;
-            return 0;
-        }
-        targetHeight(mode, itemSupport, tableSupport) { return mode === 'surface' ? itemSupport : mode === 'ontable' ? tableSupport : 0; }
-        placementLift(a, mode, itemSupport, tableSupport) { return this.targetHeight(mode, itemSupport, tableSupport) - this.authoredPlacementOffset(a); }
-        supportsAt(z, x, y) { const m = this.map(); let item = 0, table = 0; const add = (name, mode, imported = false) => { const a = this.assets.asset(name), target = imported && a ? this.authoredPlacementOffset(a) : this.targetHeight(mode, item, table), ih = this.itemHeight(name), th = this.tableHeight(name); if (ih > 0)
-            item = Math.max(item, target + ih); if (th > 0)
-            table = Math.max(table, target + th); }; for (const n of m.stack(z, x, y))
-            add(n, 'ground', true); for (const l of m.layers) {
-            if (l.level !== z)
-                continue;
-            const n = l.get(x, y, m.width);
-            if (n)
-                add(n, l.placementMode(x, y, m.width));
-        } return { item, table }; }
+        placementLift(a, height) { return Math.max(0, Math.min(128, Number(height) || 0)) - this.authoredPlacementOffset(a); }
         buildChunk(z, cx, cy, key) {
             const m = this.map(), old = this.chunkCache.get(key);
             if (old?.buffer)
@@ -961,7 +962,7 @@ var PZODT;
                             const n = stack[i], a = this.assets.asset(n);
                             if (!a)
                                 continue;
-                            cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n), lift: 0, mode: 'ground' });
+                            cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n), lift: 0, height: 0 });
                         }
                 }
             for (let li = 0; li < m.layers.length; li++) {
@@ -976,24 +977,12 @@ var PZODT;
                         const a = this.assets.asset(n);
                         if (!a)
                             continue;
-                        cmds.push({ a, x, y, order: this.order(z, x, y, 1000 + li), diag: x + y, ownerId: l.id, category: this.classify(n), lift: 0, mode: l.placementMode(x, y, m.width) });
+                        cmds.push({ a, x, y, order: this.order(z, x, y, 1000 + li), diag: x + y, ownerId: l.id, category: this.classify(n), lift: 0, height: l.placementHeight(x, y, m.width) });
                     }
             }
             cmds.sort((a, b) => a.order - b.order);
-            const itemSupports = new Map(), tableSupports = new Map();
-            for (const d of cmds) {
-                const ck = m.key(d.x, d.y), item = itemSupports.get(ck) ?? 0, table = tableSupports.get(ck) ?? 0, imported = d.ownerId === 'base', target = imported ? this.authoredPlacementOffset(d.a) : this.targetHeight(d.mode, item, table);
-                d.lift = imported ? 0 : this.placementLift(d.a, d.mode, item, table);
-                const ih = this.itemHeight(d.a.name), th = this.tableHeight(d.a.name);
-                if (ih > 0)
-                    itemSupports.set(ck, Math.max(item, target + ih));
-                else if (!itemSupports.has(ck))
-                    itemSupports.set(ck, item);
-                if (th > 0)
-                    tableSupports.set(ck, Math.max(table, target + th));
-                else if (!tableSupports.has(ck))
-                    tableSupports.set(ck, table);
-            }
+            for (const d of cmds)
+                d.lift = d.ownerId === 'base' ? 0 : this.placementLift(d.a, d.height);
             const floats = [], segments = [];
             let seg = null, vertexCursor = 0;
             const { th } = this.metrics(), displayScale = this.displayScale();
@@ -1154,7 +1143,7 @@ var PZODT;
                 const bm = this.ghostBitmaps.get(a.sourceId);
                 if (!bm)
                     continue;
-                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), mode = g.mode ?? 'ground', support = this.supportsAt(g.z, g.x, g.y), lift = this.placementLift(a, mode, support.item, support.table) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
+                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), lift = this.placementLift(a, g.height ?? 0) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
                 c.globalAlpha = g.valid ? .46 : .22;
                 c.drawImage(bm, a.sx, a.sy, a.sw, a.sh, left, top, a.sw * s, a.sh * s);
                 if (!g.valid) {
@@ -1190,7 +1179,7 @@ var PZODT;
             this.selectedAsset = null;
             this.selectedFurniture = null;
             this.furnitureOrient = 'N';
-            this.placementMode = 'ground';
+            this.placementHeight = 0;
             this.isDown = false;
             this.pan = false;
             this.last = { x: 0, y: 0 };
@@ -1206,9 +1195,9 @@ var PZODT;
             this.bind();
         }
         setTool(t) { this.tool = t; this.refreshPlacementGhost(); this.onSelection(); }
-        setPlacementMode(mode) { this.placementMode = mode; this.refreshPlacementGhost(); this.onSelection(); }
-        selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.tool = 'pencil'; this.placementMode = 'ground'; this.refreshPlacementGhost(); this.onSelection(); }
-        selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.tool = 'furniture'; this.placementMode = 'ground'; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.refreshPlacementGhost(); this.onSelection(); }
+        setPlacementHeight(height) { this.placementHeight = Math.max(0, Math.min(128, Math.round(Number(height) || 0))); this.refreshPlacementGhost(); this.onSelection(); }
+        selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.tool = 'pencil'; this.placementHeight = 0; this.refreshPlacementGhost(); this.onSelection(); }
+        selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.tool = 'furniture'; this.placementHeight = 0; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.refreshPlacementGhost(); this.onSelection(); }
         rotateFurniture(delta = 1) { const d = this.selectedFurniture; if (!d)
             return; const a = d.entries.map(e => e.orient), i = Math.max(0, a.indexOf(this.furnitureOrient)); this.furnitureOrient = a[(i + delta + a.length) % a.length]; this.refreshPlacementGhost(); this.onSelection(); }
         refreshPlacementGhost() { const p = this.renderer.hover; if (p)
@@ -1316,7 +1305,7 @@ var PZODT;
                     this.renderer.clearPlacementGhost();
                     return;
                 }
-                const cells = e.cells.map(([dx, dy, name]) => { const x = p.x + dx, y = p.y + dy; return { x, y, z: m.currentLevel, name, valid: x >= 0 && y >= 0 && x < m.width && y < m.height && !!this.catalog.assets.asset(name), mode: this.placementMode }; });
+                const cells = e.cells.map(([dx, dy, name]) => { const x = p.x + dx, y = p.y + dy; return { x, y, z: m.currentLevel, name, valid: x >= 0 && y >= 0 && x < m.width && y < m.height && !!this.catalog.assets.asset(name), height: this.placementHeight }; });
                 this.renderer.setPlacementGhost(cells);
                 return;
             }
@@ -1324,29 +1313,29 @@ var PZODT;
                 const a = this.rectStart ?? p, x0 = Math.min(a.x, p.x), x1 = Math.max(a.x, p.x), y0 = Math.min(a.y, p.y), y1 = Math.max(a.y, p.y), cells = [];
                 for (let y = y0; y <= y1; y++)
                     for (let x = x0; x <= x1; x++)
-                        cells.push({ x, y, z: m.currentLevel, name: this.selectedAsset, valid: x >= 0 && y >= 0 && x < m.width && y < m.height && !!this.catalog.assets.asset(this.selectedAsset), mode: this.placementMode });
+                        cells.push({ x, y, z: m.currentLevel, name: this.selectedAsset, valid: x >= 0 && y >= 0 && x < m.width && y < m.height && !!this.catalog.assets.asset(this.selectedAsset), height: this.placementHeight });
                 this.renderer.setPlacementGhost(cells);
                 return;
             }
             if (this.tool === 'pencil' && this.selectedAsset) {
-                this.renderer.setPlacementGhost([{ x: p.x, y: p.y, z: m.currentLevel, name: this.selectedAsset, valid: this.valid(p) && !!this.catalog.assets.asset(this.selectedAsset), mode: this.placementMode }]);
+                this.renderer.setPlacementGhost([{ x: p.x, y: p.y, z: m.currentLevel, name: this.selectedAsset, valid: this.valid(p) && !!this.catalog.assets.asset(this.selectedAsset), height: this.placementHeight }]);
                 return;
             }
             this.renderer.clearPlacementGhost();
         }
-        layerChange(l, x, y, after, afterMode = 'ground') { const m = this.map(), before = l.get(x, y, m.width), beforeMode = l.placementMode(x, y, m.width), key = `L:${l.id}:${x}:${y}`, old = this.changes.get(key); if (old) {
+        layerChange(l, x, y, after, afterHeight = 0) { const m = this.map(), before = l.get(x, y, m.width), beforeHeight = l.placementHeight(x, y, m.width), key = `L:${l.id}:${x}:${y}`, old = this.changes.get(key), h = Math.max(0, Math.min(128, Math.round(Number(afterHeight) || 0))); if (old) {
             old.after = after;
-            old.afterMode = afterMode;
+            old.afterHeight = h;
         }
         else
-            this.changes.set(key, { kind: 'layer', layerId: l.id, x, y, before, after, beforeMode, afterMode }); l.set(x, y, m.width, after); if (after)
-            l.setPlacementMode(x, y, m.width, afterMode); this.renderer.invalidateCell(l.level, x, y); }
+            this.changes.set(key, { kind: 'layer', layerId: l.id, x, y, before, after, beforeHeight, afterHeight: h }); l.set(x, y, m.width, after); if (after)
+            l.setPlacementHeight(x, y, m.width, h); this.renderer.invalidateCell(l.level, x, y); }
         baseChange(z, x, y, after) { const m = this.map(), before = [...m.stack(z, x, y)], key = `B:${z}:${x}:${y}`, old = this.changes.get(key); if (old)
             old.after = [...after];
         else
             this.changes.set(key, { kind: 'base', z, x, y, before, after: [...after] }); m.setStack(z, x, y, after); this.renderer.invalidateCell(z, x, y); }
         targetLocked() { const m = this.map(); if (m.activeTarget === 'base')
-            return m.baseLocked; return m.activeLayer()?.locked ?? false; }
+            return false; return m.activeLayer()?.locked ?? false; }
         paint(p, notify = true) {
             const m = this.map();
             if (this.targetLocked()) {
@@ -1359,23 +1348,14 @@ var PZODT;
             if (this.tool === 'eraser')
                 this.strokeCells.add(strokeKey);
             if (m.activeTarget === 'base') {
-                const before = [...m.stack(m.currentLevel, p.x, p.y)], s = [...before];
                 if (this.tool === 'eraser') {
-                    let removed = null;
-                    for (let i = s.length - 1; i >= 0; i--)
-                        if (this.visible(s[i])) {
-                            removed = s[i];
-                            s.splice(i, 1);
-                            break;
-                        }
-                    if (removed) {
-                        this.baseChange(m.currentLevel, p.x, p.y, s);
-                        this.onDebugLog({ type: 'erase', strokeId: this.strokeId, target: 'base', z: m.currentLevel, x: p.x, y: p.y, removed, before, after: [...s], time: new Date().toISOString() });
-                    }
+                    this.onStatus('Imported Base is read-only. Select a user layer to erase placed objects.');
+                    return;
                 }
-                else if (this.selectedAsset && !s.includes(this.selectedAsset)) {
-                    s.push(this.selectedAsset);
-                    this.baseChange(m.currentLevel, p.x, p.y, s);
+                if (this.selectedAsset) {
+                    const cat = this.classifier(this.selectedAsset), target = m.findStackLayer(cat, m.currentLevel, [p], true, true);
+                    this.layerChange(target, p.x, p.y, this.selectedAsset, this.placementHeight);
+                    m.activeTarget = target.id;
                 }
             }
             else {
@@ -1385,7 +1365,7 @@ var PZODT;
                 if (this.tool === 'eraser') {
                     const before = l.get(p.x, p.y, m.width);
                     if (before) {
-                        this.layerChange(l, p.x, p.y, null, 'ground');
+                        this.layerChange(l, p.x, p.y, null, 0);
                         this.onDebugLog({ type: 'erase', strokeId: this.strokeId, target: l.id, layer: l.name, z: l.level, x: p.x, y: p.y, removed: before, before, after: null, time: new Date().toISOString() });
                     }
                 }
@@ -1395,7 +1375,7 @@ var PZODT;
                         const cat = this.classifier(this.selectedAsset);
                         target = m.findStackLayer(cat, m.currentLevel, [p], true, true);
                     }
-                    this.layerChange(target, p.x, p.y, this.selectedAsset, this.placementMode);
+                    this.layerChange(target, p.x, p.y, this.selectedAsset, this.placementHeight);
                     m.activeTarget = target.id;
                 }
             }
@@ -1416,13 +1396,13 @@ var PZODT;
                     continue;
                 const n = l.get(p.x, p.y, m.width);
                 if (n && this.visible(n))
-                    items.push({ name: n, targetId: l.id, sourceLabel: l.name, category: this.classifier(n), z: m.currentLevel, x: p.x, y: p.y, placementMode: l.placementMode(p.x, p.y, m.width) });
+                    items.push({ name: n, targetId: l.id, sourceLabel: l.name, category: this.classifier(n), z: m.currentLevel, x: p.x, y: p.y, placementHeight: l.placementHeight(p.x, p.y, m.width) });
             }
             if (m.baseVisible && m.baseOpacity > .001) {
                 const s = m.stack(m.currentLevel, p.x, p.y);
                 for (let i = s.length - 1; i >= 0; i--)
                     if (this.visible(s[i]))
-                        items.push({ name: s[i], targetId: 'base', sourceLabel: `Imported Base · stack ${i + 1}`, category: this.classifier(s[i]), z: m.currentLevel, x: p.x, y: p.y, placementMode: 'ground' });
+                        items.push({ name: s[i], targetId: 'base', sourceLabel: `Imported Base · stack ${i + 1}`, category: this.classifier(s[i]), z: m.currentLevel, x: p.x, y: p.y, placementHeight: 0 });
             }
             if (!items.length) {
                 this.onStatus('Nothing visible to pick on this cell.');
@@ -1434,10 +1414,10 @@ var PZODT;
             }
             this.onPickCandidates(items, p);
         }
-        applyPickCandidate(c) { const m = this.map(); if (c.targetId === 'base' || m.layers.some(l => l.id === c.targetId))
-            m.activeTarget = c.targetId; this.selectedAsset = c.name; this.selectedFurniture = null; this.tool = 'pencil'; this.placementMode = 'ground'; this.refreshPlacementGhost(); this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`); this.onSelection(); }
-        applyPickFurniture(match, c) { const m = this.map(); if (c.targetId === 'base' || m.layers.some(l => l.id === c.targetId))
-            m.activeTarget = c.targetId; this.selectedFurniture = match.def; this.selectedAsset = null; this.tool = 'furniture'; this.placementMode = 'ground'; this.furnitureOrient = match.orient; this.refreshPlacementGhost(); this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}).`); this.onSelection(); }
+        applyPickCandidate(c) { const m = this.map(); if (c.targetId !== 'base' && m.layers.some(l => l.id === c.targetId))
+            m.activeTarget = c.targetId; this.selectedAsset = c.name; this.selectedFurniture = null; this.tool = 'pencil'; this.placementHeight = 0; this.refreshPlacementGhost(); this.onStatus(`Picked ${c.name} from ${c.sourceLabel}. New placements start at H0.`); this.onSelection(); }
+        applyPickFurniture(match, c) { const m = this.map(); if (c.targetId !== 'base' && m.layers.some(l => l.id === c.targetId))
+            m.activeTarget = c.targetId; this.selectedFurniture = match.def; this.selectedAsset = null; this.tool = 'furniture'; this.placementHeight = 0; this.furnitureOrient = match.orient; this.refreshPlacementGhost(); this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}). New placements start at H0.`); this.onSelection(); }
         placeFurniture(p) {
             const d = this.selectedFurniture, e = d ? this.catalog.entry(d, this.furnitureOrient) : null;
             if (!d || !e)
@@ -1466,7 +1446,7 @@ var PZODT;
             }
             const target = m.findStackLayer('Furniture', m.currentLevel, cells, true, true);
             for (const c of cells)
-                this.layerChange(target, c.x, c.y, c.name, this.placementMode);
+                this.layerChange(target, c.x, c.y, c.name, this.placementHeight);
             m.activeTarget = target.id;
             this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing ? ` · ${missing} missing` : ''}.`);
             this.renderer.request();
@@ -1490,7 +1470,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.6';
+    const APP_VERSION = '1.1.7';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1529,6 +1509,7 @@ var PZODT;
             this.tileToken = 0;
             this.furnitureToken = 0;
             this.furnitureObserver = null;
+            this.heightPresets = [{ label: 'Floor', height: 0, count: 0 }];
             this.editLog = [];
             this.status = el('status');
             this.coords = el('coords');
@@ -1543,7 +1524,7 @@ var PZODT;
             this.preview = el('previewCanvas');
             this.selectionInfo = el('selectionInfo');
             this.orientationButtons = el('orientationButtons');
-            this.placementModeButtons = el('placementModeButtons');
+            this.placementHeightControls = el('placementHeightControls');
             this.selectionLabel = el('selectionLabel');
             this.layersList = el('layersList');
             this.zLevel = el('zLevel');
@@ -1763,7 +1744,7 @@ var PZODT;
         async ensureMediaReady(progress) { if (this.mediaReadySignature === this.importer.mediaSignature && this.mediaReadySignature) {
             progress('Media library already indexed — reusing cached tiles, .pack textures and .tiles properties.');
             return;
-        } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress); this.classificationCache.clear(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
+        } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress); this.classificationCache.clear(); this.refreshHeightPresets(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
         async loadLocation() { const ds = el('datasetSelect').value, x = +el('worldX').value, y = +el('worldY').value, mode = el('loadMode').value, margin = +el('marginInput').value, aw = +el('areaW').value, ah = +el('areaH').value, st = el('loadStatus'), btn = el('loadBtn'); if (!this.mediaReadySignature) {
             st.textContent = 'Choose and finish indexing the media folder first.';
             return;
@@ -1839,13 +1820,16 @@ var PZODT;
         } this.zLevel.value = String(this.map.currentLevel); this.stageBadge.textContent = `Z ${this.map.currentLevel} · perspective`; this.updateZButtons(); }
         renderLayers() {
             this.layersList.replaceChildren();
+            this.map.baseLocked = true;
             const base = document.createElement('div');
             base.className = 'layer' + (this.map.activeTarget === 'base' ? ' active' : '');
             const eye = this.icon(this.map.baseVisible ? '●' : '○', 'Visibility', () => { this.map.baseVisible = !this.map.baseVisible; this.renderLayers(); this.renderer.request(); });
-            const lock = this.icon(this.map.baseLocked ? '🔒' : '🔓', 'Lock / unlock', () => { this.map.baseLocked = !this.map.baseLocked; this.renderLayers(); });
+            const lock = this.icon('🔒', 'Imported Base is read-only', () => { });
+            lock.disabled = true;
             const name = document.createElement('div');
             name.className = 'lname';
             name.textContent = 'Imported Base';
+            name.title = 'Read-only. New decorations are automatically placed on user layers.';
             name.onclick = () => { this.map.activeTarget = 'base'; this.renderLayers(); };
             const op = document.createElement('input');
             op.type = 'range';
@@ -1949,27 +1933,31 @@ var PZODT;
             } }, { root: this.furnitureList, rootMargin: '120px' }); for (const q of previews)
             this.furnitureObserver.observe(q.c); }
         selectionChanged() { document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === this.editor.tool)); this.renderSelection(); }
-        renderPlacementModes() { this.placementModeButtons.replaceChildren(); if (!this.editor.selectedAsset && !this.editor.selectedFurniture)
-            return; const modes = [['ground', 'Ground', 'Place directly on the floor/current tile plane'], ['surface', 'Surface', 'Place on top of the ItemHeight of the existing object in the destination cell'], ['ontable', 'OnTable', 'Place at the table/counter surface height in the destination cell']]; for (const [mode, label, title] of modes) {
+        refreshHeightPresets() { const values = this.tileDefs.placementHeightValues(5), n = values.length, labels = n <= 1 ? ['Surface'] : n === 2 ? ['Low', 'Table'] : n === 3 ? ['Low', 'Table', 'Counter'] : n === 4 ? ['Low', 'Table', 'Counter', 'High'] : ['Low', 'Table', 'High table', 'Countertop', 'Upper']; this.heightPresets = [{ label: 'Floor', height: 0, count: 0 }, ...values.map((v, i) => ({ label: labels[i] ?? `Height ${i + 1}`, height: v.height, count: v.count }))]; }
+        renderPlacementHeights() { this.placementHeightControls.replaceChildren(); if (!this.editor.selectedAsset && !this.editor.selectedFurniture)
+            return; const title = document.createElement('div'); title.className = 'placementHeightTitle'; title.textContent = 'Placement height'; this.placementHeightControls.appendChild(title); const buttons = document.createElement('div'); buttons.className = 'placementHeightButtons'; for (const p of this.heightPresets) {
             const b = document.createElement('button');
             b.type = 'button';
-            b.textContent = label;
-            b.title = title;
-            b.classList.toggle('active', this.editor.placementMode === mode);
-            b.onclick = () => this.editor.setPlacementMode(mode);
-            this.placementModeButtons.appendChild(b);
-        } }
-        async renderSelection() { const ctx = this.preview.getContext('2d'); ctx.clearRect(0, 0, this.preview.width, this.preview.height); this.orientationButtons.replaceChildren(); this.renderPlacementModes(); if (this.editor.selectedAsset) {
+            b.textContent = `${p.label} · H${p.height}`;
+            b.title = p.count ? `Derived from ${p.count} matching surface definitions in the loaded media` : 'Floor height';
+            b.classList.toggle('active', this.editor.placementHeight === p.height);
+            b.onclick = () => this.editor.setPlacementHeight(p.height);
+            buttons.appendChild(b);
+        } this.placementHeightControls.appendChild(buttons); const custom = document.createElement('div'); custom.className = 'placementHeightCustom'; const label = document.createElement('span'); label.textContent = 'Custom'; const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.max = '128'; input.step = '1'; input.value = String(this.editor.placementHeight); input.setAttribute('aria-label', 'Custom placement height'); const apply = () => this.editor.setPlacementHeight(+input.value); input.onchange = apply; input.onkeydown = e => { if (e.key === 'Enter') {
+            e.preventDefault();
+            apply();
+        } }; custom.append(label, input); this.placementHeightControls.appendChild(custom); }
+        async renderSelection() { const ctx = this.preview.getContext('2d'); ctx.clearRect(0, 0, this.preview.width, this.preview.height); this.orientationButtons.replaceChildren(); this.renderPlacementHeights(); if (this.editor.selectedAsset) {
             this.selectionLabel.textContent = this.editor.selectedAsset;
             const a = this.assets.asset(this.editor.selectedAsset), cat = this.classify(this.editor.selectedAsset);
-            this.selectionInfo.textContent = `${cat}\n${this.editor.selectedAsset}\nPlacement: ${this.editor.placementMode}`;
+            this.selectionInfo.textContent = `${cat}\n${this.editor.selectedAsset}\nHeight: H${this.editor.placementHeight}`;
             if (a)
                 await this.assets.drawPreview(this.preview, a.name);
             return;
         } const d = this.editor.selectedFurniture; if (d) {
             const h = this.selectedFurnitureHit;
             this.selectionLabel.textContent = `${h?.group.label || 'Furniture'} · ${this.editor.furnitureOrient}`;
-            this.selectionInfo.textContent = `Furniture\n${h?.group.label || ''} · #${d.index}\n${d.layer}\nPlacement: ${this.editor.placementMode}`;
+            this.selectionInfo.textContent = `Furniture\n${h?.group.label || ''} · #${d.index}\n${d.layer}\nHeight: H${this.editor.placementHeight}`;
             for (const o of this.catalog.orientations(d)) {
                 const b = document.createElement('button');
                 b.textContent = o;
