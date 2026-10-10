@@ -247,6 +247,7 @@ var PZODT;
             this.sheets = new Map();
             this.byKey = new Map();
             this.imageBitmaps = new Map();
+            this.legacyTreePools = null;
             this.sourceSeq = 1;
             this.loadedFileKeys = new Set();
             this.onChanged = () => { };
@@ -256,7 +257,7 @@ var PZODT;
         tileKey(name) { const p = PZODT.parseTileName(name); return `${p.tilesetName.toLowerCase()}:${p.tileIndex}`; }
         addAsset(a) { const old = this.assets.get(a.name); if (!old || a.scale >= old.scale)
             this.assets.set(a.name, a); const k = `${a.tilesetName.toLowerCase()}:${a.tileIndex}`, ok = this.byKey.get(k); if (!ok || a.scale >= ok.scale)
-            this.byKey.set(k, a); }
+            this.byKey.set(k, a); this.legacyTreePools = null; }
         asset(name) { return this.assets.get(name) ?? this.byKey.get(this.tileKey(name)) ?? null; }
         async bitmap(sourceId) { let p = this.imageBitmaps.get(sourceId); if (p)
             return p; const s = this.sources.get(sourceId); if (!s)
@@ -265,7 +266,7 @@ var PZODT;
             s.height = b.height;
         } return b; }); this.imageBitmaps.set(sourceId, p); return p; }
         clear() { for (const s of this.sources.values())
-            URL.revokeObjectURL(s.objectUrl); this.assets.clear(); this.sources.clear(); this.sheets.clear(); this.byKey.clear(); this.imageBitmaps.clear(); this.loadedFileKeys.clear(); this.onChanged(); }
+            URL.revokeObjectURL(s.objectUrl); this.assets.clear(); this.sources.clear(); this.sheets.clear(); this.byKey.clear(); this.imageBitmaps.clear(); this.legacyTreePools = null; this.loadedFileKeys.clear(); this.onChanged(); }
         dominantScale() { let a = 0, b = 0, i = 0; for (const x of this.assets.values()) {
             x.scale >= 2 ? b++ : a++;
             if (++i > 5000)
@@ -336,19 +337,57 @@ var PZODT;
             this.onChanged();
             return { png: pngs.length, packs: packs.length, skipped };
         }
-        installLegacyTreeAliases(tileCount) { if (tileCount <= 0)
-            return 0; const all = [...this.assets.values()].filter(a => !/^vegetation_trees_01_/i.test(a.name)), from = (needle) => all.filter(a => (this.sources.get(a.sourceId)?.label ?? '').toLowerCase().includes(needle)); let candidates = from('jumbotreesbigs2x.pack'); if (!candidates.length)
-            candidates = from('jumbotrees2x.pack'); if (!candidates.length)
-            candidates = all.filter(a => /jumbo/i.test(a.tilesetName)); const seen = new Set(); candidates = candidates.filter(a => { const k = `${a.sourceId}:${a.sx}:${a.sy}:${a.sw}:${a.sh}`; if (seen.has(k))
-            return false; seen.add(k); return true; }).sort((a, b) => a.name.localeCompare(b.name) || a.tileIndex - b.tileIndex); if (!candidates.length)
-            return 0; let added = 0; for (let i = 0; i < tileCount; i++) {
-            const key = `vegetation_trees_01:${i}`;
-            if (this.byKey.has(key))
+        buildLegacyTreePools() { if (this.legacyTreePools)
+            return this.legacyTreePools; const pools = new Map(), groups = new Map(), push = (size, a) => { const p = pools.get(size) ?? []; p.push(a); pools.set(size, p); }; for (const a of this.assets.values()) {
+            if (!/^e_/i.test(a.tilesetName))
                 continue;
-            const src = candidates[(i * 13 + 7) % candidates.length];
-            this.addAsset({ ...src, name: `vegetation_trees_01_${i}`, tilesetName: 'vegetation_trees_01', tileIndex: i });
-            added++;
-        } return added; }
+            const g = groups.get(a.tilesetName) ?? [];
+            g.push(a);
+            groups.set(a.tilesetName, g);
+        } for (const [name, items] of groups) {
+            const n = name.toUpperCase(), max = Math.max(...items.map(a => a.tileIndex));
+            if (n.includes('JUMBOXXL_')) {
+                const target = max >= 5 ? 3 : 0;
+                for (const a of items)
+                    if (a.tileIndex === target)
+                        push(8, a);
+                continue;
+            }
+            if (n.includes('JUMBOXL_')) {
+                const target = max >= 5 ? 3 : 0;
+                for (const a of items)
+                    if (a.tileIndex === target)
+                        push(7, a);
+                continue;
+            }
+            if (n.includes('JUMBO_')) {
+                const green = max >= 11 ? [6, 7] : [0, 1];
+                for (const a of items) {
+                    const j = green.indexOf(a.tileIndex);
+                    if (j >= 0)
+                        push(5 + j, a);
+                }
+                continue;
+            }
+            if (/_1$/i.test(name)) {
+                const green = max >= 23 ? [12, 13, 14, 15] : [0, 1, 2, 3];
+                for (const a of items) {
+                    const j = green.indexOf(a.tileIndex);
+                    if (j >= 0)
+                        push(1 + j, a);
+                }
+            }
+        } this.legacyTreePools = pools; return pools; }
+        legacyTreeAsset(name, worldX, worldY) { const p = PZODT.parseTileName(name); if (p.tilesetName.toLowerCase() !== 'vegetation_trees_01')
+            return null; const pools = this.buildLegacyTreePools(); if (!pools.size)
+            return null; let h = (Math.imul(worldX | 0, 73856093) ^ Math.imul(worldY | 0, 19349663) ^ Math.imul((p.tileIndex | 0) + 1, 83492791)) >>> 0; h ^= h >>> 13; h = Math.imul(h, 1274126177) >>> 0; const r = h % 1000; let size = r < 25 ? 8 : r < 60 ? 7 : r < 140 ? 6 : r < 260 ? 5 : 1 + ((h >>> 10) & 3), pool = pools.get(size); if (!pool?.length) {
+            for (const s of [4, 3, 2, 1, 5, 6, 7, 8])
+                if (pools.get(s)?.length) {
+                    pool = pools.get(s);
+                    break;
+                }
+        } if (!pool?.length)
+            return null; return pool[(h >>> 16) % pool.length] ?? pool[0] ?? null; }
         tilesetNames() { const s = new Set(); for (const a of this.assets.values())
             s.add(a.tilesetName); return [...s].sort(); }
         search(q, limit = 600, extra) { const out = []; for (const a of this.assets.values()) {
@@ -994,7 +1033,7 @@ var PZODT;
             return explicit; const cat = this.classify(a.name); return cat === 'Furniture' || cat === 'Decor / Overlay' ? this.inferredArtOffset(a) : 0; }
         placementLift(a, height) { return Math.max(0, Math.min(128, Number(height) || 0)) - this.authoredPlacementOffset(a); }
         buildChunk(z, cx, cy, key) {
-            const m = this.map(), old = this.chunkCache.get(key);
+            const m = this.map(), old = this.chunkCache.get(key), originX = Number.parseInt(m.properties['pzodt.worldOriginX'] ?? '0', 10) || 0, originY = Number.parseInt(m.properties['pzodt.worldOriginY'] ?? '0', 10) || 0;
             if (old?.buffer)
                 this.gl.deleteBuffer(old.buffer);
             if (old)
@@ -1006,7 +1045,10 @@ var PZODT;
                     const k = m.key(x, y), stack = base?.get(k);
                     if (stack)
                         for (let i = 0; i < stack.length; i++) {
-                            const n = stack[i], a = this.assets.asset(n);
+                            const n = stack[i];
+                            let a = this.assets.asset(n);
+                            if (!a && /^vegetation_trees_01_\d+$/i.test(n))
+                                a = this.assets.legacyTreeAsset(n, originX + x, originY + y);
                             if (!a)
                                 continue;
                             cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n), lift: 0, height: 0 });
@@ -1531,7 +1573,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.10';
+    const APP_VERSION = '1.1.11';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1797,7 +1839,7 @@ var PZODT;
         async ensureMediaReady(progress) { if (this.mediaReadySignature === this.importer.mediaSignature && this.mediaReadySignature) {
             progress('Media library already indexed — reusing cached tiles, .pack textures and .tiles properties.');
             return;
-        } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress), treeAliases = this.assets.installLegacyTreeAliases(this.tileDefs.tilesetCount('vegetation_trees_01')); this.classificationCache.clear(); this.refreshHeightPresets(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${treeAliases ? ` · ${treeAliases} legacy tree previews restored` : ''}${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
+        } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress); this.classificationCache.clear(); this.refreshHeightPresets(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
         async loadLocation() { const ds = el('datasetSelect').value, x = +el('worldX').value, y = +el('worldY').value, mode = el('loadMode').value, margin = +el('marginInput').value, aw = +el('areaW').value, ah = +el('areaH').value, st = el('loadStatus'), btn = el('loadBtn'); if (!this.mediaReadySignature) {
             st.textContent = 'Choose and finish indexing the media folder first.';
             return;
