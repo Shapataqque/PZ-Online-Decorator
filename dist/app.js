@@ -913,6 +913,9 @@ var PZODT;
                 mask |= (1 << i); return mask; }
         allFilterMask() { return (1 << PZODT.VIEW_CATEGORIES.length) - 1; }
         sourceSurfaceOffset(name) { const i = this.surfaceInfo(name); return i.isSurfaceOffset ? i.surface : 0; }
+        inferredArtOffset(a) { const scale = Math.max(1, a.scale || 1), floorCenter = a.frameH - 16 * scale, trimBottom = a.offsetY + a.sh; return Math.max(0, (floorCenter - trimBottom) / scale); }
+        authoredPlacementOffset(a) { const explicit = this.sourceSurfaceOffset(a.name); if (explicit > 0)
+            return explicit; const cat = this.classify(a.name); return cat === 'Furniture' || cat === 'Decor / Overlay' ? this.inferredArtOffset(a) : 0; }
         itemHeight(name) { return this.surfaceInfo(name).itemHeight; }
         tableHeight(name) {
             const i = this.surfaceInfo(name), n = name.toLowerCase(), tableLike = i.isTable || /(furniture_tables|table_|tables_|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n);
@@ -931,8 +934,8 @@ var PZODT;
             return 0;
         }
         targetHeight(mode, itemSupport, tableSupport) { return mode === 'surface' ? itemSupport : mode === 'ontable' ? tableSupport : 0; }
-        placementLift(name, mode, itemSupport, tableSupport) { return this.targetHeight(mode, itemSupport, tableSupport) - this.sourceSurfaceOffset(name); }
-        supportsAt(z, x, y) { const m = this.map(); let item = 0, table = 0; const add = (name, mode, imported = false) => { const target = imported ? this.sourceSurfaceOffset(name) : this.targetHeight(mode, item, table), ih = this.itemHeight(name), th = this.tableHeight(name); if (ih > 0)
+        placementLift(a, mode, itemSupport, tableSupport) { return this.targetHeight(mode, itemSupport, tableSupport) - this.authoredPlacementOffset(a); }
+        supportsAt(z, x, y) { const m = this.map(); let item = 0, table = 0; const add = (name, mode, imported = false) => { const a = this.assets.asset(name), target = imported && a ? this.authoredPlacementOffset(a) : this.targetHeight(mode, item, table), ih = this.itemHeight(name), th = this.tableHeight(name); if (ih > 0)
             item = Math.max(item, target + ih); if (th > 0)
             table = Math.max(table, target + th); }; for (const n of m.stack(z, x, y))
             add(n, 'ground', true); for (const l of m.layers) {
@@ -979,8 +982,8 @@ var PZODT;
             cmds.sort((a, b) => a.order - b.order);
             const itemSupports = new Map(), tableSupports = new Map();
             for (const d of cmds) {
-                const ck = m.key(d.x, d.y), item = itemSupports.get(ck) ?? 0, table = tableSupports.get(ck) ?? 0, imported = d.ownerId === 'base', target = imported ? this.sourceSurfaceOffset(d.a.name) : this.targetHeight(d.mode, item, table);
-                d.lift = imported ? 0 : target - this.sourceSurfaceOffset(d.a.name);
+                const ck = m.key(d.x, d.y), item = itemSupports.get(ck) ?? 0, table = tableSupports.get(ck) ?? 0, imported = d.ownerId === 'base', target = imported ? this.authoredPlacementOffset(d.a) : this.targetHeight(d.mode, item, table);
+                d.lift = imported ? 0 : this.placementLift(d.a, d.mode, item, table);
                 const ih = this.itemHeight(d.a.name), th = this.tableHeight(d.a.name);
                 if (ih > 0)
                     itemSupports.set(ck, Math.max(item, target + ih));
@@ -1151,7 +1154,7 @@ var PZODT;
                 const bm = this.ghostBitmaps.get(a.sourceId);
                 if (!bm)
                     continue;
-                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), mode = g.mode ?? 'ground', support = this.supportsAt(g.z, g.x, g.y), lift = this.placementLift(g.name, mode, support.item, support.table) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
+                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), mode = g.mode ?? 'ground', support = this.supportsAt(g.z, g.x, g.y), lift = this.placementLift(a, mode, support.item, support.table) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
                 c.globalAlpha = g.valid ? .46 : .22;
                 c.drawImage(bm, a.sx, a.sy, a.sw, a.sh, left, top, a.sw * s, a.sh * s);
                 if (!g.valid) {
@@ -1487,7 +1490,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.5';
+    const APP_VERSION = '1.1.6';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1558,6 +1561,8 @@ var PZODT;
             this.editor.onDebugLog = e => this.recordEditLog(e);
             this.assets.onChanged = () => this.assetsChanged();
             this.bind();
+            this.updateLoadMode();
+            this.updateMediaUi('needed');
             this.renderFilterButtons();
             this.renderFurnitureCategories();
             this.refreshAll();
@@ -1577,6 +1582,17 @@ var PZODT;
             return c; c = this.tileDefs.classify(n, this.catalog.furnitureTiles); this.classificationCache.set(n, c); return c; }
         objectVisible(n) { return this.filters.get(this.classify(n)) !== false; }
         setStatus(s) { this.status.textContent = s; }
+        updateMediaUi(state, message = '') { const ready = state === 'ready', busy = state === 'indexing', datasets = el('datasetSelect').options.length && !!el('datasetSelect').value; document.body.classList.toggle('mediaNeeded', !ready); const choose = el('chooseMediaBtn'), noticeChoose = el('mediaNoticeChooseBtn'), loadWorld = el('loadLocationBtn'), load = el('loadBtn'), notice = el('mediaNoticeText'), loadStatus = el('loadStatus'); choose.disabled = busy; noticeChoose.disabled = busy; choose.textContent = ready ? 'Change Media Folder…' : busy ? 'Indexing Media…' : 'Choose Media Folder…'; loadWorld.disabled = !ready || !datasets; load.disabled = !ready || !datasets; if (message) {
+            notice.textContent = message;
+            loadStatus.textContent = message;
+        }
+        else if (state === 'needed') {
+            notice.textContent = 'Please choose the Project Zomboid Media folder to load tiles and furniture.';
+            loadStatus.textContent = 'Choose the media folder from the main toolbar first.';
+        }
+        else if (ready) {
+            loadStatus.textContent = datasets ? 'Media library ready. Enter coordinates and load a location.' : 'Media library ready, but no map dataset was found.';
+        } }
         bind() {
             document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => this.editor.setTool(b.dataset.tool));
             document.querySelectorAll('.tab').forEach(b => b.onclick = () => this.setTab(b.dataset.tab === 'furniture' ? 'furniture' : 'tiles'));
@@ -1585,6 +1601,8 @@ var PZODT;
             el('redoBtn').onclick = () => this.editor.redo();
             el('centerBtn').onclick = () => this.renderer.center();
             el('newMapBtn').onclick = () => this.newMap();
+            el('chooseMediaBtn').onclick = () => el('mediaInput').click();
+            el('mediaNoticeChooseBtn').onclick = () => el('mediaInput').click();
             el('loadLocationBtn').onclick = () => this.openLoadDialog();
             el('saveJsonBtn').onclick = () => save('pz-online-decoration.json', new Blob([JSON.stringify({ map: this.map.toJSON(), filters: Object.fromEntries(this.filters) })], { type: 'application/json' }));
             el('openJsonBtn').onclick = () => el('jsonInput').click();
@@ -1617,19 +1635,21 @@ var PZODT;
             el('addLevelBtn').onclick = () => { this.map.currentLevel = this.map.maxLevel() + 1; this.renderLevels(); this.renderLayers(); this.editor.refreshPlacementGhost(); this.renderer.request(); };
             el('addLayerBtn').onclick = () => { const n = (prompt('Layer name', 'Decoration') || '').trim().slice(0, 128); if (!n)
                 return; this.map.addLayer(n, this.map.currentLevel, 'Custom'); this.renderLayers(); };
-            el('chooseMediaBtn').onclick = () => el('mediaInput').click();
             el('loadCancelBtn').onclick = () => el('loadDialog').close();
             el('loadMode').onchange = () => this.updateLoadMode();
+            el('datasetSelect').onchange = () => this.updateMediaUi(this.mediaReadySignature ? 'ready' : 'needed');
             el('loadBtn').onclick = () => this.loadLocation();
             el('versionHistoryBtn').onclick = () => el('versionHistoryDialog').showModal();
             el('versionHistoryCloseBtn').onclick = () => el('versionHistoryDialog').close();
-            el('indexMediaBtn').onclick = () => this.indexMediaOnly();
             el('pickerCloseBtn').onclick = el('pickerCancelBtn').onclick = () => el('pickerDialog').close();
             el('mediaInput').onchange = e => this.mediaSelected(e);
             el('jsonInput').onchange = e => this.jsonSelected(e);
             this.renderer.overlay.addEventListener('pointermove', e => { const r = this.renderer.overlay.getBoundingClientRect(), p = this.renderer.screenToTile(e.clientX - r.left, e.clientY - r.top, this.map.currentLevel), ox = Number(this.map.properties['pzodt.worldOriginX']), oy = Number(this.map.properties['pzodt.worldOriginY']); this.coords.textContent = Number.isFinite(ox) && Number.isFinite(oy) ? `local ${p.x},${p.y} · world ${ox + p.x},${oy + p.y},${this.map.currentLevel}` : `x ${p.x} · y ${p.y} · Z ${this.map.currentLevel}`; });
         }
-        openLoadDialog() { const d = el('loadDialog'); if (!d.open)
+        openLoadDialog() { if (!this.mediaReadySignature) {
+            this.updateMediaUi('needed', 'Please choose the Project Zomboid Media folder before loading a world location.');
+            return;
+        } const d = el('loadDialog'); this.updateLoadMode(); this.updateMediaUi('ready'); if (!d.open)
             d.showModal(); }
         showPickerChoices(items, p) {
             const box = el('pickerChoices');
@@ -1703,44 +1723,52 @@ var PZODT;
         async mediaSelected(e) { const inp = e.target; if (!inp.files?.length)
             return; if (inp.files.length > 100000) {
             this.setStatus('Media folder contains too many files to index safely.');
+            this.updateMediaUi('error', 'The selected folder contains too many files to index safely.');
             inp.value = '';
             return;
-        } const list = this.importer.scan(inp.files); const select = el('datasetSelect'); select.replaceChildren(); for (const d of list) {
+        } const oldSignature = this.mediaReadySignature, list = this.importer.scan(inp.files), select = el('datasetSelect'); select.replaceChildren(); for (const d of list) {
             const o = document.createElement('option');
             o.value = d.id;
             o.textContent = `${d.label} · ${d.headers} headers / ${d.packs} lotpacks`;
             select.appendChild(o);
-        } el('loadBtn').disabled = !list.length; el('indexMediaBtn').disabled = !list.length; el('mediaInfo').textContent = list.length ? `${list.length} map dataset(s) found. ${this.importer.assetFiles().length} texture source file(s), ${this.importer.tileDefFiles().length} .tiles definition file(s).` : 'No map dataset found in this media folder.'; if (this.mediaReadySignature && this.mediaReadySignature !== this.importer.mediaSignature) {
+        } if (!list.length) {
+            const o = document.createElement('option');
+            o.value = '';
+            o.textContent = 'No map dataset found';
+            select.appendChild(o);
+        } if (oldSignature && oldSignature !== this.importer.mediaSignature) {
             this.assets.clear();
             this.tileDefs.clear();
             this.classificationCache.clear();
             this.mediaReadySignature = '';
-        } inp.value = ''; }
+        } const found = `${this.importer.assetFiles().length} texture source file(s) · ${this.importer.tileDefFiles().length} .tiles definition file(s)`; this.updateMediaUi('indexing', `Media folder selected. Indexing ${found}…`); inp.value = ''; try {
+            const progress = (s) => { el('mediaNoticeText').textContent = s; el('loadStatus').textContent = s; this.setStatus(s); };
+            await this.ensureMediaReady(progress);
+            this.renderTilesets();
+            this.renderTiles();
+            this.renderFurnitureCategories();
+            this.renderFurniture();
+            this.selectionChanged();
+            const msg = `Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${this.tileDefs.props.size.toLocaleString()} tile definitions${list.length ? ` · ${list.length} map dataset(s)` : ' · no map dataset found'}.`;
+            this.updateMediaUi('ready');
+            this.setStatus(msg);
+        }
+        catch (err) {
+            const msg = `Media error: ${String(err.message || err)}`;
+            console.error(err);
+            this.updateMediaUi('error', msg);
+            this.setStatus(msg);
+        } }
         updateLoadMode() { const m = el('loadMode').value; el('marginRow').classList.toggle('hidden', m !== 'building'); el('areaRow').classList.toggle('hidden', m !== 'area'); }
         async ensureMediaReady(progress) { if (this.mediaReadySignature === this.importer.mediaSignature && this.mediaReadySignature) {
             progress('Media library already indexed — reusing cached tiles, .pack textures and .tiles properties.');
             return;
         } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress); this.classificationCache.clear(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
-        async indexMediaOnly() { const st = el('loadStatus'), btn = el('indexMediaBtn'); if (!el('datasetSelect').value) {
-            st.textContent = 'Select the Project Zomboid media folder first.';
+        async loadLocation() { const ds = el('datasetSelect').value, x = +el('worldX').value, y = +el('worldY').value, mode = el('loadMode').value, margin = +el('marginInput').value, aw = +el('areaW').value, ah = +el('areaH').value, st = el('loadStatus'), btn = el('loadBtn'); if (!this.mediaReadySignature) {
+            st.textContent = 'Choose and finish indexing the media folder first.';
             return;
-        } btn.disabled = true; try {
-            const progress = (s) => { st.textContent = s; this.setStatus(s); };
-            await this.ensureMediaReady(progress);
-            this.renderTilesets();
-            this.renderTiles();
-            this.renderFurniture();
-            this.selectionChanged();
-            st.textContent = 'Media library ready. Current map was not changed.';
-        }
-        catch (err) {
-            st.textContent = `Media error: ${String(err.message || err)}`;
-        }
-        finally {
-            btn.disabled = false;
-        } }
-        async loadLocation() { const ds = el('datasetSelect').value, x = +el('worldX').value, y = +el('worldY').value, mode = el('loadMode').value, margin = +el('marginInput').value, aw = +el('areaW').value, ah = +el('areaH').value, st = el('loadStatus'), btn = el('loadBtn'); if (!ds || !Number.isFinite(x) || !Number.isFinite(y)) {
-            st.textContent = 'Select media and enter valid World X / Y.';
+        } if (!ds || !Number.isFinite(x) || !Number.isFinite(y)) {
+            st.textContent = 'Select a map dataset and enter valid World X / Y.';
             return;
         } btn.disabled = true; try {
             const progress = (s) => { st.textContent = s; this.setStatus(s); };
@@ -1861,7 +1889,7 @@ var PZODT;
             o.textContent = n;
             this.tilesetSelect.appendChild(o);
         } if ([...this.tilesetSelect.options].some(o => o.value === old))
-            this.tilesetSelect.value = old; this.assetSummary.textContent = this.assets.assets.size ? `${this.assets.assets.size.toLocaleString()} sprites · ${this.tileDefs.props.size.toLocaleString()} tile definitions` : 'Load a PZ location to index the media library.'; }
+            this.tilesetSelect.value = old; this.assetSummary.textContent = this.assets.assets.size ? `${this.assets.assets.size.toLocaleString()} sprites · ${this.tileDefs.props.size.toLocaleString()} tile definitions` : 'Choose the Project Zomboid media folder to index the media library.'; }
         renderTiles() { const token = ++this.tileToken; this.tileList.replaceChildren(); let a = this.tilesetSelect.value ? this.assets.assetsForTileset(this.tilesetSelect.value) : this.assets.search(this.tileSearch.value, 500); if (this.tilesetSelect.value && this.tileSearch.value.trim()) {
             const q = this.tileSearch.value.toLowerCase();
             a = a.filter(x => x.name.toLowerCase().includes(q));
@@ -1933,8 +1961,8 @@ var PZODT;
         } }
         async renderSelection() { const ctx = this.preview.getContext('2d'); ctx.clearRect(0, 0, this.preview.width, this.preview.height); this.orientationButtons.replaceChildren(); this.renderPlacementModes(); if (this.editor.selectedAsset) {
             this.selectionLabel.textContent = this.editor.selectedAsset;
-            const a = this.assets.asset(this.editor.selectedAsset), props = this.tileDefs.properties(this.editor.selectedAsset), cat = this.classify(this.editor.selectedAsset);
-            this.selectionInfo.textContent = `${cat}\n${this.editor.selectedAsset}${Object.keys(props).length ? `\nProperties: ${Object.keys(props).slice(0, 8).join(', ')}` : ''}\nPlacement: ${this.editor.placementMode}`;
+            const a = this.assets.asset(this.editor.selectedAsset), cat = this.classify(this.editor.selectedAsset);
+            this.selectionInfo.textContent = `${cat}\n${this.editor.selectedAsset}\nPlacement: ${this.editor.placementMode}`;
             if (a)
                 await this.assets.drawPreview(this.preview, a.name);
             return;
