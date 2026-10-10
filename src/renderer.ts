@@ -116,7 +116,7 @@ namespace PZODT {
     private filterMask(){let mask=0;for(let i=0;i<VIEW_CATEGORIES.length;i++)if(this.categoryVisible(VIEW_CATEGORIES[i]))mask|=(1<<i);return mask;}
     private allFilterMask(){return(1<<VIEW_CATEGORIES.length)-1;}
     private itemHeight(name:string){return this.surfaceInfo(name).itemHeight;}
-    private tableHeight(name:string){const i=this.surfaceInfo(name),n=name.toLowerCase(),tableLike=i.isTable||i.isTableTop||/(furniture_tables|table_|tables_|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n);if(!tableLike)return 0;if(i.surface>0)return i.surface;if(i.itemHeight>0)return i.itemHeight;
+    private tableHeight(name:string){const i=this.surfaceInfo(name),n=name.toLowerCase(),tableLike=i.isTable||/(furniture_tables|table_|tables_|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n);if(!tableLike)return 0;if(i.surface>0)return i.surface;if(i.itemHeight>0)return i.itemHeight;
       if(/(furniture_tables_high|table_high|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n))return 32;
       if(/(furniture_tables_low|table_low|coffee_table|coffee_?table|side_?table|end_?table|nightstand)/.test(n))return 18;
       if(/(^|_)table(s)?(_|$)/.test(n)||n.includes('furniture_table'))return 26;
