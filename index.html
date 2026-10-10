@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.11</title>
+  <title>PZ Online Decoration Tool 1.1.12</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="mediaNeeded">
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.11</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.12</button></div>
   <button id="newMapBtn">New</button>
   <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
   <button id="loadLocationBtn" disabled>Load World Location</button>
@@ -90,6 +90,18 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.12</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Legacy vegetation_trees_01 placeholders now always pass through the erosion-tree resolver instead of accidentally rendering raw placeholder textures.</li>
+        <li>Tree previews in Picker, Selection, Tiles, placement ghosts, Imported Base, and user-placed layers now use the same coordinate-aware resolved asset.</li>
+        <li>Escape clears the current tile/furniture selection and removes its Pencil placement preview.</li>
+        <li>Erase now opens a checkbox chooser for all visible objects on the clicked cell, allowing multiple specific objects to be removed in one operation.</li>
+        <li>Z-level editing now shows an elevated active grid, a dashed adjacent-level reference grid, and vertical hover connectors to make multi-level object alignment clearer.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.11</h4>
@@ -321,6 +333,18 @@
     <div id="pickerChoices" class="pickerChoices"></div>
   </div>
   <div class="dialogActions"><button id="pickerCancelBtn" type="button">Cancel</button></div>
+</dialog>
+
+<dialog id="eraseDialog" class="dialog eraseDialog">
+  <div class="dialogTitle">
+    <div><b>Erase objects</b><small>Select exactly which objects on this cell should be removed.</small></div>
+    <button id="eraseCloseBtn" type="button">×</button>
+  </div>
+  <div class="dialogBody">
+    <div id="eraseInfo" class="hint"></div>
+    <div id="eraseChoices" class="eraseChoices"></div>
+  </div>
+  <div class="dialogActions"><button id="eraseCancelBtn" type="button">Cancel</button><button id="eraseSelectedBtn" type="button" class="primary" disabled>Erase selected</button></div>
 </dialog>
 
 <dialog id="feedbackDialog" class="dialog feedbackDialog">

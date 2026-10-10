@@ -12,6 +12,8 @@ namespace PZODT {
     private tileKey(name:string):string{const p=parseTileName(name);return `${p.tilesetName.toLowerCase()}:${p.tileIndex}`;}
     addAsset(a:AssetRef):void{const old=this.assets.get(a.name);if(!old||a.scale>=old.scale)this.assets.set(a.name,a);const k=`${a.tilesetName.toLowerCase()}:${a.tileIndex}`,ok=this.byKey.get(k);if(!ok||a.scale>=ok.scale)this.byKey.set(k,a);this.legacyTreePools=null;}
     asset(name:string):AssetRef|null{return this.assets.get(name)??this.byKey.get(this.tileKey(name))??null;}
+    isLegacyTreePlaceholder(name:string):boolean{return /^vegetation_trees_01_\d+$/i.test(name);}
+    resolveAsset(name:string,worldX=0,worldY=0):AssetRef|null{return this.isLegacyTreePlaceholder(name)?this.legacyTreeAsset(name,worldX,worldY):this.asset(name);}
     async bitmap(sourceId:string):Promise<ImageBitmap>{let p=this.imageBitmaps.get(sourceId);if(p)return p;const s=this.sources.get(sourceId);if(!s)throw new Error('Missing source');p=createImageBitmap(s.blob).then(b=>{if(!s.width){s.width=b.width;s.height=b.height;}return b;});this.imageBitmaps.set(sourceId,p);return p;}
     clear():void{for(const s of this.sources.values())URL.revokeObjectURL(s.objectUrl);this.assets.clear();this.sources.clear();this.sheets.clear();this.byKey.clear();this.imageBitmaps.clear();this.legacyTreePools=null;this.loadedFileKeys.clear();this.onChanged();}
     dominantScale():number{let a=0,b=0,i=0;for(const x of this.assets.values()){x.scale>=2?b++:a++;if(++i>5000)break;}return b>a?2:1;}
@@ -27,6 +29,6 @@ namespace PZODT {
     tilesetNames():string[]{const s=new Set<string>();for(const a of this.assets.values())s.add(a.tilesetName);return [...s].sort();}
     search(q:string,limit=600,extra?:(a:AssetRef)=>string):AssetRef[]{const out:AssetRef[]=[];for(const a of this.assets.values()){if(!q||searchMatches(`${a.name} ${a.tilesetName} ${extra?.(a)??''}`,q))out.push(a);}return out.sort((a,b)=>a.name.localeCompare(b.name)).slice(0,limit);}
     assetsForTileset(n:string):AssetRef[]{return [...this.assets.values()].filter(a=>a.tilesetName===n).sort((a,b)=>a.tileIndex-b.tileIndex);}
-    async drawPreview(c:HTMLCanvasElement,name:string):Promise<void>{const a=this.asset(name),ctx=c.getContext('2d')!;ctx.clearRect(0,0,c.width,c.height);if(!a)return;const b=await this.bitmap(a.sourceId),fit=Math.min(c.width/a.frameW,c.height/a.frameH,1),x=(c.width-a.frameW*fit)/2+a.offsetX*fit,y=(c.height-a.frameH*fit)/2+a.offsetY*fit;ctx.imageSmoothingEnabled=false;ctx.drawImage(b,a.sx,a.sy,a.sw,a.sh,x,y,a.sw*fit,a.sh*fit);}
+    async drawPreview(c:HTMLCanvasElement,name:string,worldX=0,worldY=0):Promise<void>{const a=this.resolveAsset(name,worldX,worldY),ctx=c.getContext('2d')!;ctx.clearRect(0,0,c.width,c.height);if(!a)return;const b=await this.bitmap(a.sourceId),fit=Math.min(c.width/a.frameW,c.height/a.frameH,1),x=(c.width-a.frameW*fit)/2+a.offsetX*fit,y=(c.height-a.frameH*fit)/2+a.offsetY*fit;ctx.imageSmoothingEnabled=false;ctx.drawImage(b,a.sx,a.sy,a.sw,a.sh,x,y,a.sw*fit,a.sh*fit);}
   }
 }

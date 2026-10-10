@@ -28,7 +28,7 @@ namespace PZODT {
   export interface TileSurfaceInfo{surface:number;itemHeight:number;isSurfaceOffset:boolean;isTable:boolean;isTableTop:boolean;}
   export interface PlacementHeightPreset{label:string;height:number;count:number;}
   export interface PlacementGhostCell{x:number;y:number;z:number;name:string;valid:boolean;height?:number;}
-  export interface PickCandidate{name:string;targetId:string;sourceLabel:string;category:ViewCategory;z:number;x:number;y:number;placementHeight?:number;}
+  export interface PickCandidate{name:string;targetId:string;sourceLabel:string;category:ViewCategory;z:number;x:number;y:number;placementHeight?:number;stackIndex?:number;}
   export interface BaseStackChange{kind:'base';z:number;x:number;y:number;before:string[];after:string[];}
   export interface LayerCellChange{kind:'layer';layerId:string;x:number;y:number;before:string|null;after:string|null;beforeHeight?:number;afterHeight?:number;}
   export type EditChange=BaseStackChange|LayerCellChange;

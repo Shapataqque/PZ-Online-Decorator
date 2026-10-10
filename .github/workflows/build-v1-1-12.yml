@@ -1,0 +1,44 @@
+name: Build v1.1.12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "index.html"
+      - "styles.css"
+      - "CHANGELOG.md"
+      - ".github/workflows/build-v1-1-12.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Compile TypeScript
+        run: npx -y -p typescript@5.8.3 tsc -p tsconfig.json
+      - name: Validate JavaScript
+        run: node --check dist/app.js
+      - name: Verify v1.1.12 changes
+        shell: bash
+        run: |
+          grep -q "APP_VERSION = '1.1.12'" dist/app.js
+          grep -q "resolveAsset(name" dist/app.js
+          grep -q "eraseCandidates(items" dist/app.js
+          grep -q "showEraseChoices" dist/app.js
+          grep -q "Selection cleared" dist/app.js
+          grep -q "elevated editing plane" dist/app.js
+      - name: Commit compiled build
+        shell: bash
+        run: |
+          rm -f .github/workflows/build-v1-1-12.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Build v1.1.12"
+          git push origin HEAD:main

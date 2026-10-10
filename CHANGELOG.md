@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.12 — 10 October 2026
+
+- Fixed the remaining legacy-tree rendering path: `vegetation_trees_01_*` no longer falls back to a raw placeholder texture when one exists in the indexed media. Imported trees, placement ghosts, user layers, Picker previews, Selection previews, and Tiles previews all use the same coordinate-aware erosion-tree resolver.
+- Pressing **Esc** clears the active tile/furniture selection and removes the Pencil preview.
+- Replaced sequential top-first Erase behavior with a checkbox object chooser. Clicking with Erase lists every visible object on that cell and applies the selected deletions together with normal undo/redo history.
+- Added explicit Z-plane visualization: non-zero active grids are highlighted, the adjacent level is shown as a faint dashed reference plane, and the hovered cell displays a vertical connector between the two planes.
+
 ## 1.1.11 — 10 October 2026
 
 - Removed the arbitrary global jumbo-tree alias fallback from 1.1.10.
