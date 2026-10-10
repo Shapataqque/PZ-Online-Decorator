@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.14 — 10 October 2026
+
+- Improved initial media-folder indexing: `.tiles` parsing and `.pack` indexing now begin concurrently.
+- Texture packs are indexed before raw PNG fallback sheets. When a pack already covers the complete `.tiles` count for a tileset at the same or higher scale, the duplicate PNG sheet is not decoded.
+- Increased PNG fallback decode concurrency from 6 to 8 and reduced progress-DOM update frequency.
+- Removed the Picker sentence `Catalog-matched sprites are selected as rotatable furniture objects.`
+- Explicitly classify every `fixtures_counters_*` sprite as **Furniture**, before Wall / Doors & Windows metadata checks.
+
 ## 1.1.13 — 10 October 2026
 
 - Replaced the broad `e_*` legacy-tree pool with the 11 vanilla Build 42 tree families used by `NatureTrees`.
