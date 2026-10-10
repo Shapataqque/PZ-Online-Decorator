@@ -1,12 +1,6 @@
 # Credits
 
-I built PZ Online Decoration Tool on top of years of work by people in the Project Zomboid and open-source mapping communities. I want those contributions to stay visible in this repository and in forks of it.
-
-## AI-assisted development
-
-PZ Online Decoration Tool and its public website were developed with substantial assistance from generative AI. AI assistance has been used for code generation, debugging, refactoring, documentation, and UI implementation. The project owner defines the requirements, reviews and tests changes, and is responsible for publishing and maintaining the project.
-
-This disclosure applies to the PZ Online Decoration Tool implementation and website, not to the upstream Project Zomboid mapping tools, Tiled, or the work of the contributors credited below.
+PZ Online Decoration Tool builds on years of work from the Project Zomboid and open-source mapping communities. The upstream contributions below are retained for attribution and license provenance.
 
 ## Project Zomboid mapping tools
 
@@ -17,7 +11,7 @@ This disclosure applies to the PZ Online Decoration Tool implementation and webs
 
 ## Tiled
 
-TileZed has roots in the open-source Tiled map editor ecosystem. I also want to preserve the upstream credit given to:
+TileZed has roots in the open-source Tiled map editor ecosystem. Upstream Tiled credits include:
 
 - **Thorbjørn Lindeijer** — original Tiled developer and maintainer.
 - **Andrew G. Crowell**
@@ -43,4 +37,4 @@ The browser implementation is source-derived from and behavior-compatible with p
 
 No Project Zomboid tiles, textures, map binaries, or other game assets are distributed with PZ Online Decoration Tool. Users select their own local game files at runtime.
 
-If you fork or redistribute this project, please keep this file and the PZ Online Decoration Tool attribution so the upstream work remains visible too.
+Keep this file and the applicable license notices when redistributing the project.

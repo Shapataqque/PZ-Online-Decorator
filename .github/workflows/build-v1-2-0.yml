@@ -1,0 +1,59 @@
+name: Build v1.2.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "index.html"
+      - "styles.css"
+      - "README.md"
+      - "CREDITS.md"
+      - "CHANGELOG.md"
+      - "config/**"
+      - "_headers"
+      - ".github/workflows/build-v1-2-0.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Compile TypeScript
+        run: npx -y -p typescript@5.8.3 tsc -p tsconfig.json
+
+      - name: Validate JavaScript
+        run: node --check dist/app.js
+
+      - name: Release checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "APP_VERSION = '1.2.0'" dist/app.js
+          grep -q "selectedBytes" dist/app.js
+          grep -q "readPngSize" dist/app.js
+          grep -q "PNG dimensions exceed browser safety limits" dist/app.js
+          grep -q "feedbackFrame" dist/app.js
+          grep -q "sandbox=\"allow-forms allow-scripts allow-same-origin allow-popups\"" index.html
+          grep -q "frame-ancestors 'none'" _headers
+          grep -q "X-Frame-Options: DENY" _headers
+          ! grep -RniE "ChatGPT|OpenAI|generative AI|AI-assisted|AI development disclosure|V11_NATIVE" README.md CREDITS.md index.html src config
+          ! grep -RniE "innerHTML|insertAdjacentHTML|eval\(|new Function" src index.html
+          ! grep -q "if(/\^fixtures_counters" src/tiledefs.ts
+          test "$(grep -c '^## 1\.1\.' CHANGELOG.md || true)" -eq 0
+
+      - name: Commit compiled build
+        shell: bash
+        run: |
+          rm -f .github/workflows/build-v1-2-0.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release v1.2.0"
+          git push origin HEAD:main

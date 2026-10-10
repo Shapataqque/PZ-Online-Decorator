@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.14</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
+  <title>PZ Online Decoration Tool 1.2.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="mediaNeeded">
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.14</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.2.0</button></div>
   <button id="newMapBtn">New</button>
   <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
   <button id="loadLocationBtn" disabled>Load World Location</button>
@@ -92,185 +92,18 @@
   <div class="dialogBody versionHistory">
 
     <section>
-      <h4>1.1.14</h4>
+      <h4>1.2.0</h4>
       <small>10 October 2026</small>
       <ul>
-        <li>Media indexing now parses .tiles definitions and texture packs concurrently.</li>
-        <li>After pack indexing, raw PNG tilesheets already fully covered by an equal-or-higher-resolution pack are skipped instead of being decoded a second time.</li>
-        <li>PNG fallback decoding uses a larger worker queue and progress UI updates are throttled to reduce main-thread overhead.</li>
-        <li>Removed the Picker explanation about catalog-matched sprites being selected as rotatable furniture objects.</li>
-        <li>All fixtures_counters_* sprites are explicitly classified as Furniture before wall/door metadata is evaluated.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.13</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Corrected legacy tree resolution using the actual Build 42 NatureTrees families and stage layout instead of a broad e_* asset pool.</li>
-        <li>vegetation_trees_01 placeholders now resolve only to the 11 vanilla tree families and their normal stage 2/3 sprites; non-tree erosion assets and jumbo seasonal frames are excluded.</li>
-        <li>Restored Wall classification priority ahead of generic furniture-catalog matching so wall metadata/name wins again.</li>
-        <li>Non-zero Z grids use the normal neutral grid color again; the dashed adjacent-level plane and vertical hover reference remain.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.12</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Legacy vegetation_trees_01 placeholders now always pass through the erosion-tree resolver instead of accidentally rendering raw placeholder textures.</li>
-        <li>Tree previews in Picker, Selection, Tiles, placement ghosts, Imported Base, and user-placed layers now use the same coordinate-aware resolved asset.</li>
-        <li>Escape clears the current tile/furniture selection and removes its Pencil placement preview.</li>
-        <li>Erase now opens a checkbox chooser for all visible objects on the clicked cell, allowing multiple specific objects to be removed in one operation.</li>
-        <li>Z-level editing now shows an elevated active grid, a dashed adjacent-level reference grid, and vertical hover connectors to make multi-level object alignment clearer.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.11</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Replaced the incorrect legacy-tree alias fallback introduced in 1.1.10.</li>
-        <li>vegetation_trees_01 placeholders are now resolved per world coordinate against erosion tree families instead of mapping one tile name globally to an arbitrary jumbo sprite.</li>
-        <li>Tree previews use normal non-snow seasonal frames and a weighted size distribution, so imported forests no longer become rows of identical snowy XXL trees.</li>
-        <li>The resolver remains deterministic for the same world coordinates, keeping imported areas visually stable between reloads.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.10</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Restored previews for legacy vegetation_trees_01 placeholders by resolving missing tree tiles against the Build 42 jumbo-tree texture packs.</li>
-        <li>Tiles whose names contain roof/roofs are now always classified as Roof before overlay metadata is considered.</li>
-        <li>Catalog furniture matching now treats padded and unpadded sprite indices as equivalent, fixing imported-base classification for Vegetation - Indoor and similar objects.</li>
-        <li>Furniture is now the default left-side tab and appears before Tiles.</li>
-        <li>Furniture and Tiles search now includes .tiles metadata such as CustomName, GroupName, material and other property values; common search synonyms are also supported.</li>
-        <li>Furniture cards prefer metadata-derived object names while keeping the original catalog category and index visible underneath.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.9</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Removed Map/Center and all user-facing layer controls from the Inspector; internal stacking now works as one unified editable scene.</li>
-        <li>Pencil no longer creates duplicate backing layers when a drag revisits the same cell, and Erase works across all internal layers plus Imported Base.</li>
-        <li>Furniture variants are now labeled as Alternative appearance 1, 2, 3… instead of exposing W/N/E/S direction codes; R still cycles appearances.</li>
-        <li>Fixtures - Railings objects are classified under Fences &amp; Railings, and animated_clock_01_1 is classified as Furniture for imported-base filtering.</li>
-        <li>Renamed Settings help labels to Credits/Display and improved selected-button contrast in light mode.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.8</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Imported Base is editable again: unlock it to erase imported game objects while keeping undo/redo support.</li>
-        <li>Picker now treats catalog-matched sprites as full furniture objects, including single-tile furniture, so R rotation works after picking.</li>
-        <li>Pencil now places the currently selected furniture object as well as selected single tiles.</li>
-        <li>Placement-height presets are shown only as H-codes, with + / − keyboard shortcuts and Inspector controls for one-step adjustment.</li>
-        <li>Simplified furniture information in the Inspector by removing repeated Furniture labels and layer text.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.7</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Replaced Ground / Surface / OnTable logic with explicit numeric placement heights.</li>
-        <li>Common height presets are derived from Surface and ItemHeight values found in the loaded media folder.</li>
-        <li>Added Floor, named height presets, and a Custom height input in the Inspector.</li>
-        <li>Imported Base is now permanently read-only; all new decorations are written to user layers.</li>
-        <li>Preview and committed placement now use the same vertical-position function, eliminating preview/final height mismatches.</li>
-        <li>JSON projects now store per-cell numeric placement heights.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.6</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Moved media-folder selection to the main toolbar and added a first-run media prompt.</li>
-        <li>Media assets now index automatically after the folder is selected, without loading a world location.</li>
-        <li>Renamed Load PZ Location to Load World Location and made Area around coordinate the default load mode.</li>
-        <li>Removed tile-property text from the Inspector selection summary.</li>
-        <li>Improved Ground / Surface / OnTable placement for tabletop-authored sprites whose vertical offset is baked into the packed sprite frame rather than exposed as IsSurfaceOffset.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.5</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Fixed placement of sprites that use IsSurfaceOffset so Ground can place them back on the floor instead of keeping their authored tabletop height.</li>
-        <li>Surface and OnTable now use a target-height minus source-surface-offset calculation instead of stacking an extra vertical lift.</li>
-        <li>Imported base objects keep their original game alignment while newly placed objects use the selected placement mode.</li>
-        <li>Placement previews now use the same corrected height calculation as committed objects.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.4</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Removed the coordinate map chooser and the PZmap.org helper entirely; World X / Y are now entered directly.</li>
-        <li>Restored Ground, Surface, and OnTable placement controls.</li>
-        <li>Ground places the object on the floor; Surface uses the ItemHeight of the existing destination object; OnTable uses the destination table/counter surface height.</li>
-        <li>Picker and Furniture selections now start in Ground mode so a previously elevated object does not carry its old height into a new placement.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.3</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Removed the built-in tutorial entirely.</li>
-        <li>Replaced the slow local coordinate-map renderer with a fast PZmap.org reference workflow and coordinate paste helper.</li>
-        <li>Removed the Ground / Surface / OnTable controls and switched tabletop placement to automatic destination-based snapping.</li>
-        <li>Picking an object from a table no longer preserves the table-top height as the object's future placement reference.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.2</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Replaced the coarse coordinate overview with a locally rendered top-view map based on map-square tile stacks.</li>
-        <li>Appliances and furniture-named tiles now take priority over conflicting Doors &amp; Windows metadata in View Filters.</li>
-        <li>Aligned the Z-level dropdown and up/down controls.</li>
-        <li>Improved Picker recognition of imported multi-tile furniture by matching canonical tileset name and tile index.</li>
-        <li>Added explicit Ground, Surface, and OnTable placement modes below the rotation controls.</li>
-        <li>Hardened tutorial step 2 so Load PZ Location opens reliably before advancing.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.1</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Reworked the coordinate map into a colored terrain overview with roads, vegetation, water, urban areas, and building footprints.</li>
-        <li>Added a heuristic tabletop-placement fallback for TVs, radios, computers, lamps, and similar small objects.</li>
-        <li>Added Z-level up/down buttons next to the existing Z dropdown.</li>
-        <li>Refined View Filters with separate Roads &amp; Ground, Vegetation, and Fences &amp; Railings categories.</li>
-        <li>Rectangle now shows the same semi-transparent placement preview while dragging.</li>
-        <li>Fixed repeated erasing of the same cell during a single drag stroke and added an exportable edit log for debugging.</li>
-        <li>Picker can now select a complete multi-tile furniture object from one of its component tiles.</li>
-        <li>Adjusted tutorial interaction and simplified tutorial wording.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h4>1.1.0</h4>
-      <small>10 October 2026</small>
-      <ul>
-        <li>Improved the interactive tutorial flow around Load PZ Location.</li>
-        <li>View Filters now affect only the currently selected Z level.</li>
-        <li>Improved tile classification for several indoor vegetation, school, and counter sprites.</li>
-        <li>Picker now lets you choose between multiple objects on the same cell.</li>
-        <li>Added semi-transparent placement previews before placing tiles and furniture.</li>
-        <li>Added surface-aware placement for tabletop objects such as TVs and radios.</li>
-        <li>Added an optional zoomable map overview for choosing World X / Y coordinates.</li>
+        <li>Faster local media indexing and metadata-aware Furniture / Tiles search.</li>
+        <li>Furniture is the default asset tab with numbered alternative appearances.</li>
+        <li>Unified scene editing with editable imported objects and no user-facing layer controls.</li>
+        <li>Picker supports stacked and multi-tile objects; Erase can remove selected stacked objects.</li>
+        <li>Explicit H-code placement heights, keyboard height controls, placement previews, and Esc to clear selection.</li>
+        <li>Improved Z-level navigation and adjacent-level grid references.</li>
+        <li>Refined View Filters and imported tree rendering.</li>
+        <li>Stricter validation for local media and JSON project files.</li>
+        <li>Updated browser security policy and sandboxed, on-demand feedback loading.</li>
       </ul>
     </section>
 
@@ -289,6 +122,7 @@
       </ul>
     </section>
 
+
   </div>
 </dialog>  
 <dialog id="settingsDialog" class="dialog">
@@ -299,10 +133,6 @@
         <label>Quality<select id="graphicsQuality"><option value="low">Low — lower render and sprite texture resolution</option><option value="medium">Medium — balanced</option><option value="high">High — full resolution</option></select></label>
         <div class="hint">Low reduces canvas and GPU sprite-texture resolution for better performance on large imported buildings.</div>
         <label class="check"><input id="performanceStatsToggle" type="checkbox"> Show Performance Stats</label>
-      </section>
-      <section><h4>Debug log</h4>
-        <div class="hint">Records recent edit actions locally in this browser so erase/stacking bugs can be reproduced. No log is uploaded automatically.</div>
-        <div class="row"><button id="copyEditLogBtn" type="button">Copy log</button><button id="downloadEditLogBtn" type="button">Download log</button><button id="clearEditLogBtn" type="button">Clear</button></div>
       </section>
       <section><h4>Credits</h4><div class="row"><button id="creditsBtn" type="button">Credits</button></div></section>
     </div>
@@ -319,7 +149,6 @@
       <p><b>Thorbjørn Lindeijer and the Tiled contributors</b> — upstream Tiled foundation.</p>
       <p><b>The Project Zomboid mapping and modding community</b> — workflows, testing, reports, tools, and shared knowledge.</p>
       <p><b>The Indie Stone</b> — creators of Project Zomboid. This tool is unofficial and is not affiliated with or endorsed by The Indie Stone.</p>
-      <p><b>AI development disclosure</b> — PZ Online Decoration Tool and this website were developed with substantial assistance from generative AI, including code generation, debugging, documentation, and UI implementation. Project direction, testing, review, publishing, and maintenance are handled by the project owner.</p>
       <p class="hint">The complete attribution list and license provenance are in <a href="CREDITS.md" target="_blank" rel="noopener noreferrer">CREDITS.md</a>.</p>
     </div>
     <div class="dialogActions"><button id="creditsDoneBtn" class="primary" type="button">Done</button></div>
@@ -380,13 +209,17 @@
   </div>
 
   <iframe
-    src="https://tally.so/embed/lbPPlB?alignLeft=1&hideTitle=1&transparentBackground=1"
+    id="feedbackFrame"
+    data-src="https://tally.so/embed/lbPPlB?alignLeft=1&hideTitle=1&transparentBackground=1"
     width="100%"
     height="650"
     frameborder="0"
     marginheight="0"
     marginwidth="0"
     title="PZ Online Decoration Tool Feedback"
+    sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
+    referrerpolicy="no-referrer"
+    loading="lazy"
     style="display:block;border:0;"
   ></iframe>
 </dialog>

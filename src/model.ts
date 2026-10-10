@@ -29,7 +29,46 @@ namespace PZODT {
     moveLayer(id:string,d:number):void{const i=this.layers.findIndex(l=>l.id===id);if(i<0)return;const j=Math.max(0,Math.min(this.layers.length-1,i+d));const [x]=this.layers.splice(i,1);this.layers.splice(j,0,x);}
     findStackLayer(category:ViewCategory,level:number,cells:Array<{x:number;y:number}>,create=true,preferTop=false):UserLayerModel|null{const candidates=this.layers.filter(l=>l.level===level&&l.category===category),ordered=preferTop?[...candidates].reverse():candidates;for(const l of ordered)if(cells.every(c=>!l.get(c.x,c.y,this.width)))return l;if(!create)return null;let n=1;let name:string=category;while(this.layers.some(l=>l.level===level&&l.name===name)){n++;name=`${category} ${n}`;}return this.addLayer(name,level,category);}
     toJSON():any{return{format:'PZOnlineDecorationTool',version:4,width:this.width,height:this.height,tileWidth:this.tileWidth,tileHeight:this.tileHeight,cellsPerLevelY:this.cellsPerLevelY,currentLevel:this.currentLevel,properties:this.properties,baseVisible:this.baseVisible,baseOpacity:this.baseOpacity,baseLocked:this.baseLocked,activeTarget:this.activeTarget,baseStacks:[...this.baseStacks].map(([z,m])=>[z,[...m]]),layers:this.layers.map(l=>({id:l.id,name:l.name,level:l.level,visible:l.visible,opacity:l.opacity,locked:l.locked,category:l.category,cells:[...l.cells],placementHeights:[...l.placementHeights]}))};}
-    static fromJSON(o:any):PZMapModel{const m=new PZMapModel(o.width||64,o.height||64);m.tileWidth=o.tileWidth||64;m.tileHeight=o.tileHeight||32;m.cellsPerLevelY=o.cellsPerLevelY||3;m.currentLevel=o.currentLevel||0;m.properties=o.properties||{};m.baseVisible=true;m.baseOpacity=1;m.baseLocked=false;m.activeTarget='base';m.baseStacks=new Map((o.baseStacks||[]).map((q:any)=>[+q[0],new Map(q[1]||[])]));m.layers=[];for(const q of o.layers||[]){const imported=/^(Imported Base|Imported ·|Base ·)/.test(q.name||'');if(imported&&!o.baseStacks){const z=q.level||0;let lev=m.baseStacks.get(z);if(!lev){lev=new Map();m.baseStacks.set(z,lev);}for(const [k,v] of q.cells||[]){const stack=lev.get(+k)||[];stack.push(v);lev.set(+k,stack);}continue;}const l=new UserLayerModel(q.name||'Layer',q.level||0,q.category||'Custom');l.id=q.id||l.id;l.visible=true;l.opacity=1;l.locked=false;l.cells=new Map(q.cells||[]);const heights=Array.isArray(q.placementHeights)?q.placementHeights:[];l.placementHeights=new Map(heights.filter((x:any)=>x&&x.length>=2&&Number.isFinite(+x[1])).map((x:any)=>[+x[0],Math.max(0,Math.min(512,Math.round(+x[1])))]));if(!heights.length&&Array.isArray(q.placementModes)){for(const x of q.placementModes){if(!x||x.length<2)continue;const legacy=x[1],h=legacy==='ontable'?32:legacy==='surface'?16:0;if(h)l.placementHeights.set(+x[0],h);}}m.layers.push(l);}if(m.activeTarget!=='base'&&!m.layers.some(l=>l.id===m.activeTarget))m.activeTarget='base';return m;}
+    static fromJSON(o:any):PZMapModel{
+      const width=Math.max(1,Math.min(600,Math.trunc(Number(o.width)||64)));
+      const height=Math.max(1,Math.min(600,Math.trunc(Number(o.height)||64)));
+      const m=new PZMapModel(width,height);
+      m.tileWidth=Math.max(16,Math.min(512,Number(o.tileWidth)||64));
+      m.tileHeight=Math.max(8,Math.min(256,Number(o.tileHeight)||32));
+      m.cellsPerLevelY=Math.max(0,Math.min(64,Number(o.cellsPerLevelY)||3));
+      m.currentLevel=Math.max(-64,Math.min(64,Math.trunc(Number(o.currentLevel)||0)));
+      const props:Record<string,string>=Object.create(null);
+      if(o.properties&&typeof o.properties==='object'&&!Array.isArray(o.properties)){
+        for(const [k,v] of Object.entries(o.properties)){
+          if(typeof v==='string'&&k.length<=128&&v.length<=2048&&!['__proto__','prototype','constructor'].includes(k))props[k]=v;
+        }
+      }
+      m.properties=props;
+      m.baseVisible=true;m.baseOpacity=1;m.baseLocked=false;m.activeTarget='base';
+      m.baseStacks=new Map((o.baseStacks||[]).map((q:any)=>[+q[0],new Map(q[1]||[])]));
+      m.layers=[];
+      const ids=new Set<string>();
+      for(const q of o.layers||[]){
+        const name=typeof q.name==='string'&&q.name?q.name.slice(0,128):'Layer';
+        const imported=/^(Imported Base|Imported ·|Base ·)/.test(name);
+        if(imported&&!o.baseStacks){
+          const z=Math.max(-64,Math.min(64,Math.trunc(Number(q.level)||0)));
+          let lev=m.baseStacks.get(z);if(!lev){lev=new Map();m.baseStacks.set(z,lev);}
+          for(const [k,v] of q.cells||[]){const stack=lev.get(+k)||[];stack.push(v);lev.set(+k,stack);}
+          continue;
+        }
+        const level=Math.max(-64,Math.min(64,Math.trunc(Number(q.level)||0)));
+        const category=(VIEW_CATEGORIES as readonly string[]).includes(q.category)?q.category:'Custom';
+        const l=new UserLayerModel(name,level,category as ViewCategory|'Custom');
+        let id=typeof q.id==='string'&&q.id.length<=128?q.id:l.id;if(ids.has(id))id=l.id;ids.add(id);l.id=id;
+        l.visible=true;l.opacity=1;l.locked=false;l.cells=new Map(q.cells||[]);
+        const heights=Array.isArray(q.placementHeights)?q.placementHeights:[];
+        l.placementHeights=new Map(heights.filter((x:any)=>x&&x.length>=2&&Number.isInteger(+x[0])&&Number.isFinite(+x[1])).map((x:any)=>[+x[0],Math.max(0,Math.min(512,Math.round(+x[1])))]));
+        if(!heights.length&&Array.isArray(q.placementModes)){for(const x of q.placementModes){if(!x||x.length<2)continue;const legacy=x[1],h=legacy==='ontable'?32:legacy==='surface'?16:0;if(h)l.placementHeights.set(+x[0],h);}}
+        m.layers.push(l);
+      }
+      return m;
+    }
   }
   export class History{
     undoStack:EditChange[][]=[];redoStack:EditChange[][]=[];limit=100;
