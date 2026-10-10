@@ -36,11 +36,10 @@ The upstream Tiled authorship records also credit translators including Alexande
 
 - **The Indie Stone** — creators of Project Zomboid and the game ecosystem this tool is built around. This repository is unofficial and is not affiliated with or endorsed by The Indie Stone.
 - The broader **Project Zomboid community**, especially mapping, modding, base-building, documentation, and tooling communities, for the workflows and ideas that made this project useful to build.
-- **pzmap.org / PZmap / pzmap2dzi** — a useful community reference for world-coordinate browsing and top-view rendering. The v1.1.2 local coordinate-map renderer adapts the general per-square top-view/color-rule approach from the MIT-licensed PZmap project. PZmap is credited to Min Xiang and its current community maintainers, including CalvyPZ. No rendered pzmap.org map assets are bundled here.
 
 ## Source and license provenance
 
-The browser implementation is source-derived from and behavior-compatible with parts of the Project Zomboid mapping-tool source tree, including concepts or formats associated with TileZed, BuildingEd, WorldEd, and libtiled. Relevant upstream license texts are kept under `licenses/`, including the MIT notice for PZmap/pzmap2dzi.
+The browser implementation is source-derived from and behavior-compatible with parts of the Project Zomboid mapping-tool source tree, including concepts or formats associated with TileZed, BuildingEd, WorldEd, and libtiled. Relevant upstream license texts are kept under `licenses/`.
 
 No Project Zomboid tiles, textures, map binaries, or other game assets are distributed with PZ Online Decoration Tool. Users select their own local game files at runtime.
 
