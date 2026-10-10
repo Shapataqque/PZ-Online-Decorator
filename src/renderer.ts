@@ -130,7 +130,7 @@ namespace PZODT {
       const x0=cx*SPATIAL_CHUNK_SIZE,y0=cy*SPATIAL_CHUNK_SIZE,x1=Math.min(m.width,x0+SPATIAL_CHUNK_SIZE),y1=Math.min(m.height,y0+SPATIAL_CHUNK_SIZE),cmds:BuildCommand[]=[];
       const base=m.baseStacks.get(z);
       for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
-        const k=m.key(x,y),stack=base?.get(k);if(stack)for(let i=0;i<stack.length;i++){const n=stack[i],a=this.assets.asset(n);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,i),diag:x+y,ownerId:'base',category:this.classify(n),lift:0,mode:'ground'});}
+        const k=m.key(x,y),stack=base?.get(k);if(stack)for(let i=0;i<stack.length;i++){const n=stack[i],a=this.assets.asset(n);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,i),diag:x+y,ownerId:'base',category:this.classify(n),lift:0,mode:'auto'});}
       }
       for(let li=0;li<m.layers.length;li++){
         const l=m.layers[li];if(l.level!==z)continue;
