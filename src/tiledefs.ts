@@ -25,10 +25,10 @@ namespace PZODT {
       if(n.includes('vegetation_indoor'))return 'Furniture';
       if(canonical==='vegetation_indoor_01_11'||canonical==='location_community_school_01_33'||canonical==='fixtures_counters_01_151'||canonical==='animated_clock_01_1')return 'Furniture';
       if(/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))return 'Fences & Railings';
-      if(n.includes('appliances')||n.includes('furniture')||furniture.has(n)||furniture.has(canonical))return 'Furniture';
       if(has('solidfloor')||/(^|_)(floor|floors|flooring)(_|$)/.test(n)||BUILDING_TILE_CATEGORIES['Floors']?.has(name))return 'Floor';
       if(has('walln','wallw','wallnw','wallse','wall','treataswallorder')||n.includes('wall')||BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name)||BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))return 'Wall';
       if(has('windown','windoww','doorwalln','doorwallw','doorn','doorw','window','door')||/(^|_)(door|doors|window|windows|curtain|curtains|shutter|shutters)(_|$)/.test(n)||BUILDING_TILE_CATEGORIES['Doors']?.has(name)||BUILDING_TILE_CATEGORIES['Windows']?.has(name))return 'Doors & Windows';
+      if(n.includes('appliances')||n.includes('furniture')||furniture.has(n)||furniture.has(canonical))return 'Furniture';
       if(has('walloverlay','flooroverlay','overlay','attachedn','attacheds','attachede','attachedw','ontable')||/(overlay|graffiti|poster|sign_)/.test(n))return 'Decor / Overlay';
       if(has('container','surface','table','tablen','tables','tablee','tablew','countertop','isstackable')||/(^|_)(cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n))return 'Furniture';
       if(has('roof')||n.includes('roof')||BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name)||BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))return 'Roof';

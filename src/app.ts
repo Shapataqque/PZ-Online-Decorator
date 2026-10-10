@@ -5,7 +5,7 @@
  */
 namespace PZODT {
   (PZODT as any).V11_NATIVE=true;
-  const APP_VERSION='1.1.12';
+  const APP_VERSION='1.1.13';
   type ReleaseConfig={feedbackEndpoint?:string;feedbackUrl?:string;supportUrl?:string};
   const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
   const storeGet=(k:string):string|null=>{try{return localStorage.getItem(k);}catch{return null;}};

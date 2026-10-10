@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.13 — 10 October 2026
+
+- Replaced the broad `e_*` legacy-tree pool with the 11 vanilla Build 42 tree families used by `NatureTrees`.
+- `vegetation_trees_01_*` placeholders now resolve to normal stage 2/3 sprites, matching the game's existing-tree replacement path; jumbo, snow/seasonal and unrelated erosion assets are no longer eligible.
+- Restored Wall classification priority ahead of generic furniture-catalog membership so wall tiles are controlled by the Wall filter again.
+- Returned elevated Z-level grids to the normal neutral grid color while retaining the dashed adjacent-level reference plane and vertical hover connector.
+
 ## 1.1.12 — 10 October 2026
 
 - Fixed the remaining legacy-tree rendering path: `vegetation_trees_01_*` no longer falls back to a raw placeholder texture when one exists in the indexed media. Imported trees, placement ghosts, user layers, Picker previews, Selection previews, and Tiles previews all use the same coordinate-aware erosion-tree resolver.

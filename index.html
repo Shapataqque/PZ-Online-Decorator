@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.12</title>
+  <title>PZ Online Decoration Tool 1.1.13</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="mediaNeeded">
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.12</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.13</button></div>
   <button id="newMapBtn">New</button>
   <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
   <button id="loadLocationBtn" disabled>Load World Location</button>
@@ -90,6 +90,17 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.13</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Corrected legacy tree resolution using the actual Build 42 NatureTrees families and stage layout instead of a broad e_* asset pool.</li>
+        <li>vegetation_trees_01 placeholders now resolve only to the 11 vanilla tree families and their normal stage 2/3 sprites; non-tree erosion assets and jumbo seasonal frames are excluded.</li>
+        <li>Restored Wall classification priority ahead of generic furniture-catalog matching so wall metadata/name wins again.</li>
+        <li>Non-zero Z grids use the normal neutral grid color again; the dashed adjacent-level plane and vertical hover reference remain.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.12</h4>
