@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.5</title>
+  <title>PZ Online Decoration Tool 1.1.6</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="mediaNeeded">
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.5</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.6</button></div>
   <button id="newMapBtn">New</button>
-  <button id="loadLocationBtn" class="primary">Load PZ Location</button>
+  <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
+  <button id="loadLocationBtn" disabled>Load World Location</button>
   <span class="sep"></span>
   <button id="openJsonBtn">Open .json file</button>
   <button id="saveJsonBtn">Save as .json</button>
@@ -24,6 +25,10 @@
   <button id="undoBtn">Undo</button>
   <button id="redoBtn">Redo</button>
 </header>
+<div id="mediaNotice" class="mediaNotice" role="status">
+  <span id="mediaNoticeText">Please choose the Project Zomboid Media folder to load tiles and furniture.</span>
+  <button id="mediaNoticeChooseBtn" type="button">Choose Media Folder…</button>
+</div>
 
 <div class="toolrow" id="toolrow">
   <button data-tool="pencil" class="active">1 Pencil</button>
@@ -43,7 +48,7 @@
     <section id="tilesTab" class="tabbody active">
       <input id="tileSearch" class="search" placeholder="Search tile or tileset…" autocomplete="off">
       <select id="tilesetSelect"><option value="">All tilesets</option></select>
-      <div id="assetSummary" class="hint">Load a PZ location to index the media library.</div>
+      <div id="assetSummary" class="hint">Choose the Project Zomboid media folder to index the media library.</div>
       <div id="tileList" class="tilelist"></div>
     </section>
     <section id="furnitureTab" class="tabbody">
@@ -90,6 +95,18 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.6</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Moved media-folder selection to the main toolbar and added a first-run media prompt.</li>
+        <li>Media assets now index automatically after the folder is selected, without loading a world location.</li>
+        <li>Renamed Load PZ Location to Load World Location and made Area around coordinate the default load mode.</li>
+        <li>Removed tile-property text from the Inspector selection summary.</li>
+        <li>Improved Ground / Surface / OnTable placement for tabletop-authored sprites whose vertical offset is baked into the packed sprite frame rather than exposed as IsSurfaceOffset.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.5</h4>
@@ -220,25 +237,20 @@
 
 <dialog id="loadDialog" class="dialog importDialog">
   <form method="dialog">
-    <div class="dialogTitle"><div><b>Load PZ Location</b></div><button id="loadCancelBtn" type="button">×</button></div>
+    <div class="dialogTitle"><div><b>Load World Location</b><small>Load an existing building, area, or map cell from the indexed media folder.</small></div><button id="loadCancelBtn" type="button">×</button></div>
     <div class="dialogBody">
-      <section><h4>1. Project Zomboid media folder</h4>
-        <button id="chooseMediaBtn" type="button">Choose media Folder…</button>
-        <div class="hint">Select <b>...\ProjectZomboid\media</b>. Maps, .lotpack, .pack textures, PNG tilesheets and .tiles object definitions are read locally from this folder.</div>
-        <div id="mediaInfo" class="hint">No media folder selected.</div>
-        <label>Map dataset<select id="datasetSelect"><option value="">Select media folder first</option></select></label>
-      </section>
-      <section><h4>2. Location</h4>
+      <section><h4>1. Location</h4>
+        <label>Map dataset<select id="datasetSelect"><option value="">Choose media folder first</option></select></label>
         <div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div>
       </section>
-      <section><h4>3. Load</h4>
-        <label>Mode<select id="loadMode"><option value="building">Building at coordinate</option><option value="area">Area around coordinate</option><option value="cell">Entire map cell</option></select></label>
-        <div id="marginRow"><label>Extra margin<input id="marginInput" type="number" min="0" max="20" value="2"></label></div>
-        <div id="areaRow" class="coords2 hidden"><label>Area width<input id="areaW" type="number" min="1" max="300" value="48"></label><label>Area height<input id="areaH" type="number" min="1" max="300" value="48"></label></div>
+      <section><h4>2. Load</h4>
+        <label>Mode<select id="loadMode"><option value="area" selected>Area around coordinate</option><option value="building">Building at coordinate</option><option value="cell">Entire map cell</option></select></label>
+        <div id="marginRow" class="hidden"><label>Extra margin<input id="marginInput" type="number" min="0" max="20" value="2"></label></div>
+        <div id="areaRow" class="coords2"><label>Area width<input id="areaW" type="number" min="1" max="300" value="48"></label><label>Area height<input id="areaH" type="number" min="1" max="300" value="48"></label></div>
       </section>
-      <div id="loadStatus" class="importStatus">Ready.</div>
+      <div id="loadStatus" class="importStatus">Media folder is not ready yet.</div>
     </div>
-    <div class="dialogActions"><button id="indexMediaBtn" type="button" disabled>Index media only</button><button id="loadBtn" type="button" class="primary" disabled>Load Location</button></div>
+    <div class="dialogActions"><button id="loadBtn" type="button" class="primary" disabled>Load Location</button></div>
   </form>
 </dialog>
 
