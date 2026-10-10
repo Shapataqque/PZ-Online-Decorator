@@ -8,11 +8,11 @@ The tool reads the Project Zomboid `media` folder locally in the browser. I do n
 
 - Choose the local Project Zomboid `media` folder once and index `.pack`, PNG, and `.tiles` resources without loading a world location.
 - Optionally load an existing Project Zomboid building, area, or map cell from `.lotheader` / `.lotpack` data.
-- Preserve imported squares as ordered sprite/object stacks in a read-only Imported Base.
+- Preserve imported squares as ordered sprite/object stacks in an editable Imported Base. Unlock it when you want to erase imported game objects.
 - Browse searchable furniture categories with thumbnails and multi-tile placement.
-- Edit with Pencil, Erase, Rectangle, Picker, and Pan tools.
-- Preview tiles and furniture before placement and choose between stacked objects with Picker.
-- Place tiles and furniture at explicit numeric heights. The Inspector provides **Floor (H0)** plus common height presets derived from `Surface` / `ItemHeight` values in the loaded media folder, with a Custom height field for manual control. Imported Base is read-only; all new decorations are stored on editable user layers.
+- Edit with Pencil, Erase, Rectangle, Picker, and Pan tools. Pencil places whichever tile or furniture object is currently selected in the Inspector.
+- Preview tiles and furniture before placement and choose between stacked objects with Picker. Picker resolves catalog matches as rotatable furniture objects, so **R** works after picking.
+- Place tiles and furniture at explicit numeric heights. The Inspector shows height codes such as **H0**, **H15**, and **H34**, plus manual +/- controls. Press **+** or **-** on the keyboard for one-step adjustments.
 - Save projects as JSON and open them later.
 
 ## Quick start
