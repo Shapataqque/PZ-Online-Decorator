@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1 — 10 October 2026
+
+- Reworked the coordinate picker into a colored semantic map showing vegetation, roads/ground, water, urban areas, and building footprints.
+- Replaced the first tabletop placement approach with a heuristic fallback for TVs, radios, computers, lamps, and similar small objects when placed on tables/counters.
+- Added Z-level up/down buttons next to the existing dropdown.
+- Refined View Filters: roads/ground, vegetation, and fences/railings are now separate categories; Exterior is reserved for outdoor/exterior clutter-style objects.
+- Rectangle now shows a semi-transparent placement preview while dragging.
+- Fixed repeated erase calls on the same cell during a single stroke and added a local exportable edit log for debugging.
+- Picker now offers complete multi-tile furniture objects when a clicked tile belongs to one.
+- Fixed tutorial interaction around Load PZ Location and simplified tutorial wording.
+
 ## 1.1.0
 
 - The tutorial now waits for the user to click **Load PZ Location** on step 2, advances automatically when the loader opens, and closes the loader automatically on tutorial steps that do not use it.
