@@ -116,6 +116,8 @@ namespace PZODT {
     private filterMask(){let mask=0;for(let i=0;i<VIEW_CATEGORIES.length;i++)if(this.categoryVisible(VIEW_CATEGORIES[i]))mask|=(1<<i);return mask;}
     private allFilterMask(){return(1<<VIEW_CATEGORIES.length)-1;}
     private sourceSurfaceOffset(name:string){const i=this.surfaceInfo(name);return i.isSurfaceOffset?i.surface:0;}
+    private inferredArtOffset(a:AssetRef){const scale=Math.max(1,a.scale||1),floorCenter=a.frameH-16*scale,trimBottom=a.offsetY+a.sh;return Math.max(0,(floorCenter-trimBottom)/scale);}
+    private authoredPlacementOffset(a:AssetRef){const explicit=this.sourceSurfaceOffset(a.name);if(explicit>0)return explicit;const cat=this.classify(a.name);return cat==='Furniture'||cat==='Decor / Overlay'?this.inferredArtOffset(a):0;}
     private itemHeight(name:string){return this.surfaceInfo(name).itemHeight;}
     private tableHeight(name:string){const i=this.surfaceInfo(name),n=name.toLowerCase(),tableLike=i.isTable||/(furniture_tables|table_|tables_|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n);if(!tableLike)return 0;if(i.surface>0)return i.surface;if(i.itemHeight>0)return i.itemHeight;
       if(/(furniture_tables_high|table_high|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n))return 32;
@@ -123,8 +125,8 @@ namespace PZODT {
       if(/(^|_)table(s)?(_|$)/.test(n)||n.includes('furniture_table'))return 26;
       return 0;}
     private targetHeight(mode:PlacementMode,itemSupport:number,tableSupport:number){return mode==='surface'?itemSupport:mode==='ontable'?tableSupport:0;}
-    private placementLift(name:string,mode:PlacementMode,itemSupport:number,tableSupport:number){return this.targetHeight(mode,itemSupport,tableSupport)-this.sourceSurfaceOffset(name);}
-    private supportsAt(z:number,x:number,y:number){const m=this.map();let item=0,table=0;const add=(name:string,mode:PlacementMode,imported=false)=>{const target=imported?this.sourceSurfaceOffset(name):this.targetHeight(mode,item,table),ih=this.itemHeight(name),th=this.tableHeight(name);if(ih>0)item=Math.max(item,target+ih);if(th>0)table=Math.max(table,target+th);};for(const n of m.stack(z,x,y))add(n,'ground',true);for(const l of m.layers){if(l.level!==z)continue;const n=l.get(x,y,m.width);if(n)add(n,l.placementMode(x,y,m.width));}return{item,table};}
+    private placementLift(a:AssetRef,mode:PlacementMode,itemSupport:number,tableSupport:number){return this.targetHeight(mode,itemSupport,tableSupport)-this.authoredPlacementOffset(a);}
+    private supportsAt(z:number,x:number,y:number){const m=this.map();let item=0,table=0;const add=(name:string,mode:PlacementMode,imported=false)=>{const a=this.assets.asset(name),target=imported&&a?this.authoredPlacementOffset(a):this.targetHeight(mode,item,table),ih=this.itemHeight(name),th=this.tableHeight(name);if(ih>0)item=Math.max(item,target+ih);if(th>0)table=Math.max(table,target+th);};for(const n of m.stack(z,x,y))add(n,'ground',true);for(const l of m.layers){if(l.level!==z)continue;const n=l.get(x,y,m.width);if(n)add(n,l.placementMode(x,y,m.width));}return{item,table};}
 
     private buildChunk(z:number,cx:number,cy:number,key:string):ChunkCache{
       const m=this.map(),old=this.chunkCache.get(key);if(old?.buffer)this.gl.deleteBuffer(old.buffer);if(old)this.cachedBatchCount-=old.segments.length;
@@ -140,7 +142,7 @@ namespace PZODT {
         }
       }
       cmds.sort((a,b)=>a.order-b.order);
-      const itemSupports=new Map<number,number>(),tableSupports=new Map<number,number>();for(const d of cmds){const ck=m.key(d.x,d.y),item=itemSupports.get(ck)??0,table=tableSupports.get(ck)??0,imported=d.ownerId==='base',target=imported?this.sourceSurfaceOffset(d.a.name):this.targetHeight(d.mode,item,table);d.lift=imported?0:target-this.sourceSurfaceOffset(d.a.name);const ih=this.itemHeight(d.a.name),th=this.tableHeight(d.a.name);if(ih>0)itemSupports.set(ck,Math.max(item,target+ih));else if(!itemSupports.has(ck))itemSupports.set(ck,item);if(th>0)tableSupports.set(ck,Math.max(table,target+th));else if(!tableSupports.has(ck))tableSupports.set(ck,table);}
+      const itemSupports=new Map<number,number>(),tableSupports=new Map<number,number>();for(const d of cmds){const ck=m.key(d.x,d.y),item=itemSupports.get(ck)??0,table=tableSupports.get(ck)??0,imported=d.ownerId==='base',target=imported?this.authoredPlacementOffset(d.a):this.targetHeight(d.mode,item,table);d.lift=imported?0:this.placementLift(d.a,d.mode,item,table);const ih=this.itemHeight(d.a.name),th=this.tableHeight(d.a.name);if(ih>0)itemSupports.set(ck,Math.max(item,target+ih));else if(!itemSupports.has(ck))itemSupports.set(ck,item);if(th>0)tableSupports.set(ck,Math.max(table,target+th));else if(!tableSupports.has(ck))tableSupports.set(ck,table);}
       const floats:number[]=[],segments:CachedSegment[]=[];let seg:CachedSegment|null=null,vertexCursor=0;
       const {th}=this.metrics(),displayScale=this.displayScale();
       for(const d of cmds){
@@ -175,7 +177,7 @@ namespace PZODT {
       for(let y=b.minY;y<=b.maxY+1;y++){const a=this.tileToWorld(b.minX,y,m.currentLevel),d=this.tileToWorld(b.maxX+1,y,m.currentLevel);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}
       for(let x=b.minX;x<=b.maxX+1;x++){const a=this.tileToWorld(x,b.minY,m.currentLevel),d=this.tileToWorld(x,b.maxY+1,m.currentLevel);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}c.stroke();
       if(this.hover){const p=this.tileToWorld(this.hover.x,this.hover.y,m.currentLevel);c.fillStyle='rgba(60,165,255,.14)';c.strokeStyle='rgba(80,190,255,.9)';c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+tw/2,p.y+th/2);c.lineTo(p.x,p.y+th);c.lineTo(p.x-tw/2,p.y+th/2);c.closePath();c.fill();c.stroke();}
-      c.imageSmoothingEnabled=false;for(const g of this.placementGhost){const a=this.assets.asset(g.name);if(!a)continue;const bm=this.ghostBitmaps.get(a.sourceId);if(!bm)continue;const s=displayScale/(a.scale||1),fw=a.frameW*s,fh=a.frameH*s,p=this.tileToWorld(g.x,g.y,g.z),mode=g.mode??'ground',support=this.supportsAt(g.z,g.x,g.y),lift=this.placementLift(g.name,mode,support.item,support.table)*displayScale,left=p.x-fw/2+a.offsetX*s,top=p.y+th-fh+a.offsetY*s-lift;c.globalAlpha=g.valid?.46:.22;c.drawImage(bm,a.sx,a.sy,a.sw,a.sh,left,top,a.sw*s,a.sh*s);if(!g.valid){c.globalAlpha=.9;c.strokeStyle='rgba(255,95,85,.95)';c.lineWidth=2/this.camera.zoom;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+tw/2,p.y+th/2);c.lineTo(p.x,p.y+th);c.lineTo(p.x-tw/2,p.y+th/2);c.closePath();c.stroke();}}c.globalAlpha=1;c.restore();
+      c.imageSmoothingEnabled=false;for(const g of this.placementGhost){const a=this.assets.asset(g.name);if(!a)continue;const bm=this.ghostBitmaps.get(a.sourceId);if(!bm)continue;const s=displayScale/(a.scale||1),fw=a.frameW*s,fh=a.frameH*s,p=this.tileToWorld(g.x,g.y,g.z),mode=g.mode??'ground',support=this.supportsAt(g.z,g.x,g.y),lift=this.placementLift(a,mode,support.item,support.table)*displayScale,left=p.x-fw/2+a.offsetX*s,top=p.y+th-fh+a.offsetY*s-lift;c.globalAlpha=g.valid?.46:.22;c.drawImage(bm,a.sx,a.sy,a.sw,a.sh,left,top,a.sw*s,a.sh*s);if(!g.valid){c.globalAlpha=.9;c.strokeStyle='rgba(255,95,85,.95)';c.lineWidth=2/this.camera.zoom;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+tw/2,p.y+th/2);c.lineTo(p.x,p.y+th);c.lineTo(p.x-tw/2,p.y+th/2);c.closePath();c.stroke();}}c.globalAlpha=1;c.restore();
     }
   }
 }
