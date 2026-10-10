@@ -26,11 +26,11 @@ var PZODT;
             this.cells.delete(k);
             this.placementModes.delete(k);
         } }
-        placementMode(x, y, w) { return this.placementModes.get(y * w + x) ?? 'ground'; }
-        setPlacementMode(x, y, w, mode = 'ground') { const k = y * w + x; if (mode === 'ground')
+        placementMode(x, y, w) { const m = this.placementModes.get(y * w + x) ?? 'ground'; return m === 'surface' || m === 'ontable' ? 'auto' : m; }
+        setPlacementMode(x, y, w, mode = 'ground') { const k = y * w + x, normalized = mode === 'surface' || mode === 'ontable' ? 'auto' : mode; if (normalized === 'ground')
             this.placementModes.delete(k);
         else
-            this.placementModes.set(k, mode); }
+            this.placementModes.set(k, normalized); }
     }
     PZODT.UserLayerModel = UserLayerModel;
     class PZMapModel {
@@ -105,7 +105,7 @@ var PZODT;
             l.opacity = Number.isFinite(q.opacity) ? q.opacity : 1;
             l.locked = q.locked === true;
             l.cells = new Map(q.cells || []);
-            l.placementModes = new Map((q.placementModes || []).map((x) => [+x[0], x[1]]));
+            l.placementModes = new Map((q.placementModes || []).map((x) => [+x[0], (x[1] === 'surface' || x[1] === 'ontable' ? 'auto' : x[1])]));
             m.layers.push(l);
         } if (m.activeTarget !== 'base' && !m.layers.some(l => l.id === m.activeTarget))
             m.activeTarget = 'base'; return m; }
@@ -1000,12 +1000,10 @@ var PZODT;
             if (this.categoryVisible(PZODT.VIEW_CATEGORIES[i]))
                 mask |= (1 << i); return mask; }
         allFilterMask() { return (1 << PZODT.VIEW_CATEGORIES.length) - 1; }
-        supportHeight(name, fallback) {
+        supportHeight(name) {
             const i = this.surfaceInfo(name), n = name.toLowerCase(), explicit = Math.max(i.surface, i.itemHeight);
             if (explicit > 0)
                 return explicit;
-            if (!fallback)
-                return 0;
             if (/(furniture_tables_high|table_high|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n))
                 return 32;
             if (/(furniture_tables_low|table_low|coffee_table|coffee_?table|side_?table|end_?table|nightstand)/.test(n))
@@ -1014,16 +1012,20 @@ var PZODT;
                 return 26;
             return 0;
         }
-        advanceSurface(current, name, fallback) { const h = this.supportHeight(name, fallback); return h > 0 ? Math.max(current, h) : current; }
-        supportSurfaceAt(z, x, y, fallback) { const m = this.map(); let h = 0; for (const n of m.stack(z, x, y))
-            h = this.advanceSurface(h, n, fallback); for (const l of m.layers) {
+        canAutoSnap(name) { const i = this.surfaceInfo(name), n = name.toLowerCase(); if (i.isSurfaceOffset)
+            return true; return /(television|(^|_)tv(_|$)|radio|computer|monitor|microwave|toaster|kettle|coffee_machine|coffeemaker|lamp|telephone|phone|clock|stereo|speaker|cash_?register|small_?appliance)/.test(n); }
+        advanceSurface(current, name) { const h = this.supportHeight(name); return h > 0 ? Math.max(current, h) : current; }
+        supportSurfaceAt(z, x, y) { const m = this.map(); let h = 0; for (const n of m.stack(z, x, y))
+            h = this.advanceSurface(h, n); for (const l of m.layers) {
             if (l.level !== z)
                 continue;
             const n = l.get(x, y, m.width);
             if (n)
-                h = this.advanceSurface(h, n, fallback);
+                h = this.advanceSurface(h, n);
         } return h; }
-        liftFor(mode, supportExact, supportTable) { return mode === 'surface' ? supportExact : mode === 'ontable' ? supportTable : 0; }
+        liftFor(mode, name, support) { if (mode === 'ground')
+            return 0; if (mode === 'surface' || mode === 'ontable' || mode === 'auto')
+            return support > 0 && this.canAutoSnap(name) ? support : 0; return 0; }
         buildChunk(z, cx, cy, key) {
             const m = this.map(), old = this.chunkCache.get(key);
             if (old?.buffer)
@@ -1040,7 +1042,7 @@ var PZODT;
                             const n = stack[i], a = this.assets.asset(n);
                             if (!a)
                                 continue;
-                            cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n), lift: 0, mode: 'ground' });
+                            cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n), lift: 0, mode: 'auto' });
                         }
                 }
             for (let li = 0; li < m.layers.length; li++) {
@@ -1059,12 +1061,11 @@ var PZODT;
                     }
             }
             cmds.sort((a, b) => a.order - b.order);
-            const exactSurfaces = new Map(), tableSurfaces = new Map();
+            const surfaces = new Map();
             for (const d of cmds) {
-                const ck = m.key(d.x, d.y), exact = exactSurfaces.get(ck) ?? 0, table = tableSurfaces.get(ck) ?? 0;
-                d.lift = this.liftFor(d.mode, exact, table);
-                exactSurfaces.set(ck, this.advanceSurface(exact, d.a.name, false));
-                tableSurfaces.set(ck, this.advanceSurface(table, d.a.name, true));
+                const ck = m.key(d.x, d.y), support = surfaces.get(ck) ?? 0;
+                d.lift = this.liftFor(d.mode, d.a.name, support);
+                surfaces.set(ck, this.advanceSurface(support, d.a.name));
             }
             const floats = [], segments = [];
             let seg = null, vertexCursor = 0;
@@ -1226,7 +1227,7 @@ var PZODT;
                 const bm = this.ghostBitmaps.get(a.sourceId);
                 if (!bm)
                     continue;
-                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), exact = this.supportSurfaceAt(g.z, g.x, g.y, false), table = this.supportSurfaceAt(g.z, g.x, g.y, true), lift = this.liftFor(g.mode ?? 'ground', exact, table) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
+                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), support = this.supportSurfaceAt(g.z, g.x, g.y), lift = this.liftFor(g.mode ?? 'auto', g.name, support) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
                 c.globalAlpha = g.valid ? .46 : .22;
                 c.drawImage(bm, a.sx, a.sy, a.sw, a.sh, left, top, a.sw * s, a.sh * s);
                 if (!g.valid) {
@@ -1262,7 +1263,7 @@ var PZODT;
             this.selectedAsset = null;
             this.selectedFurniture = null;
             this.furnitureOrient = 'N';
-            this.placementMode = 'ground';
+            this.placementMode = 'auto';
             this.isDown = false;
             this.pan = false;
             this.last = { x: 0, y: 0 };
@@ -1279,8 +1280,8 @@ var PZODT;
         }
         setTool(t) { this.tool = t; this.refreshPlacementGhost(); this.onSelection(); }
         setPlacementMode(mode) { this.placementMode = mode; this.refreshPlacementGhost(); this.onSelection(); }
-        selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.tool = 'pencil'; this.placementMode = 'ground'; this.refreshPlacementGhost(); this.onSelection(); }
-        selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.tool = 'furniture'; this.placementMode = 'ground'; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.refreshPlacementGhost(); this.onSelection(); }
+        selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.tool = 'pencil'; this.placementMode = 'auto'; this.refreshPlacementGhost(); this.onSelection(); }
+        selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.tool = 'furniture'; this.placementMode = 'auto'; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.refreshPlacementGhost(); this.onSelection(); }
         rotateFurniture(delta = 1) { const d = this.selectedFurniture; if (!d)
             return; const a = d.entries.map(e => e.orient), i = Math.max(0, a.indexOf(this.furnitureOrient)); this.furnitureOrient = a[(i + delta + a.length) % a.length]; this.refreshPlacementGhost(); this.onSelection(); }
         refreshPlacementGhost() { const p = this.renderer.hover; if (p)
@@ -1507,9 +1508,9 @@ var PZODT;
             this.onPickCandidates(items, p);
         }
         applyPickCandidate(c) { const m = this.map(); if (c.targetId === 'base' || m.layers.some(l => l.id === c.targetId))
-            m.activeTarget = c.targetId; this.selectedAsset = c.name; this.selectedFurniture = null; this.tool = 'pencil'; this.placementMode = c.placementMode ?? 'ground'; this.refreshPlacementGhost(); this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`); this.onSelection(); }
+            m.activeTarget = c.targetId; this.selectedAsset = c.name; this.selectedFurniture = null; this.tool = 'pencil'; this.placementMode = 'auto'; this.refreshPlacementGhost(); this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`); this.onSelection(); }
         applyPickFurniture(match, c) { const m = this.map(); if (c.targetId === 'base' || m.layers.some(l => l.id === c.targetId))
-            m.activeTarget = c.targetId; this.selectedFurniture = match.def; this.selectedAsset = null; this.tool = 'furniture'; this.placementMode = 'ground'; this.furnitureOrient = match.orient; this.refreshPlacementGhost(); this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}).`); this.onSelection(); }
+            m.activeTarget = c.targetId; this.selectedFurniture = match.def; this.selectedAsset = null; this.tool = 'furniture'; this.placementMode = 'auto'; this.furnitureOrient = match.orient; this.refreshPlacementGhost(); this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}).`); this.onSelection(); }
         placeFurniture(p) {
             const d = this.selectedFurniture, e = d ? this.catalog.entry(d, this.furnitureOrient) : null;
             if (!d || !e)
@@ -1562,7 +1563,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.2';
+    const APP_VERSION = '1.1.3';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1572,10 +1573,6 @@ var PZODT;
     } };
     const storeSet = (k, v) => { try {
         localStorage.setItem(k, v);
-    }
-    catch { } };
-    const storeRemove = (k) => { try {
-        localStorage.removeItem(k);
     }
     catch { } };
     const releaseConfig = () => { const x = window.PZODT_RELEASE_CONFIG; return x && typeof x === 'object' ? x : {}; };
@@ -1605,33 +1602,7 @@ var PZODT;
             this.tileToken = 0;
             this.furnitureToken = 0;
             this.furnitureObserver = null;
-            this.tutorialIndex = 0;
-            this.tutorialActive = false;
-            this.tutorialBlocked = [];
-            this.worldOverview = null;
-            this.worldMapDataset = '';
-            this.worldMapScale = 1;
-            this.worldMapMinScale = .01;
-            this.worldMapPanX = 0;
-            this.worldMapPanY = 0;
-            this.worldMapSelection = null;
-            this.worldMapDragging = false;
-            this.worldMapDragMoved = false;
-            this.worldMapLast = { x: 0, y: 0 };
-            this.worldMapImages = new Map();
             this.editLog = [];
-            this.tutorialSteps = [
-                { title: 'Welcome', text: 'This short guide walks through the normal workflow: load a Project Zomboid location, browse assets, decorate the map, and save the project.' },
-                { title: 'Load a PZ location', text: 'Click the highlighted Load PZ Location button. The tutorial will continue automatically when the location loader opens.', target: 'loadLocationBtn', closeLoad: true },
-                { title: 'The location loader', text: 'Everything needed for importing a base is in this window: media folder, map dataset, world coordinates, map coordinate picker, and load mode.', target: 'loadDialog', openLoad: true },
-                { title: 'Choose the media folder', text: 'Choose the ProjectZomboid\\media folder. Map data, texture packs, PNG tilesheets, and tile definitions are indexed locally in the browser.', target: 'chooseMediaBtn', openLoad: true },
-                { title: 'Enter world coordinates', text: 'Enter World X and World Y manually, or use Choose from map to select a coordinate from the loaded world overview.', target: 'worldX', openLoad: true },
-                { title: 'Choose what to load', text: 'You can load the building at the selected coordinate, a general area around it, or the entire map cell. Choose the mode you need and press Load Location.', target: 'loadMode', openLoad: true },
-                { title: 'Control what you see', text: 'Use the filters to control what is visible.', target: 'viewFilters', closeLoad: true },
-                { title: 'Browse furniture', text: 'The Furniture tab contains categorized, searchable multi-tile objects with thumbnails. Select one, then place it on the map.', target: 'furnitureTabButton' },
-                { title: 'Edit the plan', text: 'Use Pencil, Erase, Rectangle, Picker, and Pan to edit the plan.', target: 'toolrow' },
-                { title: 'Save the project', text: 'Use Save as .json to keep the plan and Open .json file to continue later. Feedback is available from the top bar.', target: 'saveJsonBtn' }
-            ];
             this.status = el('status');
             this.coords = el('coords');
             this.tileList = el('tileList');
@@ -1645,7 +1616,6 @@ var PZODT;
             this.preview = el('previewCanvas');
             this.selectionInfo = el('selectionInfo');
             this.orientationButtons = el('orientationButtons');
-            this.placementModeButtons = el('placementModeButtons');
             this.selectionLabel = el('selectionLabel');
             this.layersList = el('layersList');
             this.zLevel = el('zLevel');
@@ -1677,7 +1647,6 @@ var PZODT;
             this.applyNightMode(night, false);
             setTimeout(() => this.renderer.center(), 50);
             this.configureRelease();
-            setTimeout(() => this.maybeStartTutorial(), 250);
         }
         classify(n) { let c = this.classificationCache.get(n); if (c)
             return c; c = this.tileDefs.classify(n, this.catalog.furnitureTiles); this.classificationCache.set(n, c); return c; }
@@ -1698,7 +1667,6 @@ var PZODT;
             el('settingsCloseBtn').onclick = el('settingsDoneBtn').onclick = () => el('settingsDialog').close();
             this.graphicsQuality.onchange = () => { const q = this.graphicsQuality.value; storeSet('pzodt.graphicsQuality', q); this.renderer.setQuality(q); setTimeout(() => this.renderer.center(), 0); this.setStatus(`Graphics: ${q}.`); };
             this.performanceStatsToggle.onchange = () => { storeSet('pzodt.performanceStats', this.performanceStatsToggle.checked ? '1' : '0'); this.setPerformanceStats(this.performanceStatsToggle.checked); };
-            el('startTutorialBtn').onclick = () => { el('settingsDialog').close(); this.startTutorial(true); };
             el('copyEditLogBtn').onclick = () => this.copyEditLog();
             el('downloadEditLogBtn').onclick = () => this.downloadEditLog();
             el('clearEditLogBtn').onclick = () => { this.editLog = []; this.setStatus('Edit log cleared.'); };
@@ -1708,10 +1676,6 @@ var PZODT;
             this.nightModeToggle.onchange = () => this.applyNightMode(this.nightModeToggle.checked, true);
             el('feedbackCloseBtn').onclick = () => el('feedbackDialog').close();
             el('supportBtn').onclick = () => this.openSupport();
-            el('tutorialSkipBtn').onclick = () => this.finishTutorial();
-            el('tutorialBackBtn').onclick = () => this.moveTutorial(-1);
-            el('tutorialNextBtn').onclick = () => this.moveTutorial(1);
-            addEventListener('resize', () => this.positionTutorial());
             document.querySelectorAll('dialog form').forEach(f => f.addEventListener('submit', e => e.preventDefault()));
             el('collapseLeftBtn').onclick = () => this.collapse('left', true);
             el('openLeftPanelBtn').onclick = () => this.collapse('left', false);
@@ -1736,35 +1700,16 @@ var PZODT;
             el('versionHistoryCloseBtn').onclick = () => el('versionHistoryDialog').close();
             el('indexMediaBtn').onclick = () => this.indexMediaOnly();
             el('chooseFromMapBtn').onclick = () => this.openWorldMap();
-            el('datasetSelect').onchange = () => { this.worldOverview = null; this.worldMapDataset = ''; this.worldMapImages.clear(); };
             el('worldMapCloseBtn').onclick = el('worldMapCancelBtn').onclick = () => el('worldMapDialog').close();
-            el('worldMapFitBtn').onclick = () => this.fitWorldMap();
+            el('openPzmapBtn').onclick = () => this.openPzmapReference();
+            el('pastePzmapCoordsBtn').onclick = () => this.pastePzmapCoordinates();
             el('worldMapUseBtn').onclick = () => this.useWorldMapSelection();
             el('pickerCloseBtn').onclick = el('pickerCancelBtn').onclick = () => el('pickerDialog').close();
-            const worldCanvas = el('worldMapCanvas');
-            worldCanvas.addEventListener('contextmenu', e => e.preventDefault());
-            worldCanvas.addEventListener('wheel', e => this.worldMapWheel(e), { passive: false });
-            worldCanvas.addEventListener('pointerdown', e => this.worldMapPointerDown(e));
-            worldCanvas.addEventListener('pointermove', e => this.worldMapPointerMove(e));
-            worldCanvas.addEventListener('pointerup', e => this.worldMapPointerUp(e));
-            worldCanvas.addEventListener('pointercancel', e => this.worldMapPointerUp(e));
             el('mediaInput').onchange = e => this.mediaSelected(e);
             el('jsonInput').onchange = e => this.jsonSelected(e);
             this.renderer.overlay.addEventListener('pointermove', e => { const r = this.renderer.overlay.getBoundingClientRect(), p = this.renderer.screenToTile(e.clientX - r.left, e.clientY - r.top, this.map.currentLevel), ox = Number(this.map.properties['pzodt.worldOriginX']), oy = Number(this.map.properties['pzodt.worldOriginY']); this.coords.textContent = Number.isFinite(ox) && Number.isFinite(oy) ? `local ${p.x},${p.y} · world ${ox + p.x},${oy + p.y},${this.map.currentLevel}` : `x ${p.x} · y ${p.y} · Z ${this.map.currentLevel}`; });
         }
-        openLoadDialog() { const d = el('loadDialog'); if (this.tutorialActive) {
-            d.classList.add('tutorialVisibleDialog');
-            if (!d.open) {
-                d.setAttribute('open', '');
-                d.open = true;
-            }
-            if (this.tutorialIndex === 1) {
-                this.tutorialIndex = 2;
-                this.showTutorialStep();
-            }
-            requestAnimationFrame(() => this.positionTutorial());
-        }
-        else if (!d.open)
+        openLoadDialog() { const d = el('loadDialog'); if (!d.open)
             d.showModal(); }
         showPickerChoices(items, p) {
             const box = el('pickerChoices');
@@ -1831,103 +1776,25 @@ var PZODT;
             if (!d.open)
                 d.showModal();
         }
-        async openWorldMap() { const dataset = el('datasetSelect').value, dialog = el('worldMapDialog'), info = el('worldMapInfo'), use = el('worldMapUseBtn'); if (!dataset) {
-            this.setStatus('Select the Project Zomboid media folder first.');
+        openWorldMap() { const d = el('worldMapDialog'), x = el('worldX').value, y = el('worldY').value; el('pzmapWorldX').value = x; el('pzmapWorldY').value = y; el('worldMapInfo').textContent = 'Open PZmap.org, copy a location, then paste or enter its X/Y coordinates here.'; if (!d.open)
+            d.showModal(); }
+        openPzmapReference() { this.openExternal('https://pzmap.org/'); el('worldMapInfo').textContent = 'PZmap.org opened in a new tab. Switch to Top View, copy the coordinates you want, then return here.'; }
+        parsePzmapCoords(text) { const labeled = text.match(/x\s*[:=]?\s*(-?\d+)\D{0,20}y\s*[:=]?\s*(-?\d+)/i); if (labeled)
+            return { x: +labeled[1], y: +labeled[2] }; const nums = text.match(/-?\d+/g); if (!nums || nums.length < 2)
+            return null; return { x: +nums[0], y: +nums[1] }; }
+        async pastePzmapCoordinates() { let raw = ''; try {
+            if (navigator.clipboard && isSecureContext)
+                raw = await navigator.clipboard.readText();
+        }
+        catch { } if (!raw)
+            raw = prompt('Paste coordinates copied from PZmap.org (for example: X: 6112, Y: 5210)') ?? ''; const p = this.parsePzmapCoords(raw); if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+            el('worldMapInfo').textContent = 'Could not find X and Y coordinates in that text.';
             return;
-        } if (!dialog.open)
-            dialog.showModal(); const x = Number(el('worldX').value), y = Number(el('worldY').value); this.worldMapSelection = Number.isFinite(x) && Number.isFinite(y) ? { x: Math.round(x), y: Math.round(y) } : null; use.disabled = !this.worldMapSelection; try {
-            if (!this.worldOverview || this.worldMapDataset !== dataset) {
-                info.textContent = 'Rendering local top-view map from the selected Project Zomboid dataset…';
-                use.disabled = true;
-                this.worldMapImages.clear();
-                this.worldOverview = await this.importer.worldOverview(dataset, s => { info.textContent = s; });
-                this.worldMapDataset = dataset;
-            }
-            const o = this.worldOverview;
-            info.textContent = `${o.cells.length.toLocaleString()} map cells rendered in top view. Drag to pan, use the mouse wheel to zoom, and click a point to select it.`;
-            use.disabled = !this.worldMapSelection;
-            requestAnimationFrame(() => this.fitWorldMap());
-        }
-        catch (err) {
-            info.textContent = `Map overview error: ${String(err.message || err)}`;
-            this.worldOverview = null;
-            this.worldMapDataset = '';
-        } }
-        fitWorldMap() { const o = this.worldOverview, c = el('worldMapCanvas'); if (!o)
-            return; const r = c.getBoundingClientRect(), w = Math.max(1, r.width), h = Math.max(1, r.height), bw = Math.max(1, o.bounds.x1 - o.bounds.x0 + 1), bh = Math.max(1, o.bounds.y1 - o.bounds.y0 + 1), pad = 26; this.worldMapScale = Math.max(.0001, Math.min((w - pad * 2) / bw, (h - pad * 2) / bh)); this.worldMapMinScale = this.worldMapScale * .55; this.worldMapPanX = (w - bw * this.worldMapScale) / 2 - o.bounds.x0 * this.worldMapScale; this.worldMapPanY = (h - bh * this.worldMapScale) / 2 - o.bounds.y0 * this.worldMapScale; this.drawWorldMap(); }
-        worldMapPoint(e) { const r = el('worldMapCanvas').getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-        worldFromMapCanvas(p) { return { x: (p.x - this.worldMapPanX) / this.worldMapScale, y: (p.y - this.worldMapPanY) / this.worldMapScale }; }
-        worldMapPointerDown(e) { if (!this.worldOverview || e.button > 2)
-            return; const c = el('worldMapCanvas'); this.worldMapDragging = true; this.worldMapDragMoved = false; this.worldMapLast = { x: e.clientX, y: e.clientY }; c.setPointerCapture(e.pointerId); }
-        worldMapPointerMove(e) { if (!this.worldOverview)
-            return; const p = this.worldMapPoint(e), w = this.worldFromMapCanvas(p); el('worldMapCoords').textContent = `Cursor: X ${Math.floor(w.x)}, Y ${Math.floor(w.y)}${this.worldMapSelection ? ` · Selected: X ${this.worldMapSelection.x}, Y ${this.worldMapSelection.y}` : ''}`; if (!this.worldMapDragging)
-            return; const dx = e.clientX - this.worldMapLast.x, dy = e.clientY - this.worldMapLast.y; if (Math.hypot(dx, dy) > 1)
-            this.worldMapDragMoved = true; this.worldMapPanX += dx; this.worldMapPanY += dy; this.worldMapLast = { x: e.clientX, y: e.clientY }; this.drawWorldMap(); }
-        worldMapPointerUp(e) { if (!this.worldMapDragging || !this.worldOverview)
-            return; this.worldMapDragging = false; const c = el('worldMapCanvas'); if (c.hasPointerCapture(e.pointerId))
-            c.releasePointerCapture(e.pointerId); if (this.worldMapDragMoved || e.button !== 0)
-            return; const w = this.worldFromMapCanvas(this.worldMapPoint(e)), o = this.worldOverview; if (w.x < o.bounds.x0 || w.x > o.bounds.x1 || w.y < o.bounds.y0 || w.y > o.bounds.y1)
-            return; this.worldMapSelection = { x: Math.floor(w.x), y: Math.floor(w.y) }; el('worldMapUseBtn').disabled = false; el('worldMapCoords').textContent = `Selected: X ${this.worldMapSelection.x}, Y ${this.worldMapSelection.y}`; this.drawWorldMap(); }
-        worldMapWheel(e) { if (!this.worldOverview)
-            return; e.preventDefault(); const p = this.worldMapPoint(e), w = this.worldFromMapCanvas(p), old = this.worldMapScale, max = Math.max(this.worldMapMinScale * 500, 8); this.worldMapScale = Math.max(this.worldMapMinScale, Math.min(max, old * Math.exp(-e.deltaY * .0015))); this.worldMapPanX = p.x - w.x * this.worldMapScale; this.worldMapPanY = p.y - w.y * this.worldMapScale; this.drawWorldMap(); }
-        worldMapCellCanvas(q) { const k = `${q.cellX},${q.cellY},${q.sample}`, old = this.worldMapImages.get(k); if (old)
-            return old; const c = document.createElement('canvas'); c.width = q.width; c.height = q.height; const ctx = c.getContext('2d'); ctx.putImageData(new ImageData(q.rgba, q.width, q.height), 0, 0); this.worldMapImages.set(k, c); return c; }
-        drawWorldMap() {
-            const o = this.worldOverview, c = el('worldMapCanvas');
-            if (!o)
-                return;
-            const r = c.getBoundingClientRect(), cssW = Math.max(1, Math.round(r.width)), cssH = Math.max(1, Math.round(r.height)), dpr = Math.max(1, devicePixelRatio || 1);
-            if (c.width !== Math.round(cssW * dpr) || c.height !== Math.round(cssH * dpr)) {
-                c.width = Math.round(cssW * dpr);
-                c.height = Math.round(cssH * dpr);
-            }
-            const ctx = c.getContext('2d');
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            const light = document.body.classList.contains('lightMode');
-            ctx.fillStyle = light ? '#d9dfcf' : '#151a15';
-            ctx.fillRect(0, 0, cssW, cssH);
-            const sx = (x) => x * this.worldMapScale + this.worldMapPanX, sy = (y) => y * this.worldMapScale + this.worldMapPanY;
-            ctx.imageSmoothingEnabled = false;
-            for (const q of o.topCells) {
-                const x = sx(q.x0), y = sy(q.y0), w = (q.x1 - q.x0 + 1) * this.worldMapScale, h = (q.y1 - q.y0 + 1) * this.worldMapScale;
-                if (x > cssW || y > cssH || x + w < 0 || y + h < 0)
-                    continue;
-                ctx.drawImage(this.worldMapCellCanvas(q), x, y, w, h);
-            }
-            ctx.lineWidth = 1;
-            ctx.strokeStyle = light ? 'rgba(70,75,65,.14)' : 'rgba(210,220,200,.10)';
-            for (const cell of o.cells) {
-                const x = sx(cell.x0), y = sy(cell.y0), w = (cell.x1 - cell.x0 + 1) * this.worldMapScale, h = (cell.y1 - cell.y0 + 1) * this.worldMapScale;
-                if (x > cssW || y > cssH || x + w < 0 || y + h < 0)
-                    continue;
-                ctx.strokeRect(x, y, w, h);
-            }
-            ctx.strokeStyle = light ? 'rgba(80,50,45,.55)' : 'rgba(235,205,180,.45)';
-            for (const b of o.buildings) {
-                const x = sx(b.x0), y = sy(b.y0), w = Math.max(1, (b.x1 - b.x0 + 1) * this.worldMapScale), h = Math.max(1, (b.y1 - b.y0 + 1) * this.worldMapScale);
-                if (x > cssW || y > cssH || x + w < 0 || y + h < 0)
-                    continue;
-                if (this.worldMapScale > .16)
-                    ctx.strokeRect(x, y, w, h);
-            }
-            if (this.worldMapSelection) {
-                const x = sx(this.worldMapSelection.x + .5), y = sy(this.worldMapSelection.y + .5);
-                ctx.strokeStyle = '#ffb347';
-                ctx.fillStyle = '#ffb347';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(x, y, 6, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(x - 10, y);
-                ctx.lineTo(x + 10, y);
-                ctx.moveTo(x, y - 10);
-                ctx.lineTo(x, y + 10);
-                ctx.stroke();
-            }
-        }
-        useWorldMapSelection() { if (!this.worldMapSelection)
-            return; el('worldX').value = String(this.worldMapSelection.x); el('worldY').value = String(this.worldMapSelection.y); el('worldMapDialog').close(); this.setStatus(`World coordinate selected: ${this.worldMapSelection.x}, ${this.worldMapSelection.y}.`); }
+        } el('pzmapWorldX').value = String(Math.round(p.x)); el('pzmapWorldY').value = String(Math.round(p.y)); el('worldMapInfo').textContent = `Coordinates ready: X ${Math.round(p.x)}, Y ${Math.round(p.y)}.`; }
+        useWorldMapSelection() { const x = Number(el('pzmapWorldX').value), y = Number(el('pzmapWorldY').value); if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            el('worldMapInfo').textContent = 'Enter valid X and Y coordinates first.';
+            return;
+        } el('worldX').value = String(Math.round(x)); el('worldY').value = String(Math.round(y)); el('worldMapDialog').close(); this.setStatus(`World coordinate selected: ${Math.round(x)}, ${Math.round(y)}.`); }
         collapse(side, yes) { const l = document.querySelector('.layout'); l.classList.toggle(`${side}-collapsed`, yes); el(side === 'left' ? 'openLeftPanelBtn' : 'openRightPanelBtn').classList.toggle('hidden', !yes); setTimeout(() => { this.renderer.resize(); this.renderer.request(); }, 0); }
         setTab(t) { document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === t)); el('tilesTab').classList.toggle('active', t === 'tiles'); el('furnitureTab').classList.toggle('active', t === 'furniture'); t === 'tiles' ? this.renderTiles() : this.renderFurniture(); }
         newMap() { if ((this.map.layers.some(l => l.cells.size) || [...this.map.baseStacks.values()].some(m => m.size)) && !confirm('Start a new map? Unsaved edits will be lost.'))
@@ -1942,7 +1809,7 @@ var PZODT;
             o.value = d.id;
             o.textContent = `${d.label} · ${d.headers} headers / ${d.packs} lotpacks`;
             select.appendChild(o);
-        } el('loadBtn').disabled = !list.length; el('indexMediaBtn').disabled = !list.length; el('chooseFromMapBtn').disabled = !list.length; this.worldOverview = null; this.worldMapDataset = ''; el('mediaInfo').textContent = list.length ? `${list.length} map dataset(s) found. ${this.importer.assetFiles().length} texture source file(s), ${this.importer.tileDefFiles().length} .tiles definition file(s).` : 'No map dataset found in this media folder.'; if (this.mediaReadySignature && this.mediaReadySignature !== this.importer.mediaSignature) {
+        } el('loadBtn').disabled = !list.length; el('indexMediaBtn').disabled = !list.length; el('mediaInfo').textContent = list.length ? `${list.length} map dataset(s) found. ${this.importer.assetFiles().length} texture source file(s), ${this.importer.tileDefFiles().length} .tiles definition file(s).` : 'No map dataset found in this media folder.'; if (this.mediaReadySignature && this.mediaReadySignature !== this.importer.mediaSignature) {
             this.assets.clear();
             this.tileDefs.clear();
             this.classificationCache.clear();
@@ -2153,27 +2020,17 @@ var PZODT;
             } }, { root: this.furnitureList, rootMargin: '120px' }); for (const q of previews)
             this.furnitureObserver.observe(q.c); }
         selectionChanged() { document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === this.editor.tool)); this.renderSelection(); }
-        renderPlacementModes() { this.placementModeButtons.replaceChildren(); if (!this.editor.selectedAsset && !this.editor.selectedFurniture)
-            return; const modes = [['ground', 'Ground', 'Place on the floor/current tile plane'], ['surface', 'Surface', 'Use exact Surface / ItemHeight metadata from the object below'], ['ontable', 'OnTable', 'Use table/counter support, including fallback table-height rules']]; for (const [mode, label, title] of modes) {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.textContent = label;
-            b.title = title;
-            b.classList.toggle('active', this.editor.placementMode === mode);
-            b.onclick = () => this.editor.setPlacementMode(mode);
-            this.placementModeButtons.appendChild(b);
-        } }
-        async renderSelection() { const ctx = this.preview.getContext('2d'); ctx.clearRect(0, 0, this.preview.width, this.preview.height); this.orientationButtons.replaceChildren(); this.renderPlacementModes(); if (this.editor.selectedAsset) {
+        async renderSelection() { const ctx = this.preview.getContext('2d'); ctx.clearRect(0, 0, this.preview.width, this.preview.height); this.orientationButtons.replaceChildren(); if (this.editor.selectedAsset) {
             this.selectionLabel.textContent = this.editor.selectedAsset;
             const a = this.assets.asset(this.editor.selectedAsset), props = this.tileDefs.properties(this.editor.selectedAsset), cat = this.classify(this.editor.selectedAsset);
-            this.selectionInfo.textContent = `${cat}\n${this.editor.selectedAsset}${Object.keys(props).length ? `\nProperties: ${Object.keys(props).slice(0, 8).join(', ')}` : ''}\nPlacement: ${this.editor.placementMode}`;
+            this.selectionInfo.textContent = `${cat}\n${this.editor.selectedAsset}${Object.keys(props).length ? `\nProperties: ${Object.keys(props).slice(0, 8).join(', ')}` : ''}`;
             if (a)
                 await this.assets.drawPreview(this.preview, a.name);
             return;
         } const d = this.editor.selectedFurniture; if (d) {
             const h = this.selectedFurnitureHit;
             this.selectionLabel.textContent = `${h?.group.label || 'Furniture'} · ${this.editor.furnitureOrient}`;
-            this.selectionInfo.textContent = `Furniture\n${h?.group.label || ''} · #${d.index}\n${d.layer}\nPlacement: ${this.editor.placementMode}`;
+            this.selectionInfo.textContent = `Furniture\n${h?.group.label || ''} · #${d.index}\n${d.layer}`;
             for (const o of this.catalog.orientations(d)) {
                 const b = document.createElement('button');
                 b.textContent = o;
@@ -2210,59 +2067,8 @@ var PZODT;
         } }
         downloadEditLog() { save(`pzodt-edit-log-${Date.now()}.json`, new Blob([this.editLogText()], { type: 'application/json' })); this.setStatus(`Downloaded ${this.editLog.length} edit-log entries.`); }
         configureRelease() { const cfg = releaseConfig(), support = safeHttpsUrl(cfg.supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
-        applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (el('worldMapDialog')?.open)
-            this.drawWorldMap(); if (persist)
+        applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (persist)
             storeSet('pzodt.nightMode', enabled ? '1' : '0'); }
-        maybeStartTutorial() { if (storeGet('pzodt.tutorialDismissed.1.1') !== '1')
-            this.startTutorial(false); }
-        clearTutorialInteractivity() { for (const x of this.tutorialBlocked)
-            x.inert = false; this.tutorialBlocked = []; document.querySelectorAll('.tutorialTargetInteractive').forEach(x => x.classList.remove('tutorialTargetInteractive')); document.querySelectorAll('header,.toolrow,.layout,footer').forEach(x => x.inert = false); }
-        setTutorialInteractivity(targetId) { this.clearTutorialInteractivity(); const roots = [...document.querySelectorAll('header,.toolrow,.layout,footer')], target = targetId ? document.getElementById(targetId) : null; if (target) {
-            target.inert = false;
-            target.classList.add('tutorialTargetInteractive');
-        } for (const root of roots) {
-            const contains = !!target && (root === target || root.contains(target));
-            root.inert = !contains;
-            if (contains && target && root !== target) {
-                root.querySelectorAll('button,input,select,textarea,a,[tabindex]').forEach(control => { if (control === target || control.contains(target) || target.contains(control))
-                    return; control.inert = true; this.tutorialBlocked.push(control); });
-            }
-        } }
-        startTutorial(force = false) { if (this.tutorialActive)
-            return; if (force)
-            storeRemove('pzodt.tutorialDismissed.1.1'); this.tutorialActive = true; this.tutorialIndex = 0; el('tutorialRemember').checked = true; const overlay = el('tutorialOverlay'); overlay.inert = false; overlay.classList.remove('hidden'); this.showTutorialStep(); setTimeout(() => el('tutorialNextBtn').focus(), 0); }
-        moveTutorial(delta) { if (!this.tutorialActive)
-            return; if (this.tutorialIndex === 1 && delta > 0)
-            return; const next = this.tutorialIndex + delta; if (next < 0)
-            return; if (next >= this.tutorialSteps.length) {
-            this.finishTutorial();
-            return;
-        } this.tutorialIndex = next; this.showTutorialStep(); }
-        finishTutorial() { if (!this.tutorialActive)
-            return; this.tutorialActive = false; if (el('tutorialRemember').checked)
-            storeSet('pzodt.tutorialDismissed.1.1', '1');
-        else
-            storeRemove('pzodt.tutorialDismissed.1.1'); const overlay = el('tutorialOverlay'); overlay.classList.add('hidden'); overlay.classList.remove('noTarget', 'cardTop'); this.clearTutorialInteractivity(); const d = el('loadDialog'); d.classList.remove('tutorialVisibleDialog'); if (d.open)
-            d.close(); el('tutorialSpotlight').classList.remove('active'); }
-        showTutorialStep() { const step = this.tutorialSteps[this.tutorialIndex], load = el('loadDialog'); if (!step.openLoad && load.open) {
-            load.classList.remove('tutorialVisibleDialog');
-            load.close();
-        } if (step.openLoad) {
-            load.classList.add('tutorialVisibleDialog');
-            if (!load.open)
-                load.show();
-        } this.setTutorialInteractivity(step.target); if (step.target === 'viewFilters')
-            this.collapse('right', false); if (step.target === 'furnitureTabButton')
-            this.collapse('left', false); el('tutorialTitle').textContent = step.title; el('tutorialText').textContent = step.text; el('tutorialProgress').textContent = `${this.tutorialIndex + 1} / ${this.tutorialSteps.length}`; el('tutorialBackBtn').disabled = this.tutorialIndex === 0; const next = el('tutorialNextBtn'); next.disabled = this.tutorialIndex === 1; next.textContent = this.tutorialIndex === 1 ? 'Click highlighted button' : this.tutorialIndex === this.tutorialSteps.length - 1 ? 'Finish' : 'Continue'; requestAnimationFrame(() => this.positionTutorial()); }
-        positionTutorial() { if (!this.tutorialActive)
-            return; const step = this.tutorialSteps[this.tutorialIndex], spot = el('tutorialSpotlight'), overlay = el('tutorialOverlay'); overlay.classList.toggle('noTarget', !step.target); overlay.classList.remove('cardTop'); if (!step.target) {
-            spot.classList.remove('active');
-            return;
-        } const target = document.getElementById(step.target); if (!target || target.getClientRects().length === 0) {
-            spot.classList.remove('active');
-            overlay.classList.add('noTarget');
-            return;
-        } const r = target.getBoundingClientRect(), pad = 10; spot.classList.add('active'); spot.style.left = `${Math.max(4, r.left - pad)}px`; spot.style.top = `${Math.max(4, r.top - pad)}px`; spot.style.width = `${Math.max(24, Math.min(innerWidth - 8, r.width + pad * 2))}px`; spot.style.height = `${Math.max(24, Math.min(innerHeight - 8, r.height + pad * 2))}px`; overlay.classList.toggle('cardTop', r.top + r.height / 2 > innerHeight * .58); }
         configureFeedbackText() { const type = el('feedbackType').value, msg = el('feedbackMessage').value.trim().slice(0, 6000), contact = el('feedbackContact').value.trim().slice(0, 200), technical = el('feedbackTechnical').checked; const lines = [`PZ Online Decoration Tool ${APP_VERSION}`, `Type: ${type}`, '', msg]; if (contact)
             lines.push('', `Contact: ${contact}`); if (technical)
             lines.push('', 'Technical information:', `Browser: ${navigator.userAgent.slice(0, 500)}`, `Graphics: ${this.graphicsQuality.value}`); return lines.join('\n'); }
