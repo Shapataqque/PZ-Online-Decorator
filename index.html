@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.3</title>
+  <title>PZ Online Decoration Tool 1.1.4</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.3</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.4</button></div>
   <button id="newMapBtn">New</button>
   <button id="loadLocationBtn" class="primary">Load PZ Location</button>
   <span class="sep"></span>
@@ -68,6 +68,7 @@
     <canvas id="previewCanvas" width="260" height="180"></canvas>
     <div id="selectionInfo" class="selectionInfo">Nothing selected.</div>
     <div id="orientationButtons" class="orientations"></div>
+    <div id="placementModeButtons" class="placementModes"></div>
     <h3>Map</h3>
     <div class="row"><button id="centerBtn">Center</button></div>
     <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
@@ -89,6 +90,17 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.4</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Removed the coordinate map chooser and the PZmap.org helper entirely; World X / Y are now entered directly.</li>
+        <li>Restored Ground, Surface, and OnTable placement controls.</li>
+        <li>Ground places the object on the floor; Surface uses the ItemHeight of the existing destination object; OnTable uses the destination table/counter surface height.</li>
+        <li>Picker and Furniture selections now start in Ground mode so a previously elevated object does not carry its old height into a new placement.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.3</h4>
@@ -207,7 +219,6 @@
       </section>
       <section><h4>2. Location</h4>
         <div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div>
-        <div class="row coordPickerRow"><button id="chooseFromMapBtn" type="button">Choose with PZmap.org…</button><span class="hint">Optional: use PZmap.org as a fast visual reference, then paste the copied coordinates here.</span></div>
       </section>
       <section><h4>3. Load</h4>
         <label>Mode<select id="loadMode"><option value="building">Building at coordinate</option><option value="area">Area around coordinate</option><option value="cell">Entire map cell</option></select></label>
@@ -220,26 +231,6 @@
   </form>
 </dialog>
 
-<dialog id="worldMapDialog" class="dialog worldMapDialog">
-  <div class="dialogTitle">
-    <div><b>Choose coordinates with PZmap.org</b><small>Use PZmap.org as the visual map; no Project Zomboid map image is copied into this site.</small></div>
-    <button id="worldMapCloseBtn" type="button">×</button>
-  </div>
-  <div class="dialogBody worldMapBody">
-    <p>1. Open PZmap.org, switch to <b>Top View</b>, and navigate to the location you want.</p>
-    <p>2. Use PZmap.org's coordinate copy feature, then return here and press <b>Paste coordinates</b>.</p>
-    <div class="pzmapHelperActions">
-      <button id="openPzmapBtn" type="button">Open PZmap.org</button>
-      <button id="pastePzmapCoordsBtn" type="button">Paste coordinates</button>
-    </div>
-    <div class="coords2 pzmapCoordPreview">
-      <label>World X<input id="pzmapWorldX" type="number"></label>
-      <label>World Y<input id="pzmapWorldY" type="number"></label>
-    </div>
-    <div id="worldMapInfo" class="hint">You can also type coordinates here manually.</div>
-  </div>
-  <div class="dialogActions"><button id="worldMapCancelBtn" type="button">Cancel</button><button id="worldMapUseBtn" class="primary" type="button">Use coordinates</button></div>
-</dialog>
 
 <dialog id="pickerDialog" class="dialog pickerDialog">
   <div class="dialogTitle">
