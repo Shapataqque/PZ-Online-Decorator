@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.4 — 10 October 2026
+
+- Removed **Choose with PZmap.org** and the coordinate-map workflow completely. World X / Y are now entered directly.
+- Restored **Ground**, **Surface**, and **OnTable** placement controls.
+- **Ground** places at floor height.
+- **Surface** uses the highest `ItemHeight` value of an existing object in the destination cell.
+- **OnTable** uses the destination table/counter surface height; it prefers tile metadata and falls back to table/counter naming rules when needed.
+- Picker and Furniture selections reset to **Ground**, so selecting an already elevated object does not carry that elevation into future placements.
+- Removed the unused local top-view overview renderer from the codebase.
+
 ## 1.1.3 — 10 October 2026
 
 - Removed the tutorial and all tutorial UI/logic.
