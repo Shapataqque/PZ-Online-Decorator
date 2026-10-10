@@ -912,6 +912,7 @@ var PZODT;
             if (this.categoryVisible(PZODT.VIEW_CATEGORIES[i]))
                 mask |= (1 << i); return mask; }
         allFilterMask() { return (1 << PZODT.VIEW_CATEGORIES.length) - 1; }
+        sourceSurfaceOffset(name) { const i = this.surfaceInfo(name); return i.isSurfaceOffset ? i.surface : 0; }
         itemHeight(name) { return this.surfaceInfo(name).itemHeight; }
         tableHeight(name) {
             const i = this.surfaceInfo(name), n = name.toLowerCase(), tableLike = i.isTable || /(furniture_tables|table_|tables_|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n);
@@ -929,15 +930,18 @@ var PZODT;
                 return 26;
             return 0;
         }
-        supportAt(z, x, y, mode) { const m = this.map(); let h = 0, measure = (n) => mode === 'surface' ? this.itemHeight(n) : mode === 'ontable' ? this.tableHeight(n) : 0; for (const n of m.stack(z, x, y))
-            h = Math.max(h, measure(n)); for (const l of m.layers) {
+        targetHeight(mode, itemSupport, tableSupport) { return mode === 'surface' ? itemSupport : mode === 'ontable' ? tableSupport : 0; }
+        placementLift(name, mode, itemSupport, tableSupport) { return this.targetHeight(mode, itemSupport, tableSupport) - this.sourceSurfaceOffset(name); }
+        supportsAt(z, x, y) { const m = this.map(); let item = 0, table = 0; const add = (name, mode, imported = false) => { const target = imported ? this.sourceSurfaceOffset(name) : this.targetHeight(mode, item, table), ih = this.itemHeight(name), th = this.tableHeight(name); if (ih > 0)
+            item = Math.max(item, target + ih); if (th > 0)
+            table = Math.max(table, target + th); }; for (const n of m.stack(z, x, y))
+            add(n, 'ground', true); for (const l of m.layers) {
             if (l.level !== z)
                 continue;
             const n = l.get(x, y, m.width);
             if (n)
-                h = Math.max(h, measure(n));
-        } return h; }
-        liftFor(mode, itemSupport, tableSupport) { return mode === 'surface' ? itemSupport : mode === 'ontable' ? tableSupport : 0; }
+                add(n, l.placementMode(x, y, m.width));
+        } return { item, table }; }
         buildChunk(z, cx, cy, key) {
             const m = this.map(), old = this.chunkCache.get(key);
             if (old?.buffer)
@@ -975,10 +979,17 @@ var PZODT;
             cmds.sort((a, b) => a.order - b.order);
             const itemSupports = new Map(), tableSupports = new Map();
             for (const d of cmds) {
-                const ck = m.key(d.x, d.y), item = itemSupports.get(ck) ?? 0, table = tableSupports.get(ck) ?? 0;
-                d.lift = this.liftFor(d.mode, item, table);
-                itemSupports.set(ck, Math.max(item, this.itemHeight(d.a.name)));
-                tableSupports.set(ck, Math.max(table, this.tableHeight(d.a.name)));
+                const ck = m.key(d.x, d.y), item = itemSupports.get(ck) ?? 0, table = tableSupports.get(ck) ?? 0, imported = d.ownerId === 'base', target = imported ? this.sourceSurfaceOffset(d.a.name) : this.targetHeight(d.mode, item, table);
+                d.lift = imported ? 0 : target - this.sourceSurfaceOffset(d.a.name);
+                const ih = this.itemHeight(d.a.name), th = this.tableHeight(d.a.name);
+                if (ih > 0)
+                    itemSupports.set(ck, Math.max(item, target + ih));
+                else if (!itemSupports.has(ck))
+                    itemSupports.set(ck, item);
+                if (th > 0)
+                    tableSupports.set(ck, Math.max(table, target + th));
+                else if (!tableSupports.has(ck))
+                    tableSupports.set(ck, table);
             }
             const floats = [], segments = [];
             let seg = null, vertexCursor = 0;
@@ -1140,7 +1151,7 @@ var PZODT;
                 const bm = this.ghostBitmaps.get(a.sourceId);
                 if (!bm)
                     continue;
-                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), mode = g.mode ?? 'ground', itemSupport = this.supportAt(g.z, g.x, g.y, 'surface'), tableSupport = this.supportAt(g.z, g.x, g.y, 'ontable'), lift = this.liftFor(mode, itemSupport, tableSupport) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
+                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), mode = g.mode ?? 'ground', support = this.supportsAt(g.z, g.x, g.y), lift = this.placementLift(g.name, mode, support.item, support.table) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
                 c.globalAlpha = g.valid ? .46 : .22;
                 c.drawImage(bm, a.sx, a.sy, a.sw, a.sh, left, top, a.sw * s, a.sh * s);
                 if (!g.valid) {
@@ -1476,7 +1487,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.4';
+    const APP_VERSION = '1.1.5';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
