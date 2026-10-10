@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.1</title>
+  <title>PZ Online Decoration Tool 1.1.2</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.1</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.2</button></div>
   <button id="newMapBtn">New</button>
   <button id="loadLocationBtn" class="primary">Load PZ Location</button>
   <span class="sep"></span>
@@ -68,9 +68,10 @@
     <canvas id="previewCanvas" width="260" height="180"></canvas>
     <div id="selectionInfo" class="selectionInfo">Nothing selected.</div>
     <div id="orientationButtons" class="orientations"></div>
+    <div id="placementModeButtons" class="placementModes"></div>
     <h3>Map</h3>
     <div class="row"><button id="centerBtn">Center</button></div>
-    <div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><label>Z level<select id="zLevel"></select></label><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
+    <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
     <h3>View filters</h3>
     <div id="viewFilters" class="viewFilters"></div>
     <h3>Layers</h3>
@@ -89,6 +90,19 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.2</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Replaced the coarse coordinate overview with a locally rendered top-view map based on map-square tile stacks.</li>
+        <li>Appliances and furniture-named tiles now take priority over conflicting Doors &amp; Windows metadata in View Filters.</li>
+        <li>Aligned the Z-level dropdown and up/down controls.</li>
+        <li>Improved Picker recognition of imported multi-tile furniture by matching canonical tileset name and tile index.</li>
+        <li>Added explicit Ground, Surface, and OnTable placement modes below the rotation controls.</li>
+        <li>Hardened tutorial step 2 so Load PZ Location opens reliably before advancing.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.1</h4>
@@ -198,13 +212,13 @@
 
 <dialog id="worldMapDialog" class="dialog worldMapDialog">
   <div class="dialogTitle">
-    <div><b>Choose coordinates from map</b><small>Overview generated locally from the selected Project Zomboid map dataset.</small></div>
+    <div><b>Choose coordinates from map</b><small>Local top-view render generated from the selected Project Zomboid map dataset.</small></div>
     <button id="worldMapCloseBtn" type="button">×</button>
   </div>
   <div class="dialogBody worldMapBody">
     <div id="worldMapInfo" class="hint">Select a media folder and map dataset first.</div>
     <canvas id="worldMapCanvas" class="worldMapCanvas" width="900" height="560" aria-label="Project Zomboid world overview"></canvas>
-    <div class="worldMapLegend" aria-label="Map legend"><span><i class="legendVegetation"></i>Vegetation</span><span><i class="legendRoad"></i>Road / ground</span><span><i class="legendUrban"></i>Urban / buildings</span><span><i class="legendWater"></i>Water</span></div>
+    <div class="worldMapLegend" aria-label="Map legend"><span><i class="legendVegetation"></i>Vegetation</span><span><i class="legendRoad"></i>Road</span><span><i class="legendUrban"></i>Buildings / walls</span><span><i class="legendWater"></i>Water</span></div>
     <div class="worldMapToolbar"><span id="worldMapCoords" class="worldMapCoords">Click a point to select a coordinate.</span><span class="grow"></span><button id="worldMapFitBtn" type="button">Fit map</button></div>
   </div>
   <div class="dialogActions"><button id="worldMapCancelBtn" type="button">Cancel</button><button id="worldMapUseBtn" class="primary" type="button" disabled>Use selected coordinate</button></div>
