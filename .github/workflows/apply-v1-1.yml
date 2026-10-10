@@ -1,0 +1,38 @@
+name: Apply v1.1 release patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".v1.1.patch.gz.b64"
+      - ".github/workflows/apply-v1-1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply v1.1 patch
+        shell: bash
+        run: |
+          base64 --decode .v1.1.patch.gz.b64 | gzip --decompress > /tmp/v1.1.patch
+          git apply --check /tmp/v1.1.patch
+          git apply /tmp/v1.1.patch
+      - name: Compile TypeScript
+        shell: bash
+        run: npx -y -p typescript@5.8.3 tsc -p tsconfig.json
+      - name: Commit v1.1
+        shell: bash
+        run: |
+          rm -f .v1.1.patch.gz.b64 .github/workflows/apply-v1-1.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release v1.1.0"
+          git push
