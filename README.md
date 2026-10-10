@@ -12,8 +12,8 @@ The tool reads the Project Zomboid `media` folder locally in the browser. I do n
 - Browse searchable furniture categories with thumbnails and multi-tile placement.
 - Edit with Pencil, Erase, Rectangle, Picker, and Pan tools.
 - Preview tiles and furniture before placement and choose between stacked objects with Picker.
-- Choose World X / Y coordinates from a zoomable map overview generated locally from the selected dataset.
-- Place compatible tabletop items such as TVs and radios on furniture surfaces.
+- Use a PZmap.org helper to visually find a location, then paste its World X / Y coordinates into the loader.
+- Automatically snap compatible tabletop items such as TVs and radios onto a supporting table/counter when one exists at the destination cell; the same item can still be placed on the floor elsewhere.
 - Save projects as JSON and open them later.
 
 ## Quick start
@@ -21,16 +21,14 @@ The tool reads the Project Zomboid `media` folder locally in the browser. I do n
 1. Open the site.
 2. Click **Load PZ Location**.
 3. Select the local `steamapps/common/ProjectZomboid/media` folder. under 
-4. Enter the World X and World Y coordinates of the location you want, or use **Choose from map**.
+4. Enter the World X and World Y coordinates of the location you want, or use **Choose with PZmap.org** to open the external map and paste coordinates back into the loader.
 5. Load the building or area.
 6. Browse **Tiles** or **Furniture**, use **View Filters** when walls or roofs are in the way, and decorate the map.
 7. Use **Save as .json** to keep the project.
 
-The tutorial can be started from **Settings → Start tutorial**. WIP
-
 ## Privacy
 
-Project Zomboid files are selected and parsed locally in the browser. The application does not automatically send map files, project files, world coordinates, local paths, or imported content anywhere.
+Project Zomboid files are selected and parsed locally in the browser. The application does not automatically send map files, project files, world coordinates, local paths, or imported content anywhere. If you explicitly click **Open PZmap.org**, that external site opens in a new tab; no coordinates are added to the link by this tool.
 
 ## Open source and forks
 
