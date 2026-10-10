@@ -72,7 +72,7 @@ namespace PZODT {
 
     private updatePlacementGhost(p:{x:number;y:number}){
       const m=this.map();
-      if(this.tool==='furniture'&&this.selectedFurniture){const e=this.catalog.entry(this.selectedFurniture,this.furnitureOrient);if(!e){this.renderer.clearPlacementGhost();return;}const cells:PlacementGhostCell[]=e.cells.map(([dx,dy,name])=>{const x=p.x+dx,y=p.y+dy;return{x,y,z:m.currentLevel,name,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(name),mode:'ground'};});this.renderer.setPlacementGhost(cells);return;}
+      if(this.tool==='furniture'&&this.selectedFurniture){const e=this.catalog.entry(this.selectedFurniture,this.furnitureOrient);if(!e){this.renderer.clearPlacementGhost();return;}const cells:PlacementGhostCell[]=e.cells.map(([dx,dy,name])=>{const x=p.x+dx,y=p.y+dy;return{x,y,z:m.currentLevel,name,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(name),mode:this.placementMode};});this.renderer.setPlacementGhost(cells);return;}
       if(this.tool==='rect'&&this.selectedAsset){const a=this.rectStart??p,x0=Math.min(a.x,p.x),x1=Math.max(a.x,p.x),y0=Math.min(a.y,p.y),y1=Math.max(a.y,p.y),cells:PlacementGhostCell[]=[];for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)cells.push({x,y,z:m.currentLevel,name:this.selectedAsset,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(this.selectedAsset),mode:this.placementMode});this.renderer.setPlacementGhost(cells);return;}
       if(this.tool==='pencil'&&this.selectedAsset){this.renderer.setPlacementGhost([{x:p.x,y:p.y,z:m.currentLevel,name:this.selectedAsset,valid:this.valid(p)&&!!this.catalog.assets.asset(this.selectedAsset),mode:this.placementMode}]);return;}
       this.renderer.clearPlacementGhost();
@@ -102,7 +102,7 @@ namespace PZODT {
       for(const [dx,dy,n] of e.cells){const x=p.x+dx,y=p.y+dy;if(x<0||y<0||x>=m.width||y>=m.height){outside++;continue;}if(!this.catalog.assets.asset(n)){missing++;continue;}cells.push({x,y,name:n});}
       if(outside){this.onStatus('Furniture does not fit inside the current map area.');return;}
       if(!cells.length){this.onStatus('Furniture assets are not available.');return;}
-      const target=m.findStackLayer('Furniture',m.currentLevel,cells,true,true)!;for(const c of cells)this.layerChange(target,c.x,c.y,c.name,'ground');m.activeTarget=target.id;this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing?` · ${missing} missing`:''}.`);this.renderer.request();this.onChanged();
+      const target=m.findStackLayer('Furniture',m.currentLevel,cells,true,true)!;for(const c of cells)this.layerChange(target,c.x,c.y,c.name,this.placementMode);m.activeTarget=target.id;this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing?` · ${missing} missing`:''}.`);this.renderer.request();this.onChanged();
     }
     private commit(){const c=[...this.changes.values()];this.changes.clear();this.history.push(c);if(c.length)this.onDebugLog({type:'commit',strokeId:this.strokeId,tool:this.tool,changes:c.length,time:new Date().toISOString()});}
     undo(){const c=this.history.undo(this.map());if(c){this.renderer.invalidateChanges(c);this.renderer.request();this.onChanged();}}
