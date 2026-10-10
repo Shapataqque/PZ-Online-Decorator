@@ -19,10 +19,11 @@ namespace PZODT {
   export interface Camera{panX:number;panY:number;zoom:number;}
   export interface TileProperties{[key:string]:string;}
   export interface TileSurfaceInfo{surface:number;itemHeight:number;isSurfaceOffset:boolean;isTable:boolean;isTableTop:boolean;}
-  export interface PlacementGhostCell{x:number;y:number;z:number;name:string;valid:boolean;}
-  export interface PickCandidate{name:string;targetId:string;sourceLabel:string;category:ViewCategory;z:number;x:number;y:number;}
+  export type PlacementMode='ground'|'surface'|'ontable';
+  export interface PlacementGhostCell{x:number;y:number;z:number;name:string;valid:boolean;mode?:PlacementMode;}
+  export interface PickCandidate{name:string;targetId:string;sourceLabel:string;category:ViewCategory;z:number;x:number;y:number;placementMode?:PlacementMode;}
   export interface BaseStackChange{kind:'base';z:number;x:number;y:number;before:string[];after:string[];}
-  export interface LayerCellChange{kind:'layer';layerId:string;x:number;y:number;before:string|null;after:string|null;}
+  export interface LayerCellChange{kind:'layer';layerId:string;x:number;y:number;before:string|null;after:string|null;beforeMode?:PlacementMode;afterMode?:PlacementMode;}
   export type EditChange=BaseStackChange|LayerCellChange;
 }
 
