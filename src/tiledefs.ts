@@ -22,9 +22,12 @@ namespace PZODT {
       if(has('walln','wallw','wallnw','wallse','wall','treataswallorder')||n.includes('wall')||BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name)||BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))return 'Wall';
       if(has('windown','windoww','doorwalln','doorwallw','doorn','doorw','window','door')||/(^|_)(door|doors|window|windows|curtain|curtains|shutter|shutters)(_|$)/.test(n)||BUILDING_TILE_CATEGORIES['Doors']?.has(name)||BUILDING_TILE_CATEGORIES['Windows']?.has(name))return 'Doors & Windows';
       if(has('walloverlay','flooroverlay','overlay','attachedn','attacheds','attachede','attachedw','ontable')||/(overlay|graffiti|poster|sign_)/.test(n))return 'Decor / Overlay';
-      if(furniture.has(name)||has('container','surface','table','tablen','tables','tablee','tablew','countertop','isstackable')||/(furniture|appliances|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|stove|sink|toilet|bath|cabinets?)/.test(n))return 'Furniture';
+      if(furniture.has(name)||has('container','surface','table','tablen','tables','tablee','tablew','countertop','isstackable')||/(^|_)(furniture|appliances?|cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n)||n.includes('furniture_')||n.includes('appliances_'))return 'Furniture';
       if(has('roof')||n.includes('roof')||BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name)||BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))return 'Roof';
-      if(/(vegetation|trees?|bush|grass|plants?|natural|street_|curbs?|fencing|railings?|parking|pavement|road_|sidewalk|exterior)/.test(n))return 'Exterior';
+      if(/(^|_)(blends_street|street|road|roads|asphalt|pavement|sidewalk|parking|curb|curbs)(_|$)/.test(n)||n.includes('blends_street'))return 'Roads & Ground';
+      if(/(^|_)(vegetation|tree|trees|bush|bushes|grass|plants?|natural|forest)(_|$)/.test(n)||n.includes('blends_natural'))return 'Vegetation';
+      if(/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))return 'Fences & Railings';
+      if(/(^|_)(outdoor|exterior|clutter|street_decoration|streetdecor|trash|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n)||n.includes('outdoor_clutter')||n.includes('exterior_'))return 'Exterior';
       return 'Other';}
   }
 }
