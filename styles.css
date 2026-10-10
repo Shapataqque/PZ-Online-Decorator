@@ -88,10 +88,8 @@ body.lightMode .pickerChoice{background:#fff;border-color:#c3cdd5}body.lightMode
 body.lightMode .pickerGroup{background:#f6f8f9;border-color:#c3cdd5}body.lightMode .pickerFurnitureChoice{border-color:#73a4c3}body.lightMode .pickerChildChoice:before{color:#748793}body.lightMode .zLevelCaption{color:#60717d}
 
 
-.placementModes{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.placementModes button{padding:4px 7px;font-size:11px}
-.placementModes button.active{background:#185b8d;border-color:#318aca}
-body.lightMode .placementModes button.active{color:#fff;background:#176a9d;border-color:#176a9d}
+.placementHeights{margin-top:7px}.placementHeightTitle{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#8999a5;margin-bottom:5px}.placementHeightButtons{display:flex;gap:4px;flex-wrap:wrap}.placementHeightButtons button{padding:4px 7px;font-size:10px}.placementHeightButtons button.active{background:#185b8d;border-color:#318aca}.placementHeightCustom{display:flex;align-items:center;gap:6px;margin-top:6px;color:#94a4af;font-size:10px}.placementHeightCustom input{width:72px;margin:0;padding:4px 6px}.layer .iconbtn:disabled{opacity:.7}
+body.lightMode .placementHeightTitle,body.lightMode .placementHeightCustom{color:#60717d}body.lightMode .placementHeightButtons button.active{color:#fff;background:#176a9d;border-color:#176a9d}
 
 /* v1.1.6 media-first workflow */
 .mediaNotice{display:none;height:36px;align-items:center;justify-content:center;gap:10px;padding:4px 10px;background:#26333b;border-bottom:1px solid #41515d;color:#d4e0e7;font-size:12px}
