@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.4</title>
+  <title>PZ Online Decoration Tool 1.1.5</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.4</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.5</button></div>
   <button id="newMapBtn">New</button>
   <button id="loadLocationBtn" class="primary">Load PZ Location</button>
   <span class="sep"></span>
@@ -90,6 +90,17 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.5</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Fixed placement of sprites that use IsSurfaceOffset so Ground can place them back on the floor instead of keeping their authored tabletop height.</li>
+        <li>Surface and OnTable now use a target-height minus source-surface-offset calculation instead of stacking an extra vertical lift.</li>
+        <li>Imported base objects keep their original game alignment while newly placed objects use the selected placement mode.</li>
+        <li>Placement previews now use the same corrected height calculation as committed objects.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.4</h4>
