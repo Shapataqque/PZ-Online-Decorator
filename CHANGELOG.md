@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.3 — 10 October 2026
+
+- Removed the tutorial and all tutorial UI/logic.
+- Replaced the slow local coordinate-map renderer with a fast PZmap.org reference workflow. PZmap.org opens in a separate tab and copied coordinates can be pasted back into the loader.
+- Removed the Ground / Surface / OnTable placement controls.
+- Tabletop placement now uses destination context: compatible small objects snap upward only when the destination cell actually contains a supporting surface; otherwise they stay on the floor.
+- Picker no longer carries the source object's previous table height into future placements.
+- Existing v1.1.2 Surface / OnTable project metadata is migrated to the new automatic placement behavior when projects are opened.
+
 ## 1.1.2 — 10 October 2026
 
 - Replaced the coarse coordinate overview with a locally rendered top-view map using per-square map data, following the same general top-view approach used by PZmap/pzmap2dzi.
