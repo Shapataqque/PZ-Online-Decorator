@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.2</title>
+  <title>PZ Online Decoration Tool 1.1.3</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.2</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.3</button></div>
   <button id="newMapBtn">New</button>
   <button id="loadLocationBtn" class="primary">Load PZ Location</button>
   <span class="sep"></span>
@@ -68,7 +68,6 @@
     <canvas id="previewCanvas" width="260" height="180"></canvas>
     <div id="selectionInfo" class="selectionInfo">Nothing selected.</div>
     <div id="orientationButtons" class="orientations"></div>
-    <div id="placementModeButtons" class="placementModes"></div>
     <h3>Map</h3>
     <div class="row"><button id="centerBtn">Center</button></div>
     <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
@@ -90,6 +89,17 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.3</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Removed the built-in tutorial entirely.</li>
+        <li>Replaced the slow local coordinate-map renderer with a fast PZmap.org reference workflow and coordinate paste helper.</li>
+        <li>Removed the Ground / Surface / OnTable controls and switched tabletop placement to automatic destination-based snapping.</li>
+        <li>Picking an object from a table no longer preserves the table-top height as the object's future placement reference.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.2</h4>
@@ -163,7 +173,7 @@
         <div class="hint">Records recent edit actions locally in this browser so erase/stacking bugs can be reproduced. No log is uploaded automatically.</div>
         <div class="row"><button id="copyEditLogBtn" type="button">Copy log</button><button id="downloadEditLogBtn" type="button">Download log</button><button id="clearEditLogBtn" type="button">Clear</button></div>
       </section>
-      <section><h4>Help</h4><div class="row"><button id="startTutorialBtn" type="button">Start tutorial</button><button id="creditsBtn" type="button">Credits</button></div></section>
+      <section><h4>Help</h4><div class="row"><button id="creditsBtn" type="button">Credits</button></div></section>
     </div>
     <div class="dialogActions"><button id="settingsDoneBtn" class="primary" type="button">Done</button></div>
   </form>
@@ -197,7 +207,7 @@
       </section>
       <section><h4>2. Location</h4>
         <div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div>
-        <div class="row coordPickerRow"><button id="chooseFromMapBtn" type="button" disabled>Choose from map…</button><span class="hint">Optional: browse the selected map dataset and click a coordinate.</span></div>
+        <div class="row coordPickerRow"><button id="chooseFromMapBtn" type="button">Choose with PZmap.org…</button><span class="hint">Optional: use PZmap.org as a fast visual reference, then paste the copied coordinates here.</span></div>
       </section>
       <section><h4>3. Load</h4>
         <label>Mode<select id="loadMode"><option value="building">Building at coordinate</option><option value="area">Area around coordinate</option><option value="cell">Entire map cell</option></select></label>
@@ -212,16 +222,23 @@
 
 <dialog id="worldMapDialog" class="dialog worldMapDialog">
   <div class="dialogTitle">
-    <div><b>Choose coordinates from map</b><small>Local top-view render generated from the selected Project Zomboid map dataset.</small></div>
+    <div><b>Choose coordinates with PZmap.org</b><small>Use PZmap.org as the visual map; no Project Zomboid map image is copied into this site.</small></div>
     <button id="worldMapCloseBtn" type="button">×</button>
   </div>
   <div class="dialogBody worldMapBody">
-    <div id="worldMapInfo" class="hint">Select a media folder and map dataset first.</div>
-    <canvas id="worldMapCanvas" class="worldMapCanvas" width="900" height="560" aria-label="Project Zomboid world overview"></canvas>
-    <div class="worldMapLegend" aria-label="Map legend"><span><i class="legendVegetation"></i>Vegetation</span><span><i class="legendRoad"></i>Road</span><span><i class="legendUrban"></i>Buildings / walls</span><span><i class="legendWater"></i>Water</span></div>
-    <div class="worldMapToolbar"><span id="worldMapCoords" class="worldMapCoords">Click a point to select a coordinate.</span><span class="grow"></span><button id="worldMapFitBtn" type="button">Fit map</button></div>
+    <p>1. Open PZmap.org, switch to <b>Top View</b>, and navigate to the location you want.</p>
+    <p>2. Use PZmap.org's coordinate copy feature, then return here and press <b>Paste coordinates</b>.</p>
+    <div class="pzmapHelperActions">
+      <button id="openPzmapBtn" type="button">Open PZmap.org</button>
+      <button id="pastePzmapCoordsBtn" type="button">Paste coordinates</button>
+    </div>
+    <div class="coords2 pzmapCoordPreview">
+      <label>World X<input id="pzmapWorldX" type="number"></label>
+      <label>World Y<input id="pzmapWorldY" type="number"></label>
+    </div>
+    <div id="worldMapInfo" class="hint">You can also type coordinates here manually.</div>
   </div>
-  <div class="dialogActions"><button id="worldMapCancelBtn" type="button">Cancel</button><button id="worldMapUseBtn" class="primary" type="button" disabled>Use selected coordinate</button></div>
+  <div class="dialogActions"><button id="worldMapCancelBtn" type="button">Cancel</button><button id="worldMapUseBtn" class="primary" type="button">Use coordinates</button></div>
 </dialog>
 
 <dialog id="pickerDialog" class="dialog pickerDialog">
@@ -256,17 +273,6 @@
     style="display:block;border:0;"
   ></iframe>
 </dialog>
-
-<div id="tutorialOverlay" class="tutorialOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
-  <div id="tutorialSpotlight" class="tutorialSpotlight"></div>
-  <div class="tutorialCard">
-    <div class="tutorialProgress" id="tutorialProgress">1 / 10</div>
-    <h2 id="tutorialTitle">Welcome</h2>
-    <p id="tutorialText"></p>
-    <label class="tutorialRemember"><input id="tutorialRemember" type="checkbox" checked> Don't show this tutorial on startup again</label>
-    <div class="tutorialActions"><button id="tutorialSkipBtn" type="button">Skip tutorial</button><span class="grow"></span><button id="tutorialBackBtn" type="button">Back</button><button id="tutorialNextBtn" class="primary" type="button">Continue</button></div>
-  </div>
-</div>
 
 <input id="mediaInput" type="file" webkitdirectory multiple hidden>
 <input id="jsonInput" type="file" accept=".json,application/json" hidden>
