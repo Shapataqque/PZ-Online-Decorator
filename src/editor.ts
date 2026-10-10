@@ -14,10 +14,12 @@ namespace PZODT {
     last={x:0,y:0};
     rectStart:{x:number;y:number}|null=null;
     changes=new Map<string,EditChange>();
+    private strokeCells=new Set<string>();private strokeId=0;
     onStatus:(s:string)=>void=()=>{};
     onChanged:()=>void=()=>{};
     onSelection:()=>void=()=>{};
     onPickCandidates:(items:PickCandidate[],p:{x:number;y:number})=>void=()=>{};
+    onDebugLog:(entry:Record<string,unknown>)=>void=()=>{};
 
     constructor(
       public renderer:WebGLMapRenderer,
@@ -50,10 +52,10 @@ namespace PZODT {
     private valid(p:{x:number;y:number}){const m=this.map();return p.x>=0&&p.y>=0&&p.x<m.width&&p.y<m.height;}
 
     private down(e:PointerEvent){
-      this.renderer.overlay.focus();this.isDown=true;this.last={x:e.clientX,y:e.clientY};this.pan=this.tool==='pan'||e.button===1||e.button===2||e.shiftKey;this.changes.clear();this.renderer.overlay.setPointerCapture(e.pointerId);if(this.pan)return;
+      this.renderer.overlay.focus();this.isDown=true;this.last={x:e.clientX,y:e.clientY};this.pan=this.tool==='pan'||e.button===1||e.button===2||e.shiftKey;this.changes.clear();this.strokeCells.clear();this.strokeId++;this.renderer.overlay.setPointerCapture(e.pointerId);if(this.pan)return;
       const p=this.point(e);if(!this.valid(p))return;
       if(this.tool==='picker'){this.pick(p);return;}
-      if(this.tool==='rect'){this.rectStart=p;return;}
+      if(this.tool==='rect'){this.rectStart=p;this.updatePlacementGhost(p);return;}
       if(this.tool==='furniture'){this.placeFurniture(p);this.commit();this.updatePlacementGhost(p);return;}
       this.paint(p);
     }
@@ -62,13 +64,14 @@ namespace PZODT {
       if(this.pan){const q=this.renderer.ratio();this.renderer.camera.panX+=(e.clientX-this.last.x)*q;this.renderer.camera.panY+=(e.clientY-this.last.y)*q;this.last={x:e.clientX,y:e.clientY};this.renderer.request();return;}
       if(this.tool==='pencil'||this.tool==='eraser')if(this.valid(p))this.paint(p);
     }
-    private up(e:PointerEvent){if(!this.isDown)return;this.isDown=false;if(this.pan){this.pan=false;return;}if(this.tool==='rect'&&this.rectStart){const p=this.point(e);if(this.valid(p))this.rect(this.rectStart,p);this.rectStart=null;}this.commit();}
+    private up(e:PointerEvent){if(!this.isDown)return;this.isDown=false;if(this.pan){this.pan=false;return;}if(this.tool==='rect'&&this.rectStart){const p=this.point(e);if(this.valid(p))this.rect(this.rectStart,p);this.rectStart=null;this.updatePlacementGhost(p);}this.commit();}
     private wheel(e:WheelEvent){e.preventDefault();const r=this.renderer.overlay.getBoundingClientRect(),q=this.renderer.ratio(),sx=(e.clientX-r.left)*q,sy=(e.clientY-r.top)*q,old=this.renderer.camera.zoom,n=Math.max(.12,Math.min(5,old*Math.exp(-e.deltaY*.0015))),wx=(sx-this.renderer.camera.panX)/old,wy=(sy-this.renderer.camera.panY)/old;this.renderer.camera.zoom=n;this.renderer.camera.panX=sx-wx*n;this.renderer.camera.panY=sy-wy*n;this.renderer.request();}
     private key(e:KeyboardEvent){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?this.redo():this.undo();return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();this.redo();return;}if(e.key.toLowerCase()==='r'&&this.selectedFurniture){this.rotateFurniture(e.shiftKey?-1:1);return;}const k:{[k:string]:ToolName}={'1':'pencil','2':'eraser','3':'rect','4':'picker','5':'pan'};if(k[e.key])this.setTool(k[e.key]);}
 
     private updatePlacementGhost(p:{x:number;y:number}){
       const m=this.map();
       if(this.tool==='furniture'&&this.selectedFurniture){const e=this.catalog.entry(this.selectedFurniture,this.furnitureOrient);if(!e){this.renderer.clearPlacementGhost();return;}const cells:PlacementGhostCell[]=e.cells.map(([dx,dy,name])=>{const x=p.x+dx,y=p.y+dy;return{x,y,z:m.currentLevel,name,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(name)};});this.renderer.setPlacementGhost(cells);return;}
+      if(this.tool==='rect'&&this.selectedAsset){const a=this.rectStart??p,x0=Math.min(a.x,p.x),x1=Math.max(a.x,p.x),y0=Math.min(a.y,p.y),y1=Math.max(a.y,p.y),cells:PlacementGhostCell[]=[];for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)cells.push({x,y,z:m.currentLevel,name:this.selectedAsset,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(this.selectedAsset)});this.renderer.setPlacementGhost(cells);return;}
       if(this.tool==='pencil'&&this.selectedAsset){this.renderer.setPlacementGhost([{x:p.x,y:p.y,z:m.currentLevel,name:this.selectedAsset,valid:this.valid(p)&&!!this.catalog.assets.asset(this.selectedAsset)}]);return;}
       this.renderer.clearPlacementGhost();
     }
@@ -76,7 +79,9 @@ namespace PZODT {
     private layerChange(l:UserLayerModel,x:number,y:number,after:string|null){const m=this.map(),before=l.get(x,y,m.width),key=`L:${l.id}:${x}:${y}`,old=this.changes.get(key) as LayerCellChange|undefined;if(old)old.after=after;else this.changes.set(key,{kind:'layer',layerId:l.id,x,y,before,after});l.set(x,y,m.width,after);this.renderer.invalidateCell(l.level,x,y);}
     private baseChange(z:number,x:number,y:number,after:string[]){const m=this.map(),before=[...m.stack(z,x,y)],key=`B:${z}:${x}:${y}`,old=this.changes.get(key) as BaseStackChange|undefined;if(old)old.after=[...after];else this.changes.set(key,{kind:'base',z,x,y,before,after:[...after]});m.setStack(z,x,y,after);this.renderer.invalidateCell(z,x,y);}
     private targetLocked():boolean{const m=this.map();if(m.activeTarget==='base')return m.baseLocked;return m.activeLayer()?.locked??false;}
-    private paint(p:{x:number;y:number},notify=true){const m=this.map();if(this.targetLocked()){this.onStatus('Selected layer is locked.');return;}if(m.activeTarget==='base'){const s=[...m.stack(m.currentLevel,p.x,p.y)];if(this.tool==='eraser'){for(let i=s.length-1;i>=0;i--)if(this.visible(s[i])){s.splice(i,1);break;}this.baseChange(m.currentLevel,p.x,p.y,s);}else if(this.selectedAsset&&!s.includes(this.selectedAsset)){s.push(this.selectedAsset);this.baseChange(m.currentLevel,p.x,p.y,s);}}else{const l=m.activeLayer();if(!l)return;if(this.tool==='eraser')this.layerChange(l,p.x,p.y,null);else if(this.selectedAsset){let target=l;if(l.get(p.x,p.y,m.width)){const cat=this.classifier(this.selectedAsset);target=m.findStackLayer(cat,m.currentLevel,[p],true,true)!;}this.layerChange(target,p.x,p.y,this.selectedAsset);m.activeTarget=target.id;}}if(notify){this.renderer.request();this.onChanged();}}
+    private paint(p:{x:number;y:number},notify=true){const m=this.map();if(this.targetLocked()){this.onStatus('Selected layer is locked.');return;}const strokeKey=`${m.currentLevel}:${p.x}:${p.y}`;if(this.tool==='eraser'&&this.strokeCells.has(strokeKey))return;if(this.tool==='eraser')this.strokeCells.add(strokeKey);
+      if(m.activeTarget==='base'){const before=[...m.stack(m.currentLevel,p.x,p.y)],s=[...before];if(this.tool==='eraser'){let removed:string|null=null;for(let i=s.length-1;i>=0;i--)if(this.visible(s[i])){removed=s[i];s.splice(i,1);break;}if(removed){this.baseChange(m.currentLevel,p.x,p.y,s);this.onDebugLog({type:'erase',strokeId:this.strokeId,target:'base',z:m.currentLevel,x:p.x,y:p.y,removed,before,after:[...s],time:new Date().toISOString()});}}else if(this.selectedAsset&&!s.includes(this.selectedAsset)){s.push(this.selectedAsset);this.baseChange(m.currentLevel,p.x,p.y,s);}}
+      else{const l=m.activeLayer();if(!l)return;if(this.tool==='eraser'){const before=l.get(p.x,p.y,m.width);if(before){this.layerChange(l,p.x,p.y,null);this.onDebugLog({type:'erase',strokeId:this.strokeId,target:l.id,layer:l.name,z:l.level,x:p.x,y:p.y,removed:before,before,after:null,time:new Date().toISOString()});}}else if(this.selectedAsset){let target=l;if(l.get(p.x,p.y,m.width)){const cat=this.classifier(this.selectedAsset);target=m.findStackLayer(cat,m.currentLevel,[p],true,true)!;}this.layerChange(target,p.x,p.y,this.selectedAsset);m.activeTarget=target.id;}}if(notify){this.renderer.request();this.onChanged();}}
     private rect(a:{x:number;y:number},b:{x:number;y:number}){if(!this.selectedAsset||this.targetLocked())return;const x0=Math.min(a.x,b.x),x1=Math.max(a.x,b.x),y0=Math.min(a.y,b.y),y1=Math.max(a.y,b.y);for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)this.paint({x,y},false);this.renderer.request();this.onChanged();}
 
     private pick(p:{x:number;y:number}){
@@ -88,6 +93,7 @@ namespace PZODT {
       this.onPickCandidates(items,p);
     }
     applyPickCandidate(c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedAsset=c.name;this.selectedFurniture=null;this.tool='pencil';this.refreshPlacementGhost();this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`);this.onSelection();}
+    applyPickFurniture(match:FurnitureTileMatch,c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedFurniture=match.def;this.selectedAsset=null;this.tool='furniture';this.furnitureOrient=match.orient;this.refreshPlacementGhost();this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}).`);this.onSelection();}
 
     private placeFurniture(p:{x:number;y:number}){
       const d=this.selectedFurniture,e=d?this.catalog.entry(d,this.furnitureOrient):null;if(!d||!e)return;const m=this.map(),cells:Array<{x:number;y:number;name:string}>=[];let missing=0,outside=0;
@@ -96,7 +102,7 @@ namespace PZODT {
       if(!cells.length){this.onStatus('Furniture assets are not available.');return;}
       const target=m.findStackLayer('Furniture',m.currentLevel,cells,true,true)!;for(const c of cells)this.layerChange(target,c.x,c.y,c.name);m.activeTarget=target.id;this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing?` · ${missing} missing`:''}.`);this.renderer.request();this.onChanged();
     }
-    private commit(){const c=[...this.changes.values()];this.changes.clear();this.history.push(c);}
+    private commit(){const c=[...this.changes.values()];this.changes.clear();this.history.push(c);if(c.length)this.onDebugLog({type:'commit',strokeId:this.strokeId,tool:this.tool,changes:c.length,time:new Date().toISOString()});}
     undo(){const c=this.history.undo(this.map());if(c){this.renderer.invalidateChanges(c);this.renderer.request();this.onChanged();}}
     redo(){const c=this.history.redo(this.map());if(c){this.renderer.invalidateChanges(c);this.renderer.request();this.onChanged();}}
   }
