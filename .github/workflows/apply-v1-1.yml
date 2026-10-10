@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - ".v1.1.patch.gz.b64"
+      - ".v1.1-blob/**"
       - ".github/workflows/apply-v1-1.yml"
   workflow_dispatch:
 
@@ -18,18 +18,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Apply v1.1 patch
+      - name: Reconstruct and apply v1.1 patch
         shell: bash
         run: |
-          base64 --decode .v1.1.patch.gz.b64 | gzip --decompress > /tmp/v1.1.patch
+          cat .v1.1-blob/00 .v1.1-blob/01 .v1.1-blob/02 .v1.1-blob/03 .v1.1-blob/04 .v1.1-blob/05 | base64 --decode | gzip --decompress > /tmp/v1.1.patch
           git apply --check /tmp/v1.1.patch
           git apply /tmp/v1.1.patch
       - name: Compile TypeScript
         shell: bash
         run: npx -y -p typescript@5.8.3 tsc -p tsconfig.json
+      - name: Validate compiled JavaScript
+        shell: bash
+        run: node --check dist/app.js
       - name: Commit v1.1
         shell: bash
         run: |
+          rm -rf .v1.1-blob .v1.1-parts
           rm -f .v1.1.patch.gz.b64 .github/workflows/apply-v1-1.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
