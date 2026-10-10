@@ -9,6 +9,7 @@ namespace PZODT {
     selectedAsset:string|null=null;
     selectedFurniture:FurnitureDef|null=null;
     furnitureOrient='N';
+    placementMode:PlacementMode='ground';
     isDown=false;
     pan=false;
     last={x:0,y:0};
@@ -31,8 +32,9 @@ namespace PZODT {
     ){this.bind();}
 
     setTool(t:ToolName){this.tool=t;this.refreshPlacementGhost();this.onSelection();}
-    selectAsset(n:string){this.selectedAsset=n;this.selectedFurniture=null;this.tool='pencil';this.refreshPlacementGhost();this.onSelection();}
-    selectFurniture(d:FurnitureDef){this.selectedFurniture=d;this.selectedAsset=null;this.tool='furniture';this.furnitureOrient=d.entries.find(e=>e.orient==='N')?.orient??d.entries[0]?.orient??'N';this.refreshPlacementGhost();this.onSelection();}
+    setPlacementMode(mode:PlacementMode){this.placementMode=mode;this.refreshPlacementGhost();this.onSelection();}
+    selectAsset(n:string){this.selectedAsset=n;this.selectedFurniture=null;this.tool='pencil';this.placementMode='ground';this.refreshPlacementGhost();this.onSelection();}
+    selectFurniture(d:FurnitureDef){this.selectedFurniture=d;this.selectedAsset=null;this.tool='furniture';this.placementMode='ground';this.furnitureOrient=d.entries.find(e=>e.orient==='N')?.orient??d.entries[0]?.orient??'N';this.refreshPlacementGhost();this.onSelection();}
     rotateFurniture(delta=1){const d=this.selectedFurniture;if(!d)return;const a=d.entries.map(e=>e.orient),i=Math.max(0,a.indexOf(this.furnitureOrient));this.furnitureOrient=a[(i+delta+a.length)%a.length];this.refreshPlacementGhost();this.onSelection();}
     refreshPlacementGhost(){const p=this.renderer.hover;if(p)this.updatePlacementGhost(p);else this.renderer.clearPlacementGhost();}
 
@@ -70,37 +72,37 @@ namespace PZODT {
 
     private updatePlacementGhost(p:{x:number;y:number}){
       const m=this.map();
-      if(this.tool==='furniture'&&this.selectedFurniture){const e=this.catalog.entry(this.selectedFurniture,this.furnitureOrient);if(!e){this.renderer.clearPlacementGhost();return;}const cells:PlacementGhostCell[]=e.cells.map(([dx,dy,name])=>{const x=p.x+dx,y=p.y+dy;return{x,y,z:m.currentLevel,name,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(name)};});this.renderer.setPlacementGhost(cells);return;}
-      if(this.tool==='rect'&&this.selectedAsset){const a=this.rectStart??p,x0=Math.min(a.x,p.x),x1=Math.max(a.x,p.x),y0=Math.min(a.y,p.y),y1=Math.max(a.y,p.y),cells:PlacementGhostCell[]=[];for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)cells.push({x,y,z:m.currentLevel,name:this.selectedAsset,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(this.selectedAsset)});this.renderer.setPlacementGhost(cells);return;}
-      if(this.tool==='pencil'&&this.selectedAsset){this.renderer.setPlacementGhost([{x:p.x,y:p.y,z:m.currentLevel,name:this.selectedAsset,valid:this.valid(p)&&!!this.catalog.assets.asset(this.selectedAsset)}]);return;}
+      if(this.tool==='furniture'&&this.selectedFurniture){const e=this.catalog.entry(this.selectedFurniture,this.furnitureOrient);if(!e){this.renderer.clearPlacementGhost();return;}const cells:PlacementGhostCell[]=e.cells.map(([dx,dy,name])=>{const x=p.x+dx,y=p.y+dy;return{x,y,z:m.currentLevel,name,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(name),mode:'ground'};});this.renderer.setPlacementGhost(cells);return;}
+      if(this.tool==='rect'&&this.selectedAsset){const a=this.rectStart??p,x0=Math.min(a.x,p.x),x1=Math.max(a.x,p.x),y0=Math.min(a.y,p.y),y1=Math.max(a.y,p.y),cells:PlacementGhostCell[]=[];for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)cells.push({x,y,z:m.currentLevel,name:this.selectedAsset,valid:x>=0&&y>=0&&x<m.width&&y<m.height&&!!this.catalog.assets.asset(this.selectedAsset),mode:this.placementMode});this.renderer.setPlacementGhost(cells);return;}
+      if(this.tool==='pencil'&&this.selectedAsset){this.renderer.setPlacementGhost([{x:p.x,y:p.y,z:m.currentLevel,name:this.selectedAsset,valid:this.valid(p)&&!!this.catalog.assets.asset(this.selectedAsset),mode:this.placementMode}]);return;}
       this.renderer.clearPlacementGhost();
     }
 
-    private layerChange(l:UserLayerModel,x:number,y:number,after:string|null){const m=this.map(),before=l.get(x,y,m.width),key=`L:${l.id}:${x}:${y}`,old=this.changes.get(key) as LayerCellChange|undefined;if(old)old.after=after;else this.changes.set(key,{kind:'layer',layerId:l.id,x,y,before,after});l.set(x,y,m.width,after);this.renderer.invalidateCell(l.level,x,y);}
+    private layerChange(l:UserLayerModel,x:number,y:number,after:string|null,afterMode:PlacementMode='ground'){const m=this.map(),before=l.get(x,y,m.width),beforeMode=l.placementMode(x,y,m.width),key=`L:${l.id}:${x}:${y}`,old=this.changes.get(key) as LayerCellChange|undefined;if(old){old.after=after;old.afterMode=afterMode;}else this.changes.set(key,{kind:'layer',layerId:l.id,x,y,before,after,beforeMode,afterMode});l.set(x,y,m.width,after);if(after)l.setPlacementMode(x,y,m.width,afterMode);this.renderer.invalidateCell(l.level,x,y);}
     private baseChange(z:number,x:number,y:number,after:string[]){const m=this.map(),before=[...m.stack(z,x,y)],key=`B:${z}:${x}:${y}`,old=this.changes.get(key) as BaseStackChange|undefined;if(old)old.after=[...after];else this.changes.set(key,{kind:'base',z,x,y,before,after:[...after]});m.setStack(z,x,y,after);this.renderer.invalidateCell(z,x,y);}
     private targetLocked():boolean{const m=this.map();if(m.activeTarget==='base')return m.baseLocked;return m.activeLayer()?.locked??false;}
     private paint(p:{x:number;y:number},notify=true){const m=this.map();if(this.targetLocked()){this.onStatus('Selected layer is locked.');return;}const strokeKey=`${m.currentLevel}:${p.x}:${p.y}`;if(this.tool==='eraser'&&this.strokeCells.has(strokeKey))return;if(this.tool==='eraser')this.strokeCells.add(strokeKey);
       if(m.activeTarget==='base'){const before=[...m.stack(m.currentLevel,p.x,p.y)],s=[...before];if(this.tool==='eraser'){let removed:string|null=null;for(let i=s.length-1;i>=0;i--)if(this.visible(s[i])){removed=s[i];s.splice(i,1);break;}if(removed){this.baseChange(m.currentLevel,p.x,p.y,s);this.onDebugLog({type:'erase',strokeId:this.strokeId,target:'base',z:m.currentLevel,x:p.x,y:p.y,removed,before,after:[...s],time:new Date().toISOString()});}}else if(this.selectedAsset&&!s.includes(this.selectedAsset)){s.push(this.selectedAsset);this.baseChange(m.currentLevel,p.x,p.y,s);}}
-      else{const l=m.activeLayer();if(!l)return;if(this.tool==='eraser'){const before=l.get(p.x,p.y,m.width);if(before){this.layerChange(l,p.x,p.y,null);this.onDebugLog({type:'erase',strokeId:this.strokeId,target:l.id,layer:l.name,z:l.level,x:p.x,y:p.y,removed:before,before,after:null,time:new Date().toISOString()});}}else if(this.selectedAsset){let target=l;if(l.get(p.x,p.y,m.width)){const cat=this.classifier(this.selectedAsset);target=m.findStackLayer(cat,m.currentLevel,[p],true,true)!;}this.layerChange(target,p.x,p.y,this.selectedAsset);m.activeTarget=target.id;}}if(notify){this.renderer.request();this.onChanged();}}
+      else{const l=m.activeLayer();if(!l)return;if(this.tool==='eraser'){const before=l.get(p.x,p.y,m.width);if(before){this.layerChange(l,p.x,p.y,null,'ground');this.onDebugLog({type:'erase',strokeId:this.strokeId,target:l.id,layer:l.name,z:l.level,x:p.x,y:p.y,removed:before,before,after:null,time:new Date().toISOString()});}}else if(this.selectedAsset){let target=l;if(l.get(p.x,p.y,m.width)){const cat=this.classifier(this.selectedAsset);target=m.findStackLayer(cat,m.currentLevel,[p],true,true)!;}this.layerChange(target,p.x,p.y,this.selectedAsset,this.placementMode);m.activeTarget=target.id;}}if(notify){this.renderer.request();this.onChanged();}}
     private rect(a:{x:number;y:number},b:{x:number;y:number}){if(!this.selectedAsset||this.targetLocked())return;const x0=Math.min(a.x,b.x),x1=Math.max(a.x,b.x),y0=Math.min(a.y,b.y),y1=Math.max(a.y,b.y);for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)this.paint({x,y},false);this.renderer.request();this.onChanged();}
 
     private pick(p:{x:number;y:number}){
       const m=this.map(),items:PickCandidate[]=[];
-      for(let i=m.layers.length-1;i>=0;i--){const l=m.layers[i];if(!l.visible||l.opacity<=.001||l.level!==m.currentLevel)continue;const n=l.get(p.x,p.y,m.width);if(n&&this.visible(n))items.push({name:n,targetId:l.id,sourceLabel:l.name,category:this.classifier(n),z:m.currentLevel,x:p.x,y:p.y});}
-      if(m.baseVisible&&m.baseOpacity>.001){const s=m.stack(m.currentLevel,p.x,p.y);for(let i=s.length-1;i>=0;i--)if(this.visible(s[i]))items.push({name:s[i],targetId:'base',sourceLabel:`Imported Base · stack ${i+1}`,category:this.classifier(s[i]),z:m.currentLevel,x:p.x,y:p.y});}
+      for(let i=m.layers.length-1;i>=0;i--){const l=m.layers[i];if(!l.visible||l.opacity<=.001||l.level!==m.currentLevel)continue;const n=l.get(p.x,p.y,m.width);if(n&&this.visible(n))items.push({name:n,targetId:l.id,sourceLabel:l.name,category:this.classifier(n),z:m.currentLevel,x:p.x,y:p.y,placementMode:l.placementMode(p.x,p.y,m.width)});}
+      if(m.baseVisible&&m.baseOpacity>.001){const s=m.stack(m.currentLevel,p.x,p.y);for(let i=s.length-1;i>=0;i--)if(this.visible(s[i]))items.push({name:s[i],targetId:'base',sourceLabel:`Imported Base · stack ${i+1}`,category:this.classifier(s[i]),z:m.currentLevel,x:p.x,y:p.y,placementMode:'ground'});}
       if(!items.length){this.onStatus('Nothing visible to pick on this cell.');return;}
       if(items.length===1&&!this.catalog.matchesTile(items[0].name,true).length){this.applyPickCandidate(items[0]);return;}
       this.onPickCandidates(items,p);
     }
-    applyPickCandidate(c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedAsset=c.name;this.selectedFurniture=null;this.tool='pencil';this.refreshPlacementGhost();this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`);this.onSelection();}
-    applyPickFurniture(match:FurnitureTileMatch,c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedFurniture=match.def;this.selectedAsset=null;this.tool='furniture';this.furnitureOrient=match.orient;this.refreshPlacementGhost();this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}).`);this.onSelection();}
+    applyPickCandidate(c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedAsset=c.name;this.selectedFurniture=null;this.tool='pencil';this.placementMode=c.placementMode??'ground';this.refreshPlacementGhost();this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`);this.onSelection();}
+    applyPickFurniture(match:FurnitureTileMatch,c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedFurniture=match.def;this.selectedAsset=null;this.tool='furniture';this.placementMode='ground';this.furnitureOrient=match.orient;this.refreshPlacementGhost();this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}).`);this.onSelection();}
 
     private placeFurniture(p:{x:number;y:number}){
       const d=this.selectedFurniture,e=d?this.catalog.entry(d,this.furnitureOrient):null;if(!d||!e)return;const m=this.map(),cells:Array<{x:number;y:number;name:string}>=[];let missing=0,outside=0;
       for(const [dx,dy,n] of e.cells){const x=p.x+dx,y=p.y+dy;if(x<0||y<0||x>=m.width||y>=m.height){outside++;continue;}if(!this.catalog.assets.asset(n)){missing++;continue;}cells.push({x,y,name:n});}
       if(outside){this.onStatus('Furniture does not fit inside the current map area.');return;}
       if(!cells.length){this.onStatus('Furniture assets are not available.');return;}
-      const target=m.findStackLayer('Furniture',m.currentLevel,cells,true,true)!;for(const c of cells)this.layerChange(target,c.x,c.y,c.name);m.activeTarget=target.id;this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing?` · ${missing} missing`:''}.`);this.renderer.request();this.onChanged();
+      const target=m.findStackLayer('Furniture',m.currentLevel,cells,true,true)!;for(const c of cells)this.layerChange(target,c.x,c.y,c.name,'ground');m.activeTarget=target.id;this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing?` · ${missing} missing`:''}.`);this.renderer.request();this.onChanged();
     }
     private commit(){const c=[...this.changes.values()];this.changes.clear();this.history.push(c);if(c.length)this.onDebugLog({type:'commit',strokeId:this.strokeId,tool:this.tool,changes:c.length,time:new Date().toISOString()});}
     undo(){const c=this.history.undo(this.map());if(c){this.renderer.invalidateChanges(c);this.renderer.request();this.onChanged();}}
