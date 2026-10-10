@@ -92,42 +92,73 @@ var PZODT;
             name = `${category} ${n}`;
         } return this.addLayer(name, level, category); }
         toJSON() { return { format: 'PZOnlineDecorationTool', version: 4, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: this.baseLocked, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementHeights: [...l.placementHeights] })) }; }
-        static fromJSON(o) { const m = new PZMapModel(o.width || 64, o.height || 64); m.tileWidth = o.tileWidth || 64; m.tileHeight = o.tileHeight || 32; m.cellsPerLevelY = o.cellsPerLevelY || 3; m.currentLevel = o.currentLevel || 0; m.properties = o.properties || {}; m.baseVisible = true; m.baseOpacity = 1; m.baseLocked = false; m.activeTarget = 'base'; m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])])); m.layers = []; for (const q of o.layers || []) {
-            const imported = /^(Imported Base|Imported ·|Base ·)/.test(q.name || '');
-            if (imported && !o.baseStacks) {
-                const z = q.level || 0;
-                let lev = m.baseStacks.get(z);
-                if (!lev) {
-                    lev = new Map();
-                    m.baseStacks.set(z, lev);
-                }
-                for (const [k, v] of q.cells || []) {
-                    const stack = lev.get(+k) || [];
-                    stack.push(v);
-                    lev.set(+k, stack);
-                }
-                continue;
-            }
-            const l = new UserLayerModel(q.name || 'Layer', q.level || 0, q.category || 'Custom');
-            l.id = q.id || l.id;
-            l.visible = true;
-            l.opacity = 1;
-            l.locked = false;
-            l.cells = new Map(q.cells || []);
-            const heights = Array.isArray(q.placementHeights) ? q.placementHeights : [];
-            l.placementHeights = new Map(heights.filter((x) => x && x.length >= 2 && Number.isFinite(+x[1])).map((x) => [+x[0], Math.max(0, Math.min(512, Math.round(+x[1])))]));
-            if (!heights.length && Array.isArray(q.placementModes)) {
-                for (const x of q.placementModes) {
-                    if (!x || x.length < 2)
-                        continue;
-                    const legacy = x[1], h = legacy === 'ontable' ? 32 : legacy === 'surface' ? 16 : 0;
-                    if (h)
-                        l.placementHeights.set(+x[0], h);
+        static fromJSON(o) {
+            const width = Math.max(1, Math.min(600, Math.trunc(Number(o.width) || 64)));
+            const height = Math.max(1, Math.min(600, Math.trunc(Number(o.height) || 64)));
+            const m = new PZMapModel(width, height);
+            m.tileWidth = Math.max(16, Math.min(512, Number(o.tileWidth) || 64));
+            m.tileHeight = Math.max(8, Math.min(256, Number(o.tileHeight) || 32));
+            m.cellsPerLevelY = Math.max(0, Math.min(64, Number(o.cellsPerLevelY) || 3));
+            m.currentLevel = Math.max(-64, Math.min(64, Math.trunc(Number(o.currentLevel) || 0)));
+            const props = Object.create(null);
+            if (o.properties && typeof o.properties === 'object' && !Array.isArray(o.properties)) {
+                for (const [k, v] of Object.entries(o.properties)) {
+                    if (typeof v === 'string' && k.length <= 128 && v.length <= 2048 && !['__proto__', 'prototype', 'constructor'].includes(k))
+                        props[k] = v;
                 }
             }
-            m.layers.push(l);
-        } if (m.activeTarget !== 'base' && !m.layers.some(l => l.id === m.activeTarget))
-            m.activeTarget = 'base'; return m; }
+            m.properties = props;
+            m.baseVisible = true;
+            m.baseOpacity = 1;
+            m.baseLocked = false;
+            m.activeTarget = 'base';
+            m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])]));
+            m.layers = [];
+            const ids = new Set();
+            for (const q of o.layers || []) {
+                const name = typeof q.name === 'string' && q.name ? q.name.slice(0, 128) : 'Layer';
+                const imported = /^(Imported Base|Imported ·|Base ·)/.test(name);
+                if (imported && !o.baseStacks) {
+                    const z = Math.max(-64, Math.min(64, Math.trunc(Number(q.level) || 0)));
+                    let lev = m.baseStacks.get(z);
+                    if (!lev) {
+                        lev = new Map();
+                        m.baseStacks.set(z, lev);
+                    }
+                    for (const [k, v] of q.cells || []) {
+                        const stack = lev.get(+k) || [];
+                        stack.push(v);
+                        lev.set(+k, stack);
+                    }
+                    continue;
+                }
+                const level = Math.max(-64, Math.min(64, Math.trunc(Number(q.level) || 0)));
+                const category = PZODT.VIEW_CATEGORIES.includes(q.category) ? q.category : 'Custom';
+                const l = new UserLayerModel(name, level, category);
+                let id = typeof q.id === 'string' && q.id.length <= 128 ? q.id : l.id;
+                if (ids.has(id))
+                    id = l.id;
+                ids.add(id);
+                l.id = id;
+                l.visible = true;
+                l.opacity = 1;
+                l.locked = false;
+                l.cells = new Map(q.cells || []);
+                const heights = Array.isArray(q.placementHeights) ? q.placementHeights : [];
+                l.placementHeights = new Map(heights.filter((x) => x && x.length >= 2 && Number.isInteger(+x[0]) && Number.isFinite(+x[1])).map((x) => [+x[0], Math.max(0, Math.min(512, Math.round(+x[1])))]));
+                if (!heights.length && Array.isArray(q.placementModes)) {
+                    for (const x of q.placementModes) {
+                        if (!x || x.length < 2)
+                            continue;
+                        const legacy = x[1], h = legacy === 'ontable' ? 32 : legacy === 'surface' ? 16 : 0;
+                        if (h)
+                            l.placementHeights.set(+x[0], h);
+                    }
+                }
+                m.layers.push(l);
+            }
+            return m;
+        }
     }
     PZODT.PZMapModel = PZMapModel;
     class History {
@@ -159,6 +190,10 @@ var PZODT;
 })(PZODT || (PZODT = {}));
 var PZODT;
 (function (PZODT) {
+    const MAX_PACK_BYTES = 1024 * 1024 * 1024;
+    PZODT.MAX_PNG_BYTES = 256 * 1024 * 1024;
+    const MAX_IMAGE_DIMENSION = 16384;
+    const MAX_IMAGE_PIXELS = 64 * 1024 * 1024;
     class BinReader {
         constructor(buf) {
             this.pos = 0;
@@ -167,7 +202,7 @@ var PZODT;
         }
         i32() { if (this.pos + 4 > this.view.byteLength)
             throw new Error('Truncated file'); const v = this.view.getInt32(this.pos, true); this.pos += 4; return v; }
-        str() { const n = this.i32(); if (n < 0 || n > 1024 * 1024 || this.pos + n > this.bytes.length)
+        str() { const n = this.i32(); if (n < 0 || n > 65536 || this.pos + n > this.bytes.length)
             throw new Error('Invalid string'); const b = this.bytes.subarray(this.pos, this.pos + n); this.pos += n; let s = ''; for (let i = 0; i < b.length; i += 8192)
             s += String.fromCharCode(...b.subarray(i, Math.min(i + 8192, b.length))); return s; }
         slice(n) { if (n < 0 || this.pos + n > this.bytes.length)
@@ -189,53 +224,80 @@ var PZODT;
         eh = 256;
     } return w >= ew * 1.75 || h >= eh * 1.75 ? 2 : 1; }
     PZODT.inferAssetScale = inferAssetScale;
-    async function parsePZPack(file, assets, progress) { const buf = await file.arrayBuffer(), r = new BinReader(buf), u = new Uint8Array(buf); let version = 0, pages = 0; if (u.length >= 4 && u[0] === 80 && u[1] === 90 && u[2] === 80 && u[3] === 75) {
-        r.pos = 4;
-        version = r.i32();
-        pages = r.i32();
-        if (version !== 1)
-            throw new Error(`Unsupported PZPK version ${version}`);
+    function pngSize(bytes) {
+        if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47 || bytes[4] !== 0x0d || bytes[5] !== 0x0a || bytes[6] !== 0x1a || bytes[7] !== 0x0a || bytes[12] !== 0x49 || bytes[13] !== 0x48 || bytes[14] !== 0x44 || bytes[15] !== 0x52)
+            throw new Error('Invalid PNG header');
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), width = view.getUint32(16, false), height = view.getUint32(20, false);
+        if (width < 1 || height < 1 || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION || width * height > MAX_IMAGE_PIXELS)
+            throw new Error('PNG dimensions exceed browser safety limits');
+        return { width, height };
     }
-    else
-        pages = r.i32(); if (pages < 0 || pages > 10000)
-        throw new Error('Invalid pack page count'); let count = 0; for (let p = 0; p < pages; p++) {
-        const pageName = r.str(), n = r.i32();
-        r.i32();
-        if (n < 0 || n > 1000000)
-            throw new Error('Invalid pack texture count');
-        const meta = [];
-        for (let i = 0; i < n; i++)
-            meta.push({ name: r.str(), x: r.i32(), y: r.i32(), w: r.i32(), h: r.i32(), ox: r.i32(), oy: r.i32(), fx: r.i32(), fy: r.i32() });
-        let png;
-        if (version === 0) {
-            const start = r.pos;
-            let end = -1;
-            for (let i = start; i + 3 < u.length; i++) {
-                if (u[i] === 0xef && u[i + 1] === 0xbe && u[i + 2] === 0xad && u[i + 3] === 0xde) {
-                    end = i;
-                    break;
+    PZODT.pngSize = pngSize;
+    async function readPngSize(blob) {
+        if (blob.size < 24 || blob.size > PZODT.MAX_PNG_BYTES)
+            throw new Error('PNG file size is outside supported limits');
+        return pngSize(new Uint8Array(await blob.slice(0, 24).arrayBuffer()));
+    }
+    PZODT.readPngSize = readPngSize;
+    async function parsePZPack(file, assets, progress) {
+        if (file.size < 4 || file.size > MAX_PACK_BYTES)
+            throw new Error('Texture pack size is outside supported limits');
+        const buf = await file.arrayBuffer(), r = new BinReader(buf), u = new Uint8Array(buf);
+        let version = 0, pages = 0;
+        if (u.length >= 4 && u[0] === 80 && u[1] === 90 && u[2] === 80 && u[3] === 75) {
+            r.pos = 4;
+            version = r.i32();
+            pages = r.i32();
+            if (version !== 1)
+                throw new Error(`Unsupported PZPK version ${version}`);
+        }
+        else
+            pages = r.i32();
+        if (pages < 0 || pages > 4096)
+            throw new Error('Invalid pack page count');
+        let count = 0;
+        for (let page = 0; page < pages; page++) {
+            const pageName = r.str(), n = r.i32();
+            r.i32();
+            if (n < 0 || n > 250000)
+                throw new Error('Invalid pack texture count');
+            const meta = [];
+            for (let i = 0; i < n; i++)
+                meta.push({ name: r.str(), x: r.i32(), y: r.i32(), w: r.i32(), h: r.i32(), ox: r.i32(), oy: r.i32(), fx: r.i32(), fy: r.i32() });
+            let png;
+            if (version === 0) {
+                const start = r.pos;
+                let end = -1;
+                for (let i = start; i + 3 < u.length; i++) {
+                    if (u[i] === 0xef && u[i + 1] === 0xbe && u[i + 2] === 0xad && u[i + 3] === 0xde) {
+                        end = i;
+                        break;
+                    }
                 }
+                if (end < 0 || end - start > PZODT.MAX_PNG_BYTES)
+                    throw new Error('Invalid legacy pack image');
+                png = u.slice(start, end);
+                r.pos = end + 4;
             }
-            if (end < 0)
-                throw new Error('Legacy pack terminator missing');
-            png = u.slice(start, end);
-            r.pos = end + 4;
+            else {
+                const len = r.i32();
+                if (len < 24 || len > PZODT.MAX_PNG_BYTES)
+                    throw new Error('Invalid pack image size');
+                png = r.slice(len);
+            }
+            const image = pngSize(png), sid = assets.addImageSource(`${file.name}:${pageName}`, new Blob([png], { type: 'image/png' }), image.width, image.height);
+            for (const m of meta) {
+                if (m.x < 0 || m.y < 0 || m.w <= 0 || m.h <= 0 || m.fx <= 0 || m.fy <= 0 || m.x + m.w > image.width || m.y + m.h > image.height || m.fx > 8192 || m.fy > 8192 || Math.abs(m.ox) > 8192 || Math.abs(m.oy) > 8192)
+                    continue;
+                const p = parseTileName(m.name), scale = inferAssetScale(m.fx, m.fy, p.tilesetName);
+                assets.addAsset({ name: m.name, sourceId: sid, tilesetName: p.tilesetName, tileIndex: p.tileIndex, sx: m.x, sy: m.y, sw: m.w, sh: m.h, frameW: m.fx, frameH: m.fy, offsetX: m.ox, offsetY: m.oy, scale });
+                count++;
+            }
+            if (page % 10 === 0 || page === pages - 1)
+                progress?.(`${file.name}: ${page + 1}/${pages} pages · ${count.toLocaleString()} sprites`);
         }
-        else {
-            const len = r.i32();
-            png = r.slice(len);
-        }
-        const sid = assets.addImageSource(`${file.name}:${pageName}`, new Blob([png], { type: 'image/png' }), 0, 0);
-        for (const m of meta) {
-            if (m.w <= 0 || m.h <= 0 || m.fx <= 0 || m.fy <= 0)
-                continue;
-            const p = parseTileName(m.name), scale = inferAssetScale(m.fx, m.fy, p.tilesetName);
-            assets.addAsset({ name: m.name, sourceId: sid, tilesetName: p.tilesetName, tileIndex: p.tileIndex, sx: m.x, sy: m.y, sw: m.w, sh: m.h, frameW: m.fx, frameH: m.fy, offsetX: m.ox, offsetY: m.oy, scale });
-            count++;
-        }
-        if (p % 10 === 0 || p === pages - 1)
-            progress?.(`${file.name}: ${p + 1}/${pages} pages · ${count.toLocaleString()} sprites`);
-    } return count; }
+        return count;
+    }
     PZODT.parsePZPack = parsePZPack;
 })(PZODT || (PZODT = {}));
 var PZODT;
@@ -275,10 +337,8 @@ var PZODT;
         resolveAsset(name, worldX = 0, worldY = 0) { return this.isLegacyTreePlaceholder(name) ? this.legacyTreeAsset(name, worldX, worldY) : this.asset(name); }
         async bitmap(sourceId) { let p = this.imageBitmaps.get(sourceId); if (p)
             return p; const s = this.sources.get(sourceId); if (!s)
-            throw new Error('Missing source'); p = createImageBitmap(s.blob).then(b => { if (!s.width) {
-            s.width = b.width;
-            s.height = b.height;
-        } return b; }); this.imageBitmaps.set(sourceId, p); return p; }
+            throw new Error('Missing source'); if (s.width < 1 || s.height < 1 || s.width > 16384 || s.height > 16384 || s.width * s.height > 64 * 1024 * 1024)
+            throw new Error('Image dimensions exceed browser safety limits'); p = createImageBitmap(s.blob); this.imageBitmaps.set(sourceId, p); return p; }
         clear() { for (const s of this.sources.values())
             URL.revokeObjectURL(s.objectUrl); this.assets.clear(); this.sources.clear(); this.sheets.clear(); this.byKey.clear(); this.tilesetStats.clear(); this.imageBitmaps.clear(); this.legacyTreeFamilies = null; this.loadedFileKeys.clear(); this.onChanged(); }
         dominantScale() { let a = 0, b = 0, i = 0; for (const x of this.assets.values()) {
@@ -337,20 +397,19 @@ var PZODT;
                 return false;
             } return true; });
             let done = 0;
-            const total = q.length, workers = Array.from({ length: Math.min(8, q.length) }, async () => { while (q.length) {
+            const total = q.length, workers = Array.from({ length: Math.min(12, q.length) }, async () => { while (q.length) {
                 const sh = q.shift();
                 try {
-                    const bm = await createImageBitmap(sh.file);
-                    sh.width = bm.width;
-                    sh.height = bm.height;
-                    bm.close();
+                    const size = await PZODT.readPngSize(sh.file);
+                    sh.width = size.width;
+                    sh.height = size.height;
                     this.indexSheet(sh);
                 }
                 catch (e) {
-                    console.warn(e);
+                    console.warn('PNG sheet skipped', sh.path, e);
                 }
                 done++;
-                if (done === total || done % 12 === 0)
+                if (done === total || done % 20 === 0)
                     progress?.(`PNG fallbacks ${done}/${total} · ${pngSkipped.toLocaleString()} duplicate sheet(s) skipped · ${this.assets.size.toLocaleString()} sprites`);
             } });
             await Promise.all(workers);
@@ -423,13 +482,14 @@ var PZODT;
             throw new Error('Truncated .tiles'); const v = this.view.getInt32(this.pos, true); this.pos += 4; return v; }
         u8() { if (this.pos >= this.bytes.length)
             throw new Error('Truncated .tiles'); return this.bytes[this.pos++]; }
-        line() { let s = ''; for (let i = 0; i < 1024 * 1024; i++) {
+        line() { let s = ''; for (let i = 0; i < 65536; i++) {
             const c = this.u8();
             if (c === 10)
                 return s;
             s += String.fromCharCode(c);
         } throw new Error('Invalid .tiles string'); }
-        seek(n) { this.pos = n; }
+        seek(n) { if (n < 0 || n > this.bytes.length)
+            throw new Error('Invalid .tiles offset'); this.pos = n; }
     }
     class TileDefDatabase {
         constructor() {
@@ -454,7 +514,8 @@ var PZODT;
             if (done === list.length || done % 2 === 0)
                 progress?.(`Tile definitions ${done}/${list.length} · ${total.toLocaleString()} property-bearing tiles`);
         } }); await Promise.all(workers); return total; }
-        async readBinary(file) { const buf = await file.arrayBuffer(), r = new TileDefReader(buf); let version = 0; const magic = String.fromCharCode(r.u8(), r.u8(), r.u8(), r.u8()); if (magic === 'tdef') {
+        async readBinary(file) { if (file.size < 4 || file.size > 256 * 1024 * 1024)
+            throw new Error('.tiles file size is outside supported limits'); const buf = await file.arrayBuffer(), r = new TileDefReader(buf); let version = 0; const magic = String.fromCharCode(r.u8(), r.u8(), r.u8(), r.u8()); if (magic === 'tdef') {
             version = r.i32();
             if (version < 0 || version > 1)
                 throw new Error(`Unsupported .tiles version ${version}`);
@@ -468,12 +529,12 @@ var PZODT;
             if (version > 0)
                 r.i32();
             const count = r.i32();
-            if (cols < 0 || rows < 0 || count < 0 || count > cols * rows)
+            if (cols < 0 || rows < 0 || cols > 4096 || rows > 4096 || count < 0 || count > cols * rows)
                 throw new Error('Invalid tile-definition grid');
             this.tilesetCounts.set(name.toLowerCase(), Math.max(this.tilesetCounts.get(name.toLowerCase()) ?? 0, count));
             for (let j = 0; j < count; j++) {
-                const np = r.i32(), p = {};
-                if (np < 0 || np > 100000)
+                const np = r.i32(), p = Object.create(null);
+                if (np < 0 || np > 4096)
                     throw new Error('Invalid property count');
                 for (let k = 0; k < np; k++)
                     p[r.line()] = r.line();
@@ -523,8 +584,6 @@ var PZODT;
             if (/(^|_)roofs?(_|$)/.test(n))
                 return 'Roof';
             if (n.includes('vegetation_indoor'))
-                return 'Furniture';
-            if (/^fixtures_counters(?:_|$)/.test(n))
                 return 'Furniture';
             if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
                 return 'Furniture';
@@ -640,15 +699,17 @@ var PZODT;
             throw new Error('Truncated map file'); const x = Number(this.v.getBigInt64(this.p, true)); this.p += 8; return x; }
         u8() { if (this.p >= this.b.length)
             throw new Error('Truncated map file'); return this.b[this.p++]; }
-        ascii(n) { let s = ''; while (n--)
+        ascii(n) { if (n < 0 || n > 64)
+            throw new Error('Invalid map string'); let s = ''; while (n--)
             s += String.fromCharCode(this.u8()); return s; }
-        line() { let s = ''; while (this.p < this.b.length) {
+        line() { let s = ''; for (let i = 0; i < 65536 && this.p < this.b.length; i++) {
             const c = this.u8();
             if (c === 10)
-                break;
+                return s.trim();
             s += String.fromCharCode(c);
-        } return s.trim(); }
-        seek(n) { this.p = n; }
+        } throw new Error('Invalid map string'); }
+        seek(n) { if (!Number.isSafeInteger(n) || n < 0 || n > this.b.length)
+            throw new Error('Invalid map offset'); this.p = n; }
     }
     const key = (x, y) => `${x},${y}`, path = (f) => (f.webkitRelativePath || f.name).replace(/\\/g, '/'), dir = (p) => p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '', base = (p) => p.slice(p.lastIndexOf('/') + 1), W = (b) => b.x1 - b.x0 + 1, H = (b) => b.y1 - b.y0 + 1;
     const union = (a, b) => a ? { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) } : b;
@@ -660,7 +721,7 @@ var PZODT;
             this.hcache = new Map();
             this.pcache = new Map();
         }
-        scan(files) { const arr = Array.from(files); this.allFiles = arr; this.datasets.clear(); this.hcache.clear(); this.pcache.clear(); let sigParts = []; for (const f of arr) {
+        scan(files) { const arr = Array.from(files).filter(f => /\.(png|pack|tiles|lotheader|lotpack)$/i.test(f.name)); this.allFiles = arr; this.datasets.clear(); this.hcache.clear(); this.pcache.clear(); let sigParts = []; for (const f of arr) {
             const p = path(f), bn = base(p);
             sigParts.push(`${p}:${f.size}:${f.lastModified}`);
             let m = bn.match(/^(-?\d+)_(-?\d+)\.lotheader$/i);
@@ -681,9 +742,11 @@ var PZODT;
                 hash ^= s.charCodeAt(i);
                 hash = Math.imul(hash, 16777619);
             } this.mediaSignature = `${arr.length}:${hash >>> 0}`; return [...this.datasets.values()].filter(d => d.headers.size).sort((a, b) => b.headers.size - a.headers.size).map(d => ({ id: d.id, label: d.path || '(media)', headers: d.headers.size, packs: d.packs.size })); }
+        selectedBytes() { return this.allFiles.reduce((n, f) => n + f.size, 0); }
         assetFiles() { return this.allFiles.filter(f => /\.(png|pack)$/i.test(f.name)); }
         tileDefFiles() { return this.allFiles.filter(f => /\.tiles$/i.test(f.name)); }
-        async header(ds, f, cx, cy) { const ck = `${ds.id}|H|${cx},${cy}`; let q = this.hcache.get(ck); if (q)
+        async header(ds, f, cx, cy) { if (f.size < 4 || f.size > 64 * 1024 * 1024)
+            throw new Error('Map header size is outside supported limits'); const ck = `${ds.id}|H|${cx},${cy}`; let q = this.hcache.get(ck); if (q)
             return q; q = (async () => { const r = new R(await f.arrayBuffer()); let version = 0, magic = r.ascii(4); if (magic === 'LOTH') {
             version = r.i32();
         }
@@ -694,26 +757,40 @@ var PZODT;
             throw new Error(`Unsupported lotheader version ${version}`); const nt = r.i32(), tiles = []; if (nt < 0 || nt > 300000)
             throw new Error('Invalid tile list'); for (let i = 0; i < nt; i++)
             tiles.push(r.line()); if (version === 0)
-            r.u8(); const chunkW = r.i32(), chunkH = r.i32(); let min = 0, max = 0; if (version === 0) {
+            r.u8(); const chunkW = r.i32(), chunkH = r.i32(); if (chunkW < 1 || chunkH < 1 || chunkW > 256 || chunkH > 256)
+            throw new Error('Invalid map chunk dimensions'); let min = 0, max = 0; if (version === 0) {
             min = 0;
             max = r.i32() - 1;
         }
         else {
             min = r.i32();
             max = r.i32();
-        } const nr = r.i32(), rooms = []; for (let i = 0; i < nr; i++) {
+        } if (min < -64 || max > 64 || min > max)
+            throw new Error('Invalid map Z range'); const nr = r.i32(), rooms = []; if (nr < 0 || nr > 10000)
+            throw new Error('Invalid room count'); for (let i = 0; i < nr; i++) {
             const name = r.line(), level = r.i32(), rc = r.i32(), rects = [];
-            for (let j = 0; j < rc; j++)
-                rects.push({ x: r.i32(), y: r.i32(), w: r.i32(), h: r.i32() });
+            if (level < -64 || level > 64 || rc < 0 || rc > 10000)
+                throw new Error('Invalid room data');
+            for (let j = 0; j < rc; j++) {
+                const x = r.i32(), y = r.i32(), w = r.i32(), h = r.i32();
+                if (w < 0 || h < 0 || w > 10000 || h > 10000)
+                    throw new Error('Invalid room rectangle');
+                rects.push({ x, y, w, h });
+            }
             const no = r.i32();
+            if (no < 0 || no > 100000)
+                throw new Error('Invalid room object count');
             for (let j = 0; j < no; j++) {
                 r.i32();
                 r.i32();
                 r.i32();
             }
             rooms.push({ id: i, name, level, rects, buildingIndex: -1 });
-        } const nb = r.i32(), buildings = []; for (let i = 0; i < nb; i++) {
+        } const nb = r.i32(), buildings = []; if (nb < 0 || nb > 10000)
+            throw new Error('Invalid building count'); for (let i = 0; i < nb; i++) {
             const n = r.i32(), ids = [];
+            if (n < 0 || n > 10000)
+                throw new Error('Invalid building room count');
             for (let j = 0; j < n; j++) {
                 const id = r.i32();
                 ids.push(id);
@@ -722,7 +799,8 @@ var PZODT;
             }
             buildings.push({ id: i, roomIds: ids });
         } return { cellX: cx, cellY: cy, version, tiles, chunkW, chunkH, minLevel: min, maxLevel: max, rooms, buildings }; })(); this.hcache.set(ck, q); return q; }
-        async pack(ds, f, k) { const ck = `${ds.id}|P|${k}`; let q = this.pcache.get(ck); if (q)
+        async pack(ds, f, k) { if (f.size < 4 || f.size > 1024 * 1024 * 1024)
+            throw new Error('Map pack size is outside supported limits'); const ck = `${ds.id}|P|${k}`; let q = this.pcache.get(ck); if (q)
             return q; q = (async () => { const data = await f.arrayBuffer(), r = new R(data); let version = 0, n = 0, magic = r.ascii(4); if (magic === 'LOTP') {
             version = r.i32();
             n = r.i32();
@@ -843,7 +921,7 @@ var PZODT;
         readRect(h, p, zWanted, b, emit) { const cw = h.chunkW, ch = h.chunkH, cpc = p.chunksPerCell; for (let cx = Math.floor(b.x0 / cw); cx <= Math.floor(b.x1 / cw); cx++)
             for (let cy = Math.floor(b.y0 / ch); cy <= Math.floor(b.y1 / ch); cy++) {
                 const idx = cx * cpc + cy, off = p.offsets[idx];
-                if (!Number.isFinite(off) || off < 0 || off >= p.data.byteLength)
+                if (!Number.isSafeInteger(off) || off < 0 || off >= p.data.byteLength)
                     continue;
                 const r = new R(p.data);
                 r.seek(off);
@@ -1286,7 +1364,6 @@ var PZODT;
             this.onSelection = () => { };
             this.onPickCandidates = () => { };
             this.onEraseCandidates = () => { };
-            this.onDebugLog = () => { };
             this.bind();
         }
         setTool(t) { this.tool = t; this.refreshPlacementGhost(); this.onSelection(); }
@@ -1531,7 +1608,6 @@ var PZODT;
                 if (current !== item.name)
                     continue;
                 this.layerChange(l, item.x, item.y, null, 0);
-                this.onDebugLog({ type: 'erase-selected', strokeId: this.strokeId, target: l.id, layer: l.name, z: item.z, x: item.x, y: item.y, removed: item.name, time: new Date().toISOString() });
                 removed++;
             }
             for (const group of baseGroups.values()) {
@@ -1540,7 +1616,6 @@ var PZODT;
                     if (i >= 0 && i < after.length && group.some(x => x.stackIndex === i && x.name === after[i])) {
                         const n = after[i];
                         after.splice(i, 1);
-                        this.onDebugLog({ type: 'erase-selected', strokeId: this.strokeId, target: 'base', z: first.z, x: first.x, y: first.y, removed: n, stackIndex: i, time: new Date().toISOString() });
                         removed++;
                     }
                 if (after.length !== before.length)
@@ -1586,8 +1661,7 @@ var PZODT;
             this.renderer.request();
             this.onChanged();
         }
-        commit() { const c = [...this.changes.values()]; this.changes.clear(); this.history.push(c); if (c.length)
-            this.onDebugLog({ type: 'commit', strokeId: this.strokeId, tool: this.tool, changes: c.length, time: new Date().toISOString() }); }
+        commit() { const c = [...this.changes.values()]; this.changes.clear(); this.history.push(c); }
         undo() { const c = this.history.undo(this.map()); if (c) {
             this.renderer.invalidateChanges(c);
             this.renderer.request();
@@ -1603,8 +1677,7 @@ var PZODT;
 })(PZODT || (PZODT = {}));
 var PZODT;
 (function (PZODT) {
-    PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.14';
+    const APP_VERSION = '1.2.0';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1625,7 +1698,8 @@ var PZODT;
     catch {
         return '';
     } };
-    const safeSameOriginEndpoint = (value) => typeof value === 'string' && /^\/(?!\/)[A-Za-z0-9_./?=&%-]*$/.test(value) && !value.includes('..') ? value : '';
+    const safeSupportUrl = (value) => { const href = safeHttpsUrl(value); if (!href)
+        return ''; const host = new URL(href).hostname.toLowerCase(); return host === 'buymeacoffee.com' || host.endsWith('.buymeacoffee.com') ? href : ''; };
     const save = (name, blob) => { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
     class App {
         constructor() {
@@ -1644,7 +1718,6 @@ var PZODT;
             this.furnitureToken = 0;
             this.furnitureObserver = null;
             this.heightPresets = [{ label: 'Floor', height: 0, count: 0 }];
-            this.editLog = [];
             this.pendingEraseCandidates = [];
             this.status = el('status');
             this.coords = el('coords');
@@ -1674,7 +1747,6 @@ var PZODT;
             this.editor.onSelection = () => this.selectionChanged();
             this.editor.onPickCandidates = (items, p) => this.showPickerChoices(items, p);
             this.editor.onEraseCandidates = (items, p) => this.showEraseChoices(items, p);
-            this.editor.onDebugLog = e => this.recordEditLog(e);
             this.assets.onChanged = () => this.assetsChanged();
             this.bind();
             this.updateLoadMode();
@@ -1725,12 +1797,9 @@ var PZODT;
             el('settingsCloseBtn').onclick = el('settingsDoneBtn').onclick = () => el('settingsDialog').close();
             this.graphicsQuality.onchange = () => { const q = this.graphicsQuality.value; storeSet('pzodt.graphicsQuality', q); this.renderer.setQuality(q); setTimeout(() => this.renderer.center(), 0); this.setStatus(`Graphics: ${q}.`); };
             this.performanceStatsToggle.onchange = () => { storeSet('pzodt.performanceStats', this.performanceStatsToggle.checked ? '1' : '0'); this.setPerformanceStats(this.performanceStatsToggle.checked); };
-            el('copyEditLogBtn').onclick = () => this.copyEditLog();
-            el('downloadEditLogBtn').onclick = () => this.downloadEditLog();
-            el('clearEditLogBtn').onclick = () => { this.editLog = []; this.setStatus('Edit log cleared.'); };
             el('creditsBtn').onclick = () => { el('settingsDialog').close(); el('creditsDialog').showModal(); };
             el('creditsCloseBtn').onclick = el('creditsDoneBtn').onclick = () => el('creditsDialog').close();
-            el('feedbackBtn').onclick = () => el('feedbackDialog').showModal();
+            el('feedbackBtn').onclick = () => this.openFeedbackDialog();
             this.nightModeToggle.onchange = () => this.applyNightMode(this.nightModeToggle.checked, true);
             el('feedbackCloseBtn').onclick = () => el('feedbackDialog').close();
             el('supportBtn').onclick = () => this.openSupport();
@@ -1835,7 +1904,12 @@ var PZODT;
             this.updateMediaUi('error', 'The selected folder contains too many files to index safely.');
             inp.value = '';
             return;
-        } const oldSignature = this.mediaReadySignature, list = this.importer.scan(inp.files), select = el('datasetSelect'); select.replaceChildren(); for (const d of list) {
+        } const oldSignature = this.mediaReadySignature, list = this.importer.scan(inp.files), select = el('datasetSelect'); if (this.importer.selectedBytes() > 16 * 1024 * 1024 * 1024) {
+            this.updateMediaUi('error', 'The selected media folder is too large to index safely in a browser session.');
+            this.setStatus('Media folder is too large to index safely.');
+            inp.value = '';
+            return;
+        } select.replaceChildren(); for (const d of list) {
             const o = document.createElement('option');
             o.value = d.id;
             o.textContent = `${d.label} · ${d.headers} headers / ${d.packs} lotpacks`;
@@ -1908,8 +1982,8 @@ var PZODT;
         } }
         async jsonSelected(e) { const inp = e.target, f = inp.files?.[0]; if (!f)
             return; try {
-            if (f.size > 128 * 1024 * 1024)
-                throw new Error('JSON project is larger than the 128 MiB safety limit.');
+            if (f.size > 64 * 1024 * 1024)
+                throw new Error('JSON project is larger than the 64 MiB safety limit.');
             const o = JSON.parse(await f.text()), m = o?.map ?? o;
             this.validateProjectData(m);
             this.map = PZODT.PZMapModel.fromJSON(m);
@@ -2077,92 +2151,53 @@ var PZODT;
             const a = p.a;
             ctx.drawImage(p.b, a.sx, a.sy, a.sw, a.sh, ox + p.l * fit, oy + p.t * fit, a.sw * p.s * fit, a.sh * p.s * fit);
         } }
-        recordEditLog(entry) { this.editLog.push({ version: APP_VERSION, ...entry }); if (this.editLog.length > 500)
-            this.editLog.splice(0, this.editLog.length - 500); }
-        editLogText() { return JSON.stringify({ app: 'PZ Online Decoration Tool', version: APP_VERSION, generatedAt: new Date().toISOString(), entries: this.editLog }, null, 2); }
-        async copyEditLog() { try {
-            await this.copyText(this.editLogText());
-            this.setStatus(`Copied ${this.editLog.length} edit-log entries.`);
-        }
-        catch (err) {
-            this.setStatus(`Could not copy edit log: ${String(err.message || err)}`);
-        } }
-        downloadEditLog() { save(`pzodt-edit-log-${Date.now()}.json`, new Blob([this.editLogText()], { type: 'application/json' })); this.setStatus(`Downloaded ${this.editLog.length} edit-log entries.`); }
-        configureRelease() { const cfg = releaseConfig(), support = safeHttpsUrl(cfg.supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
+        configureRelease() { const support = safeSupportUrl(releaseConfig().supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
         applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (persist)
             storeSet('pzodt.nightMode', enabled ? '1' : '0'); }
-        configureFeedbackText() { const type = el('feedbackType').value, msg = el('feedbackMessage').value.trim().slice(0, 6000), contact = el('feedbackContact').value.trim().slice(0, 200), technical = el('feedbackTechnical').checked; const lines = [`PZ Online Decoration Tool ${APP_VERSION}`, `Type: ${type}`, '', msg]; if (contact)
-            lines.push('', `Contact: ${contact}`); if (technical)
-            lines.push('', 'Technical information:', `Browser: ${navigator.userAgent.slice(0, 500)}`, `Graphics: ${this.graphicsQuality.value}`); return lines.join('\n'); }
-        openFeedback() { el('feedbackStatus').textContent = 'Your feedback stays in this browser until you submit or copy it.'; el('feedbackDialog').showModal(); }
-        async copyText(text) { if (navigator.clipboard && isSecureContext) {
-            await navigator.clipboard.writeText(text);
-            return;
-        } const ta = document.createElement('textarea'); ta.value = text; ta.readOnly = true; ta.className = 'clipboardFallback'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); if (!ok)
-            throw new Error('Clipboard copy was blocked by the browser.'); }
-        async copyFeedback() { const st = el('feedbackStatus'), text = this.configureFeedbackText(); if (!el('feedbackMessage').value.trim()) {
-            st.textContent = 'Write a message first.';
-            return;
-        } try {
-            await this.copyText(text);
-            st.textContent = 'Feedback copied to the clipboard.';
-        }
-        catch (err) {
-            st.textContent = String(err.message || err);
-        } }
-        openExternal(url) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.referrerPolicy = 'no-referrer'; document.body.appendChild(a); a.click(); a.remove(); }
-        async sendFeedback() {
-            const st = el('feedbackStatus'), message = el('feedbackMessage').value.trim();
-            if (!message) {
-                st.textContent = 'Write a message first.';
-                return;
-            }
-            const cfg = releaseConfig(), endpoint = safeSameOriginEndpoint(cfg.feedbackEndpoint), fallback = safeHttpsUrl(cfg.feedbackUrl), payload = { version: APP_VERSION, type: el('feedbackType').value, message: message.slice(0, 6000), contact: el('feedbackContact').value.trim().slice(0, 200), technical: el('feedbackTechnical').checked ? { browser: navigator.userAgent.slice(0, 500), graphics: this.graphicsQuality.value } : undefined };
-            if (endpoint) {
-                st.textContent = 'Sending…';
-                try {
-                    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 8000), res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'omit', referrerPolicy: 'no-referrer', signal: ctrl.signal });
-                    clearTimeout(timer);
-                    if (!res.ok)
-                        throw new Error(`Feedback server returned ${res.status}.`);
-                    st.textContent = 'Feedback sent. Thank you.';
-                    el('feedbackMessage').value = '';
-                    return;
-                }
-                catch (err) {
-                    st.textContent = `Could not send directly: ${String(err.message || err)}`;
-                }
-            }
+        openFeedbackDialog() { const frame = el('feedbackFrame'); if (!frame.getAttribute('src')) {
+            const raw = frame.dataset.src ?? '';
             try {
-                await this.copyText(this.configureFeedbackText());
-                if (fallback) {
-                    this.openExternal(fallback);
-                    st.textContent = 'Feedback copied; the feedback page was opened in a new tab. Paste the copied text there.';
-                }
-                else
-                    st.textContent = 'Feedback copied. No feedback destination is configured in this build.';
+                const u = new URL(raw, location.href);
+                if (u.protocol === 'https:' && u.hostname === 'tally.so')
+                    frame.src = u.href;
             }
-            catch (err) {
-                st.textContent = String(err.message || err);
-            }
-        }
-        openSupport() { const url = safeHttpsUrl(releaseConfig().supportUrl); if (!url) {
+            catch { }
+        } el('feedbackDialog').showModal(); }
+        openExternal(url) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.referrerPolicy = 'no-referrer'; document.body.appendChild(a); a.click(); a.remove(); }
+        openSupport() { const url = safeSupportUrl(releaseConfig().supportUrl); if (!url) {
             this.setStatus('Support link is not configured.');
             return;
         } this.openExternal(url); }
         validateProjectData(m) {
-            if (!m || typeof m !== 'object' || m.format !== 'PZOnlineDecorationTool')
+            if (!m || typeof m !== 'object' || Array.isArray(m) || m.format !== 'PZOnlineDecorationTool')
                 throw new Error('Not a PZ Online Decoration Tool JSON file.');
-            const w = Number(m.width), h = Number(m.height);
+            const w = Number(m.width), h = Number(m.height), tileWidth = Number(m.tileWidth ?? 64), tileHeight = Number(m.tileHeight ?? 32), levelY = Number(m.cellsPerLevelY ?? 3), currentLevel = Number(m.currentLevel ?? 0);
             if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w > 600 || h > 600)
                 throw new Error('Invalid map dimensions.');
+            if (!Number.isFinite(tileWidth) || tileWidth < 16 || tileWidth > 512 || !Number.isFinite(tileHeight) || tileHeight < 8 || tileHeight > 256 || !Number.isFinite(levelY) || levelY < 0 || levelY > 64)
+                throw new Error('Invalid map geometry.');
+            if (!Number.isInteger(currentLevel) || currentLevel < -64 || currentLevel > 64)
+                throw new Error('Invalid current Z level.');
+            if (m.properties !== undefined) {
+                if (!m.properties || typeof m.properties !== 'object' || Array.isArray(m.properties))
+                    throw new Error('Invalid project properties.');
+                const entries = Object.entries(m.properties);
+                if (entries.length > 64)
+                    throw new Error('Project contains too many properties.');
+                for (const [k, v] of entries) {
+                    if (k.length > 128 || ['__proto__', 'prototype', 'constructor'].includes(k) || typeof v !== 'string' || v.length > 2048)
+                        throw new Error('Invalid project property.');
+                }
+            }
             if (m.layers !== undefined && !Array.isArray(m.layers))
                 throw new Error('Invalid layer data.');
             if (Array.isArray(m.layers) && m.layers.length > 256)
                 throw new Error('Project contains too many layers.');
-            let spriteCount = 0;
             if (m.baseStacks !== undefined && !Array.isArray(m.baseStacks))
                 throw new Error('Invalid base stack data.');
+            if (Array.isArray(m.baseStacks) && m.baseStacks.length > 129)
+                throw new Error('Project contains too many Z levels.');
+            let spriteCount = 0;
             for (const lev of m.baseStacks || []) {
                 if (!Array.isArray(lev) || lev.length !== 2 || !Number.isInteger(+lev[0]) || +lev[0] < -64 || +lev[0] > 64 || !Array.isArray(lev[1]))
                     throw new Error('Invalid base stack level.');
@@ -2172,20 +2207,34 @@ var PZODT;
                     if (!Array.isArray(cell) || cell.length !== 2 || !Number.isInteger(+cell[0]) || +cell[0] < 0 || +cell[0] >= w * h || !Array.isArray(cell[1]) || cell[1].length > 128)
                         throw new Error('Invalid base stack cell.');
                     for (const n of cell[1]) {
-                        if (typeof n !== 'string' || n.length > 512)
+                        if (typeof n !== 'string' || n.length < 1 || n.length > 512)
                             throw new Error('Invalid sprite name.');
-                        spriteCount++;
-                        if (spriteCount > 8000000)
+                        if (++spriteCount > 4000000)
                             throw new Error('Project contains too many sprites.');
                     }
                 }
             }
+            const ids = new Set();
             for (const layer of m.layers || []) {
-                if (!layer || typeof layer !== 'object' || typeof layer.name !== 'string' || layer.name.length > 128 || !Number.isInteger(+(layer.level ?? 0)) || +(layer.level ?? 0) < -64 || +(layer.level ?? 0) > 64 || !Array.isArray(layer.cells) || layer.cells.length > w * h)
+                if (!layer || typeof layer !== 'object' || Array.isArray(layer) || typeof layer.name !== 'string' || layer.name.length < 1 || layer.name.length > 128 || !Number.isInteger(+(layer.level ?? 0)) || +(layer.level ?? 0) < -64 || +(layer.level ?? 0) > 64 || !Array.isArray(layer.cells) || layer.cells.length > w * h)
                     throw new Error('Invalid layer.');
+                if (layer.id !== undefined && (typeof layer.id !== 'string' || layer.id.length < 1 || layer.id.length > 128 || ids.has(layer.id)))
+                    throw new Error('Invalid layer id.');
+                if (typeof layer.id === 'string')
+                    ids.add(layer.id);
                 for (const cell of layer.cells) {
-                    if (!Array.isArray(cell) || cell.length !== 2 || !Number.isInteger(+cell[0]) || +cell[0] < 0 || +cell[0] >= w * h || typeof cell[1] !== 'string' || cell[1].length > 512)
+                    if (!Array.isArray(cell) || cell.length !== 2 || !Number.isInteger(+cell[0]) || +cell[0] < 0 || +cell[0] >= w * h || typeof cell[1] !== 'string' || cell[1].length < 1 || cell[1].length > 512)
                         throw new Error('Invalid layer cell.');
+                    if (++spriteCount > 4000000)
+                        throw new Error('Project contains too many sprites.');
+                }
+                if (layer.placementHeights !== undefined) {
+                    if (!Array.isArray(layer.placementHeights) || layer.placementHeights.length > w * h)
+                        throw new Error('Invalid placement heights.');
+                    for (const p of layer.placementHeights) {
+                        if (!Array.isArray(p) || p.length < 2 || !Number.isInteger(+p[0]) || +p[0] < 0 || +p[0] >= w * h || !Number.isFinite(+p[1]) || +p[1] < 0 || +p[1] > 512)
+                            throw new Error('Invalid placement height.');
+                    }
                 }
             }
         }
