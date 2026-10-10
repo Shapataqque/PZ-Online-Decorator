@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.7 — 10 October 2026
+
+- Replaced destination-dependent Ground / Surface / OnTable behavior with explicit numeric placement heights.
+- The Inspector now shows **Floor (H0)**, common media-derived height presets, and a Custom numeric height.
+- Common presets are calculated from repeated `Surface` / `ItemHeight` values found in table-, counter-, desk-, cabinet-, and shelf-like tile definitions in the selected media folder.
+- Imported Base is permanently read-only. Pencil and Rectangle operations started while Imported Base is selected automatically create/use an editable category layer instead of modifying imported game stacks.
+- Picker selections from Imported Base no longer make future placements part of the imported stack.
+- Preview and committed objects now call the same vertical-offset function: `selected height - authored sprite offset`.
+- Project JSON format v4 stores per-cell numeric `placementHeights`. Older Ground / Surface / OnTable metadata is migrated to approximate numeric heights when opened.
+
 ## 1.1.6 — 10 October 2026
 
 - Moved **Choose Media Folder** to the main toolbar next to **New**.
