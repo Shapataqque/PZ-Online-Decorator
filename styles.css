@@ -78,15 +78,17 @@ body.lightMode .versionHistory small {
   margin: 5px 0;
 }
 
-/* v1.1 picker and world-coordinate map */
-.coordPickerRow{align-items:center}.coordPickerRow .hint{margin:0;flex:1}
-.worldMapDialog{width:min(720px,92vw)}.worldMapBody{padding-bottom:10px}.worldMapBody p{margin:4px 0 10px}.pzmapHelperActions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.pzmapCoordPreview{margin-top:12px}
+/* v1.1 picker */
 .pickerDialog{width:min(680px,92vw)}.pickerChoices{display:flex;flex-direction:column;gap:6px}.pickerChoice{display:grid;grid-template-columns:68px minmax(0,1fr);gap:10px;align-items:center;width:100%;padding:7px;text-align:left;background:#22292f}.pickerChoice:hover{background:#2c3740;border-color:#4a90bb}.pickerChoice canvas{width:68px;height:64px;background:#14191d;border:1px solid #303941;border-radius:4px;image-rendering:pixelated}.pickerChoice span,.pickerChoice b,.pickerChoice small{display:block;min-width:0}.pickerChoice b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pickerChoice small{margin-top:3px;color:#8fa1ad;font-size:10px}
 body.lightMode .pickerChoice{background:#fff;border-color:#c3cdd5}body.lightMode .pickerChoice:hover{background:#e6f1f8;border-color:#4a98c8}body.lightMode .pickerChoice canvas{background:#f5f7f8;border-color:#c5cfd6}body.lightMode .pickerChoice small{color:#60717d}
-@media(max-width:700px){.coordPickerRow{align-items:flex-start;flex-direction:column}.pzmapHelperActions{flex-direction:column}.pzmapHelperActions button{width:100%}}
 
-/* v1.1.1 controls, picker hierarchy, map legend and tutorial target */
+/* v1.1.1 controls and picker hierarchy */
 .zLevelCaption{font-size:11px;color:#8fa1ad;margin:4px 0 2px}.zLevelRow{align-items:center;margin-top:0}.zLevelRow #zLevel{flex:1 1 auto;min-width:70px;height:30px;margin:0;padding:4px 7px}.zStepBtn{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px!important;width:30px;height:30px;padding:0;font-size:16px;line-height:1}.zLevelRow #addLevelBtn{height:30px;white-space:nowrap}
 .pickerGroup{display:flex;flex-direction:column;gap:4px;padding:5px;border:1px solid #34414a;border-radius:6px;background:#1b2228}.pickerFurnitureChoice{border-color:#4c7693}.pickerChildChoice{width:calc(100% - 24px);margin-left:24px;position:relative}.pickerChildChoice:before{content:"↳";position:absolute;left:-18px;top:50%;transform:translateY(-50%);color:#7e94a2;font-size:16px}
 body.lightMode .pickerGroup{background:#f6f8f9;border-color:#c3cdd5}body.lightMode .pickerFurnitureChoice{border-color:#73a4c3}body.lightMode .pickerChildChoice:before{color:#748793}body.lightMode .zLevelCaption{color:#60717d}
 
+
+.placementModes{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.placementModes button{padding:4px 7px;font-size:11px}
+.placementModes button.active{background:#185b8d;border-color:#318aca}
+body.lightMode .placementModes button.active{color:#fff;background:#176a9d;border-color:#176a9d}
