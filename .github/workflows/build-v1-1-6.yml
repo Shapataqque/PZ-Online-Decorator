@@ -1,0 +1,48 @@
+name: Build v1.1.6
+
+on:
+  push:
+    branches:
+      - release/v1.1.6
+    paths:
+      - "src/**"
+      - "index.html"
+      - "styles.css"
+      - "README.md"
+      - "CHANGELOG.md"
+      - ".github/workflows/build-v1-1-6.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v1.1.6
+      - name: Compile TypeScript
+        run: npx -y -p typescript@5.8.3 tsc -p tsconfig.json
+      - name: Validate JavaScript
+        run: node --check dist/app.js
+      - name: Verify v1.1.6 changes
+        shell: bash
+        run: |
+          grep -q "APP_VERSION = '1.1.6'" dist/app.js
+          grep -q "inferredArtOffset" dist/app.js
+          grep -q "authoredPlacementOffset" dist/app.js
+          grep -q "mediaNoticeChooseBtn" index.html
+          grep -q "Load World Location" index.html
+          grep -q "Area around coordinate" index.html
+          ! grep -q "indexMediaBtn" index.html
+          ! grep -q "Properties:" dist/app.js
+      - name: Commit compiled build
+        shell: bash
+        run: |
+          rm -f .github/workflows/build-v1-1-6.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Build v1.1.6"
+          git push origin HEAD:release/v1.1.6
