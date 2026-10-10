@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.8 — 10 October 2026
+
+- Restored editable **Imported Base** behavior. Imported map objects can be erased again when the base is unlocked, with undo/redo support.
+- New user placements still go to editable user layers so their numeric placement height remains available.
+- Picker now resolves catalog-matched sprites, including single-tile objects, as full furniture selections so **R** rotation works after picking.
+- **Pencil** now places the currently selected furniture object as well as selected individual tiles.
+- Placement-height presets are displayed only as H-codes. Added Inspector +/- controls and keyboard **+ / -** shortcuts for one-unit adjustments.
+- Simplified furniture text in the Inspector to remove repeated **Furniture** and layer labels.
+- The placement examples reported in testing show that the correct H value depends on both the supporting furniture and the selected sprite's authored vertical offset; this release keeps H selection explicit instead of forcing a destination-only automatic rule.
+
 ## 1.1.7 — 10 October 2026
 
 - Replaced destination-dependent Ground / Surface / OnTable behavior with explicit numeric placement heights.
