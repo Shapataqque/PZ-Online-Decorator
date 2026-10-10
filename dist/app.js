@@ -246,6 +246,7 @@ var PZODT;
             this.sources = new Map();
             this.sheets = new Map();
             this.byKey = new Map();
+            this.tilesetStats = new Map();
             this.imageBitmaps = new Map();
             this.legacyTreeFamilies = null;
             this.sourceSeq = 1;
@@ -256,8 +257,19 @@ var PZODT;
         addImageSource(label, blob, w, h) { const id = `src-${this.sourceSeq++}`, objectUrl = URL.createObjectURL(blob); this.sources.set(id, { id, label, width: w, height: h, blob, objectUrl }); return id; }
         tileKey(name) { const p = PZODT.parseTileName(name); return `${p.tilesetName.toLowerCase()}:${p.tileIndex}`; }
         addAsset(a) { const old = this.assets.get(a.name); if (!old || a.scale >= old.scale)
-            this.assets.set(a.name, a); const k = `${a.tilesetName.toLowerCase()}:${a.tileIndex}`, ok = this.byKey.get(k); if (!ok || a.scale >= ok.scale)
+            this.assets.set(a.name, a); const k = `${a.tilesetName.toLowerCase()}:${a.tileIndex}`, ok = this.byKey.get(k), ts = a.tilesetName.toLowerCase(); if (!ok) {
+            const stat = this.tilesetStats.get(ts) ?? { count: 0, maxScale: 0 };
+            stat.count++;
+            stat.maxScale = Math.max(stat.maxScale, a.scale);
+            this.tilesetStats.set(ts, stat);
+        }
+        else {
+            const stat = this.tilesetStats.get(ts) ?? { count: 1, maxScale: ok.scale };
+            stat.maxScale = Math.max(stat.maxScale, a.scale);
+            this.tilesetStats.set(ts, stat);
+        } if (!ok || a.scale >= ok.scale)
             this.byKey.set(k, a); this.legacyTreeFamilies = null; }
+        tilesetCoverage(name) { return this.tilesetStats.get(name.toLowerCase()) ?? { count: 0, maxScale: 0 }; }
         asset(name) { return this.assets.get(name) ?? this.byKey.get(this.tileKey(name)) ?? null; }
         isLegacyTreePlaceholder(name) { return /^vegetation_trees_01_\d+$/i.test(name); }
         resolveAsset(name, worldX = 0, worldY = 0) { return this.isLegacyTreePlaceholder(name) ? this.legacyTreeAsset(name, worldX, worldY) : this.asset(name); }
@@ -268,7 +280,7 @@ var PZODT;
             s.height = b.height;
         } return b; }); this.imageBitmaps.set(sourceId, p); return p; }
         clear() { for (const s of this.sources.values())
-            URL.revokeObjectURL(s.objectUrl); this.assets.clear(); this.sources.clear(); this.sheets.clear(); this.byKey.clear(); this.imageBitmaps.clear(); this.legacyTreeFamilies = null; this.loadedFileKeys.clear(); this.onChanged(); }
+            URL.revokeObjectURL(s.objectUrl); this.assets.clear(); this.sources.clear(); this.sheets.clear(); this.byKey.clear(); this.tilesetStats.clear(); this.imageBitmaps.clear(); this.legacyTreeFamilies = null; this.loadedFileKeys.clear(); this.onChanged(); }
         dominantScale() { let a = 0, b = 0, i = 0; for (const x of this.assets.values()) {
             x.scale >= 2 ? b++ : a++;
             if (++i > 5000)
@@ -291,10 +303,9 @@ var PZODT;
             return; const sid = this.addImageSource(sh.path, sh.file, sh.width, sh.height); sh.sourceId = sid; let id = 0; for (let y = 0; y < rows; y++)
             for (let x = 0; x < cols; x++, id++)
                 this.addAsset({ name: `${sh.name}_${String(id).padStart(3, '0')}`, sourceId: sid, tilesetName: sh.name, tileIndex: id, sx: x * fr.w, sy: y * fr.h, sw: fr.w, sh: fr.h, frameW: fr.w, frameH: fr.h, offsetX: 0, offsetY: 0, scale: sh.scale }); sh.indexed = true; }
-        async loadMediaFiles(files, progress) {
-            const fresh = files.filter(f => !this.loadedFileKeys.has(this.fileKey(f)));
-            const pngs = fresh.filter(f => /\.png$/i.test(f.name)), packs = fresh.filter(f => /\.pack$/i.test(f.name));
-            let skipped = files.length - fresh.length;
+        async loadMediaFiles(files, progress, expectedCounts) {
+            const fresh = files.filter(f => !this.loadedFileKeys.has(this.fileKey(f))), pngs = fresh.filter(f => /\.png$/i.test(f.name)), packs = fresh.filter(f => /\.pack$/i.test(f.name));
+            let skipped = files.length - fresh.length, pngSkipped = 0;
             const best = new Map();
             for (const f of pngs) {
                 const path = (f.webkitRelativePath || f.name).replace(/\\/g, '/'), scale = /(^|\/)2x(\/|$)/i.test(path) ? 2 : 1, key = f.name.toLowerCase(), old = best.get(key);
@@ -305,10 +316,28 @@ var PZODT;
                 const name = f.name.replace(/\.png$/i, '');
                 this.sheets.set(name, { name, file: f, path, scale, width: 0, height: 0, indexed: false });
             }
-            const q = [...this.sheets.values()].filter(x => !x.indexed);
+            const packQueue = [...packs];
+            let packDone = 0;
+            const packWorkers = Array.from({ length: Math.min(2, packQueue.length) }, async () => { while (packQueue.length) {
+                const f = packQueue.shift();
+                try {
+                    await PZODT.parsePZPack(f, this);
+                }
+                catch (e) {
+                    console.warn('Pack failed', f.name, e);
+                }
+                packDone++;
+                if (packDone === packs.length || packDone % 2 === 0)
+                    progress?.(`Texture packs ${packDone}/${packs.length} · ${this.assets.size.toLocaleString()} sprites`);
+            } });
+            await Promise.all(packWorkers);
+            const expected = expectedCounts ? await expectedCounts : undefined, q = [...this.sheets.values()].filter(x => !x.indexed).filter(sh => { const c = this.tilesetCoverage(sh.name), need = expected?.(sh.name) ?? 0, covered = c.maxScale >= sh.scale && need > 0 && c.count >= need; if (covered) {
+                sh.indexed = true;
+                pngSkipped++;
+                return false;
+            } return true; });
             let done = 0;
-            const total = q.length;
-            const workers = Array.from({ length: Math.min(6, q.length) }, async () => { while (q.length) {
+            const total = q.length, workers = Array.from({ length: Math.min(8, q.length) }, async () => { while (q.length) {
                 const sh = q.shift();
                 try {
                     const bm = await createImageBitmap(sh.file);
@@ -321,23 +350,14 @@ var PZODT;
                     console.warn(e);
                 }
                 done++;
-                if (done % 10 === 0 || done === total)
-                    progress?.(`PNG tilesheets ${done}/${total} · ${this.assets.size.toLocaleString()} sprites`);
+                if (done === total || done % 12 === 0)
+                    progress?.(`PNG fallbacks ${done}/${total} · ${pngSkipped.toLocaleString()} duplicate sheet(s) skipped · ${this.assets.size.toLocaleString()} sprites`);
             } });
             await Promise.all(workers);
-            for (let i = 0; i < packs.length; i++) {
-                progress?.(`Reading texture pack ${i + 1}/${packs.length}: ${packs[i].name}`);
-                try {
-                    await PZODT.parsePZPack(packs[i], this, progress);
-                }
-                catch (e) {
-                    console.warn('Pack failed', packs[i].name, e);
-                }
-            }
             for (const f of fresh)
                 this.loadedFileKeys.add(this.fileKey(f));
             this.onChanged();
-            return { png: pngs.length, packs: packs.length, skipped };
+            return { png: pngs.length, packs: packs.length, skipped, pngSkipped };
         }
         buildLegacyTreeFamilies() { if (this.legacyTreeFamilies)
             return this.legacyTreeFamilies; const names = ['e_americanholly_1', 'e_canadianhemlock_1', 'e_virginiapine_1', 'e_riverbirch_1', 'e_cockspurhawthorn_1', 'e_dogwood_1', 'e_carolinasilverbell_1', 'e_yellowwood_1', 'e_easternredbud_1', 'e_redmaple_1', 'e_americanlinden_1']; this.legacyTreeFamilies = names.map(n => [0, 1, 2, 3].map(stage => this.asset(`${n}_${stage}`)).filter((a) => !!a)); return this.legacyTreeFamilies; }
@@ -421,16 +441,19 @@ var PZODT;
         properties(name) { return this.props.get(this.key(name)) ?? {}; }
         clear() { this.props.clear(); this.tilesetCounts.clear(); this.loadedFileKeys.clear(); }
         fileKey(f) { const p = (f.webkitRelativePath || f.name).replace(/\\/g, '/'); return `${p}|${f.size}|${f.lastModified}`; }
-        async loadFiles(files, progress) { const list = files.filter(f => /\.tiles$/i.test(f.name) && !this.loadedFileKeys.has(this.fileKey(f))); let total = 0; for (let i = 0; i < list.length; i++) {
+        async loadFiles(files, progress) { const list = files.filter(f => /\.tiles$/i.test(f.name) && !this.loadedFileKeys.has(this.fileKey(f))), q = [...list]; let total = 0, done = 0; const workers = Array.from({ length: Math.min(4, q.length) }, async () => { while (q.length) {
+            const f = q.shift();
             try {
-                total += await this.readBinary(list[i]);
-                this.loadedFileKeys.add(this.fileKey(list[i]));
-                progress?.(`Tile definitions ${i + 1}/${list.length} · ${total.toLocaleString()} property-bearing tiles`);
+                total += await this.readBinary(f);
+                this.loadedFileKeys.add(this.fileKey(f));
             }
             catch (e) {
-                console.warn('Tile definitions failed', list[i].name, e);
+                console.warn('Tile definitions failed', f.name, e);
             }
-        } return total; }
+            done++;
+            if (done === list.length || done % 2 === 0)
+                progress?.(`Tile definitions ${done}/${list.length} · ${total.toLocaleString()} property-bearing tiles`);
+        } }); await Promise.all(workers); return total; }
         async readBinary(file) { const buf = await file.arrayBuffer(), r = new TileDefReader(buf); let version = 0; const magic = String.fromCharCode(r.u8(), r.u8(), r.u8(), r.u8()); if (magic === 'tdef') {
             version = r.i32();
             if (version < 0 || version > 1)
@@ -500,6 +523,8 @@ var PZODT;
             if (/(^|_)roofs?(_|$)/.test(n))
                 return 'Roof';
             if (n.includes('vegetation_indoor'))
+                return 'Furniture';
+            if (/^fixtures_counters(?:_|$)/.test(n))
                 return 'Furniture';
             if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
                 return 'Furniture';
@@ -1579,7 +1604,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.13';
+    const APP_VERSION = '1.1.14';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1743,7 +1768,7 @@ var PZODT;
             d.showModal(); }
         candidateWorld(item) { const ox = Number(this.map.properties['pzodt.worldOriginX']), oy = Number(this.map.properties['pzodt.worldOriginY']); return { x: (Number.isFinite(ox) ? ox : 0) + item.x, y: (Number.isFinite(oy) ? oy : 0) + item.y }; }
         drawCandidatePreview(c, item) { const w = this.candidateWorld(item); return this.assets.drawPreview(c, item.name, w.x, w.y); }
-        showPickerChoices(items, p) { const box = el('pickerChoices'); box.replaceChildren(); el('pickerInfo').textContent = `${items.length} objects at ${p.x}, ${p.y}, Z ${this.map.currentLevel}. Catalog-matched sprites are selected as rotatable furniture objects.`; const seen = new Set(); for (const item of items) {
+        showPickerChoices(items, p) { const box = el('pickerChoices'); box.replaceChildren(); el('pickerInfo').textContent = `${items.length} objects at ${p.x}, ${p.y}, Z ${this.map.currentLevel}.`; const seen = new Set(); for (const item of items) {
             const matches = this.catalog.matchesTile(item.name, false);
             for (const match of matches) {
                 const key = `${match.groupIndex}:${match.furnitureIndex}:${match.orient}:${item.targetId}`;
@@ -1826,7 +1851,9 @@ var PZODT;
             this.classificationCache.clear();
             this.mediaReadySignature = '';
         } const found = `${this.importer.assetFiles().length} texture source file(s) · ${this.importer.tileDefFiles().length} .tiles definition file(s)`; this.updateMediaUi('indexing', `Media folder selected. Indexing ${found}…`); inp.value = ''; try {
-            const progress = (s) => { el('mediaNoticeText').textContent = s; el('loadStatus').textContent = s; this.setStatus(s); };
+            let lastProgress = 0;
+            const progress = (s) => { const now = performance.now(), important = /ready|error|already indexed/i.test(s); if (!important && now - lastProgress < 60)
+                return; lastProgress = now; el('mediaNoticeText').textContent = s; el('loadStatus').textContent = s; this.setStatus(s); };
             await this.ensureMediaReady(progress);
             this.renderTilesets();
             this.renderTiles();
@@ -1847,7 +1874,7 @@ var PZODT;
         async ensureMediaReady(progress) { if (this.mediaReadySignature === this.importer.mediaSignature && this.mediaReadySignature) {
             progress('Media library already indexed — reusing cached tiles, .pack textures and .tiles properties.');
             return;
-        } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress); this.classificationCache.clear(); this.refreshHeightPresets(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
+        } progress('Indexing local media assets…'); const defs = this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress), expected = defs.then(() => (name) => this.tileDefs.tilesetCount(name)), assets = this.assets.loadMediaFiles(this.importer.assetFiles(), progress, expected), [a, props] = await Promise.all([assets, defs]); this.classificationCache.clear(); this.refreshHeightPresets(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.pngSkipped ? ` · ${a.pngSkipped.toLocaleString()} duplicate PNG sheet(s) skipped` : ''}${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
         async loadLocation() { const ds = el('datasetSelect').value, x = +el('worldX').value, y = +el('worldY').value, mode = el('loadMode').value, margin = +el('marginInput').value, aw = +el('areaW').value, ah = +el('areaH').value, st = el('loadStatus'), btn = el('loadBtn'); if (!this.mediaReadySignature) {
             st.textContent = 'Choose and finish indexing the media folder first.';
             return;
