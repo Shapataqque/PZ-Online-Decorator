@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.0.0</title>
+  <title>PZ Online Decoration Tool 1.1.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.0.0</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.0</button></div>
   <button id="newMapBtn">New</button>
   <button id="loadLocationBtn" class="primary">Load PZ Location</button>
   <span class="sep"></span>
@@ -73,7 +73,7 @@
     <div class="row"><label>Z level<select id="zLevel"></select></label><button id="addLevelBtn">+ Level</button></div>
     <h3>View filters</h3>
     <div id="viewFilters" class="viewFilters"></div>
-    <div class="hint">Display-only filters. Imported object stacks are not rewritten.</div>
+    <div class="hint">Display-only filters for the current Z level. Lower visible levels remain unfiltered; imported object stacks are not rewritten.</div>
     <h3>Layers</h3>
     <div class="row"><button id="addLayerBtn">+ Layer</button></div>
     <div id="layersList" class="layers"></div>
@@ -90,6 +90,20 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.0</h4>
+      <small>October 2026</small>
+      <ul>
+        <li>Improved the interactive tutorial flow around Load PZ Location.</li>
+        <li>View Filters now affect only the currently selected Z level.</li>
+        <li>Improved tile classification for several indoor vegetation, school, and counter sprites.</li>
+        <li>Picker now lets you choose between multiple objects on the same cell.</li>
+        <li>Added semi-transparent placement previews before placing tiles and furniture.</li>
+        <li>Added surface-aware placement for tabletop objects such as TVs and radios.</li>
+        <li>Added an optional zoomable map overview for choosing World X / Y coordinates.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.0.0</h4>
@@ -149,7 +163,10 @@
         <div id="mediaInfo" class="hint">No media folder selected.</div>
         <label>Map dataset<select id="datasetSelect"><option value="">Select media folder first</option></select></label>
       </section>
-      <section><h4>2. Location</h4><div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div></section>
+      <section><h4>2. Location</h4>
+        <div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div>
+        <div class="row coordPickerRow"><button id="chooseFromMapBtn" type="button" disabled>Choose from map…</button><span class="hint">Optional: browse the selected map dataset and click a coordinate.</span></div>
+      </section>
       <section><h4>3. Load</h4>
         <label>Mode<select id="loadMode"><option value="building">Building at coordinate</option><option value="area">Area around coordinate</option><option value="cell">Entire map cell</option></select></label>
         <div id="marginRow"><label>Extra margin<input id="marginInput" type="number" min="0" max="20" value="2"></label></div>
@@ -159,6 +176,31 @@
     </div>
     <div class="dialogActions"><button id="indexMediaBtn" type="button" disabled>Index media only</button><button id="loadBtn" type="button" class="primary" disabled>Load Location</button></div>
   </form>
+</dialog>
+
+<dialog id="worldMapDialog" class="dialog worldMapDialog">
+  <div class="dialogTitle">
+    <div><b>Choose coordinates from map</b><small>Overview generated locally from the selected Project Zomboid map dataset.</small></div>
+    <button id="worldMapCloseBtn" type="button">×</button>
+  </div>
+  <div class="dialogBody worldMapBody">
+    <div id="worldMapInfo" class="hint">Select a media folder and map dataset first.</div>
+    <canvas id="worldMapCanvas" class="worldMapCanvas" width="900" height="560" aria-label="Project Zomboid world overview"></canvas>
+    <div class="worldMapToolbar"><span id="worldMapCoords" class="worldMapCoords">Click a point to select a coordinate.</span><span class="grow"></span><button id="worldMapFitBtn" type="button">Fit map</button></div>
+  </div>
+  <div class="dialogActions"><button id="worldMapCancelBtn" type="button">Cancel</button><button id="worldMapUseBtn" class="primary" type="button" disabled>Use selected coordinate</button></div>
+</dialog>
+
+<dialog id="pickerDialog" class="dialog pickerDialog">
+  <div class="dialogTitle">
+    <div><b>Choose object</b><small>More than one object is stacked on this cell.</small></div>
+    <button id="pickerCloseBtn" type="button">×</button>
+  </div>
+  <div class="dialogBody">
+    <div id="pickerInfo" class="hint"></div>
+    <div id="pickerChoices" class="pickerChoices"></div>
+  </div>
+  <div class="dialogActions"><button id="pickerCancelBtn" type="button">Cancel</button></div>
 </dialog>
 
 <dialog id="feedbackDialog" class="dialog feedbackDialog">
@@ -185,7 +227,7 @@
 <div id="tutorialOverlay" class="tutorialOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
   <div id="tutorialSpotlight" class="tutorialSpotlight"></div>
   <div class="tutorialCard">
-    <div class="tutorialProgress" id="tutorialProgress">1 / 9</div>
+    <div class="tutorialProgress" id="tutorialProgress">1 / 10</div>
     <h2 id="tutorialTitle">Welcome</h2>
     <p id="tutorialText"></p>
     <label class="tutorialRemember"><input id="tutorialRemember" type="checkbox" checked> Don't show this tutorial on startup again</label>

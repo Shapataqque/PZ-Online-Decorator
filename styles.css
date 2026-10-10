@@ -85,3 +85,10 @@ body.lightMode .versionHistory small {
 .versionHistory li {
   margin: 5px 0;
 }
+
+/* v1.1 picker and world-coordinate map */
+.coordPickerRow{align-items:center}.coordPickerRow .hint{margin:0;flex:1}
+.worldMapDialog{width:min(1040px,96vw)}.worldMapBody{padding-bottom:10px}.worldMapCanvas{display:block;width:100%;height:min(64vh,640px);min-height:360px;background:#101519;border:1px solid #394750;border-radius:6px;cursor:crosshair;touch-action:none}.worldMapCanvas:active{cursor:grabbing}.worldMapToolbar{display:flex;align-items:center;gap:8px;margin-top:9px}.worldMapCoords{font-size:11px;color:#9fb0bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.worldMapToolbar .grow{min-width:10px}
+.pickerDialog{width:min(680px,92vw)}.pickerChoices{display:flex;flex-direction:column;gap:6px}.pickerChoice{display:grid;grid-template-columns:68px minmax(0,1fr);gap:10px;align-items:center;width:100%;padding:7px;text-align:left;background:#22292f}.pickerChoice:hover{background:#2c3740;border-color:#4a90bb}.pickerChoice canvas{width:68px;height:64px;background:#14191d;border:1px solid #303941;border-radius:4px;image-rendering:pixelated}.pickerChoice span,.pickerChoice b,.pickerChoice small{display:block;min-width:0}.pickerChoice b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pickerChoice small{margin-top:3px;color:#8fa1ad;font-size:10px}
+body.lightMode .worldMapCanvas{background:#e8edf1;border-color:#b6c3cc}body.lightMode .worldMapCoords{color:#586b77}body.lightMode .pickerChoice{background:#fff;border-color:#c3cdd5}body.lightMode .pickerChoice:hover{background:#e6f1f8;border-color:#4a98c8}body.lightMode .pickerChoice canvas{background:#f5f7f8;border-color:#c5cfd6}body.lightMode .pickerChoice small{color:#60717d}
+@media(max-width:700px){.worldMapCanvas{min-height:300px;height:55vh}.worldMapToolbar{flex-wrap:wrap}.worldMapCoords{width:100%;white-space:normal}.coordPickerRow{align-items:flex-start;flex-direction:column}}

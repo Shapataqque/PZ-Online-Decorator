@@ -67,7 +67,7 @@ var PZODT;
             this.activeTarget = 'base'; }
         moveLayer(id, d) { const i = this.layers.findIndex(l => l.id === id); if (i < 0)
             return; const j = Math.max(0, Math.min(this.layers.length - 1, i + d)); const [x] = this.layers.splice(i, 1); this.layers.splice(j, 0, x); }
-        findStackLayer(category, level, cells, create = true) { const candidates = this.layers.filter(l => l.level === level && l.category === category && !l.locked); for (const l of candidates)
+        findStackLayer(category, level, cells, create = true, preferTop = false) { const candidates = this.layers.filter(l => l.level === level && l.category === category && !l.locked), ordered = preferTop ? [...candidates].reverse() : candidates; for (const l of ordered)
             if (cells.every(c => !l.get(c.x, c.y, this.width)))
                 return l; if (!create)
             return null; let n = 1; let name = category; while (this.layers.some(l => l.level === level && l.name === name)) {
@@ -414,9 +414,16 @@ var PZODT;
                 }
             }
         } return stored; }
+        surfaceInfo(name) {
+            const p = this.properties(name), entries = Object.entries(p).map(([k, v]) => [k.toLowerCase(), String(v).trim().toLowerCase()]), value = (k) => entries.find(([x]) => x === k)?.[1], number = (k) => { const n = Number.parseInt(value(k) ?? '0', 10); return Number.isFinite(n) ? Math.max(0, Math.min(512, n)) : 0; }, flag = (k) => { const e = entries.find(([x]) => x === k); if (!e)
+                return false; return !['false', '0', 'no', 'off'].includes(e[1]); };
+            return { surface: number('surface'), itemHeight: number('itemheight'), isSurfaceOffset: flag('issurfaceoffset') || flag('ontable') || flag('attachedsurface'), isTable: flag('istable'), isTableTop: flag('istabletop') };
+        }
         classify(name, furniture) {
-            const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase();
+            const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => `_${Number(d)}`);
             const has = (...q) => q.some(x => keys.includes(x.toLowerCase()) || all.includes(x.toLowerCase()));
+            if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151')
+                return 'Furniture';
             if (has('solidfloor') || /(^|_)(floor|floors|flooring)(_|$)/.test(n) || PZODT.BUILDING_TILE_CATEGORIES['Floors']?.has(name))
                 return 'Floor';
             if (has('walln', 'wallw', 'wallnw', 'wallse', 'wall', 'treataswallorder') || n.includes('wall') || PZODT.BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name) || PZODT.BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))
@@ -639,6 +646,32 @@ var PZODT;
                 min = Math.min(min, h.minLevel);
                 max = Math.max(max, h.maxLevel);
             } return { min: min === 99 ? 0 : min, max: max < 0 ? 0 : max }; }
+        async worldOverview(datasetId, progress) { const ds = this.datasets.get(datasetId); if (!ds)
+            throw new Error('Select a map dataset'); await this.geom(ds); const cs = ds.cellSize, entries = [...ds.headers.entries()]; if (!entries.length)
+            throw new Error('No map headers found in this dataset.'); const cells = [], buildings = []; let bounds = null; for (const [k] of entries) {
+            const [cx, cy] = k.split(',').map(Number), b = { x0: cx * cs, y0: cy * cs, x1: (cx + 1) * cs - 1, y1: (cy + 1) * cs - 1 };
+            cells.push({ ...b, cellX: cx, cellY: cy });
+            bounds = union(bounds, b);
+        } let cursor = 0, done = 0; const workers = Array.from({ length: Math.min(6, entries.length) }, async () => { while (true) {
+            const i = cursor++;
+            if (i >= entries.length)
+                return;
+            const [k, f] = entries[i], [cx, cy] = k.split(',').map(Number);
+            try {
+                const h = await this.header(ds, f, cx, cy);
+                for (const bld of h.buildings) {
+                    const b = this.buildingBounds(ds, h, bld);
+                    if (b)
+                        buildings.push({ ...b });
+                }
+            }
+            catch (e) {
+                console.warn('Overview header failed', k, e);
+            }
+            done++;
+            if (done % 20 === 0 || done === entries.length)
+                progress?.(`Reading map overview ${done}/${entries.length} cells · ${buildings.length.toLocaleString()} buildings`);
+        } }); await Promise.all(workers); return { datasetId, cellSize: cs, bounds: bounds, cells, buildings }; }
         async importLocation(o, progress) {
             const ds = this.datasets.get(o.datasetId);
             if (!ds)
@@ -738,7 +771,7 @@ var PZODT;
 (function (PZODT) {
     const SPATIAL_CHUNK_SIZE = 16;
     class WebGLMapRenderer {
-        constructor(canvas, overlay, assets, map, camera, classify, categoryVisible) {
+        constructor(canvas, overlay, assets, map, camera, classify, categoryVisible, surfaceInfo) {
             this.canvas = canvas;
             this.overlay = overlay;
             this.assets = assets;
@@ -746,12 +779,15 @@ var PZODT;
             this.camera = camera;
             this.classify = classify;
             this.categoryVisible = categoryVisible;
+            this.surfaceInfo = surfaceInfo;
             this.textures = new Map();
             this.resolved = new Map();
             this.quality = 'high';
             this.nightMode = true;
             this.raf = 0;
             this.hover = null;
+            this.placementGhost = [];
+            this.ghostBitmaps = new Map();
             this.chunkCache = new Map();
             this.dirtyChunks = new Set();
             this.cachedBatchCount = 0;
@@ -795,9 +831,17 @@ var PZODT;
         setQuality(q) { if (this.quality === q)
             return; this.quality = q; this.resetTextures(); this.resize(); this.request(); }
         setNightMode(enabled) { this.nightMode = enabled; this.request(); }
+        setPlacementGhost(cells) { this.placementGhost = cells; for (const c of cells) {
+            const a = this.assets.asset(c.name);
+            if (!a || this.ghostBitmaps.has(a.sourceId))
+                continue;
+            this.assets.bitmap(a.sourceId).then(b => { this.ghostBitmaps.set(a.sourceId, b); this.request(); }).catch(() => { });
+        } this.request(); }
+        clearPlacementGhost() { if (!this.placementGhost.length)
+            return; this.placementGhost = []; this.request(); }
         resetTextures() { this.textureEpoch++; for (const t of this.resolved.values())
             this.gl.deleteTexture(t.tex); this.textures.clear(); this.resolved.clear(); this.request(); }
-        assetsChanged() { this.resetTextures(); this.invalidateAllGeometry(); }
+        assetsChanged() { this.ghostBitmaps.clear(); this.resetTextures(); this.invalidateAllGeometry(); }
         resize() { const r = this.canvas.getBoundingClientRect(), q = this.ratio(), w = Math.max(1, Math.round(r.width * q)), h = Math.max(1, Math.round(r.height * q)); if (this.canvas.width !== w || this.canvas.height !== h) {
             this.canvas.width = w;
             this.canvas.height = h;
@@ -858,6 +902,18 @@ var PZODT;
         filterMask() { let mask = 0; for (let i = 0; i < PZODT.VIEW_CATEGORIES.length; i++)
             if (this.categoryVisible(PZODT.VIEW_CATEGORIES[i]))
                 mask |= (1 << i); return mask; }
+        allFilterMask() { return (1 << PZODT.VIEW_CATEGORIES.length) - 1; }
+        advanceSurface(current, name) { const i = this.surfaceInfo(name); if (i.isSurfaceOffset)
+            return i.itemHeight > 0 ? Math.max(current, current + i.itemHeight) : current; return i.surface > 0 ? Math.max(current, i.surface) : current; }
+        supportSurfaceAt(z, x, y) { const m = this.map(); let h = 0; for (const n of m.stack(z, x, y))
+            h = this.advanceSurface(h, n); for (const l of m.layers) {
+            if (l.level !== z)
+                continue;
+            const n = l.get(x, y, m.width);
+            if (n)
+                h = this.advanceSurface(h, n);
+        } return h; }
+        liftFor(name, support) { const i = this.surfaceInfo(name); return i.isSurfaceOffset ? Math.max(0, support - i.surface) : 0; }
         buildChunk(z, cx, cy, key) {
             const m = this.map(), old = this.chunkCache.get(key);
             if (old?.buffer)
@@ -874,7 +930,7 @@ var PZODT;
                             const n = stack[i], a = this.assets.asset(n);
                             if (!a)
                                 continue;
-                            cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n) });
+                            cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n), lift: 0 });
                         }
                 }
             for (let li = 0; li < m.layers.length; li++) {
@@ -889,18 +945,24 @@ var PZODT;
                         const a = this.assets.asset(n);
                         if (!a)
                             continue;
-                        cmds.push({ a, x, y, order: this.order(z, x, y, 1000 + li), diag: x + y, ownerId: l.id, category: this.classify(n) });
+                        cmds.push({ a, x, y, order: this.order(z, x, y, 1000 + li), diag: x + y, ownerId: l.id, category: this.classify(n), lift: 0 });
                     }
             }
             cmds.sort((a, b) => a.order - b.order);
+            const surfaces = new Map();
+            for (const d of cmds) {
+                const ck = m.key(d.x, d.y), support = surfaces.get(ck) ?? 0;
+                d.lift = this.liftFor(d.a.name, support);
+                surfaces.set(ck, this.advanceSurface(support, d.a.name));
+            }
             const floats = [], segments = [];
             let seg = null, vertexCursor = 0;
             const { th } = this.metrics(), displayScale = this.displayScale();
             for (const d of cmds) {
-                const a = d.a, s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(d.x, d.y, z), left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s, right = left + a.sw * s, bottom = top + a.sh * s, cat = this.categoryIndex(d.category), catBit = 1 << cat;
+                const a = d.a, s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(d.x, d.y, z), lift = d.lift * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift, right = left + a.sw * s, bottom = top + a.sh * s, cat = this.categoryIndex(d.category), catBit = 1 << cat;
                 const same = seg && seg.sourceId === a.sourceId && seg.ownerId === d.ownerId && seg.diag === d.diag;
                 if (!same) {
-                    seg = { order: d.order, orderEnd: d.order, firstVertex: vertexCursor, vertexCount: 0, spriteCount: 0, sourceId: a.sourceId, ownerId: d.ownerId, categoryMask: 0, categoryCounts: new Array(PZODT.VIEW_CATEGORIES.length).fill(0), chunkKey: key, buffer: null, diag: d.diag };
+                    seg = { order: d.order, orderEnd: d.order, firstVertex: vertexCursor, vertexCount: 0, spriteCount: 0, sourceId: a.sourceId, ownerId: d.ownerId, categoryMask: 0, categoryCounts: new Array(PZODT.VIEW_CATEGORIES.length).fill(0), chunkKey: key, buffer: null, diag: d.diag, z };
                     segments.push(seg);
                 }
                 seg.orderEnd = d.order;
@@ -950,19 +1012,18 @@ var PZODT;
             gl.uniform2f(this.up, this.camera.panX, this.camera.panY);
             gl.uniform1f(this.uz, this.camera.zoom);
             gl.uniform1i(this.ut, 0);
-            const mask = this.filterMask();
-            gl.uniform1i(this.ufm, mask);
+            const mask = this.filterMask(), allMask = this.allFilterMask();
             const chunks = this.visibleChunkCoords(), segments = [], layerMap = new Map(m.layers.map(l => [l.id, l]));
             let visibleSprites = 0;
             for (const q of chunks) {
                 const c = this.getChunk(q.z, q.cx, q.cy, q.key);
                 for (const s of c.segments) {
-                    const owner = this.ownerState(s.ownerId, layerMap);
-                    if (!owner.visible || owner.alpha <= .001 || (s.categoryMask & mask) === 0)
+                    const owner = this.ownerState(s.ownerId, layerMap), segmentMask = s.z === m.currentLevel ? mask : allMask;
+                    if (!owner.visible || owner.alpha <= .001 || (s.categoryMask & segmentMask) === 0)
                         continue;
                     let count = 0;
                     for (let i = 0; i < PZODT.VIEW_CATEGORIES.length; i++)
-                        if (mask & (1 << i))
+                        if (segmentMask & (1 << i))
                             count += s.categoryCounts[i];
                     if (!count)
                         continue;
@@ -971,7 +1032,7 @@ var PZODT;
                 }
             }
             segments.sort((a, b) => a.order - b.order);
-            let drawCalls = 0, lastBuffer = null, lastTexture = null;
+            let drawCalls = 0, lastBuffer = null, lastTexture = null, lastMask = -1;
             const stride = 5 * 4;
             gl.enableVertexAttribArray(this.lp);
             gl.enableVertexAttribArray(this.lu);
@@ -985,6 +1046,11 @@ var PZODT;
                 const owner = this.ownerState(s.ownerId, layerMap);
                 if (!owner.visible || owner.alpha <= .001)
                     continue;
+                const segmentMask = s.z === m.currentLevel ? mask : allMask;
+                if (segmentMask !== lastMask) {
+                    gl.uniform1i(this.ufm, segmentMask);
+                    lastMask = segmentMask;
+                }
                 if (s.buffer !== lastBuffer) {
                     gl.bindBuffer(gl.ARRAY_BUFFER, s.buffer);
                     gl.vertexAttribPointer(this.lp, 2, gl.FLOAT, false, stride, 0);
@@ -1009,27 +1075,65 @@ var PZODT;
             if (this.statsEnabled)
                 this.request();
         }
-        grid() { const c = this.overlay.getContext('2d'), m = this.map(), { tw, th } = this.metrics(), b = this.tileBounds(m.currentLevel); c.clearRect(0, 0, this.overlay.width, this.overlay.height); c.save(); c.setTransform(this.camera.zoom, 0, 0, this.camera.zoom, this.camera.panX, this.camera.panY); c.strokeStyle = this.nightMode ? 'rgba(190,210,220,.20)' : 'rgba(45,65,75,.20)'; c.lineWidth = 1 / this.camera.zoom; c.beginPath(); for (let y = b.minY; y <= b.maxY + 1; y++) {
-            const a = this.tileToWorld(b.minX, y, m.currentLevel), d = this.tileToWorld(b.maxX + 1, y, m.currentLevel);
-            c.moveTo(a.x, a.y);
-            c.lineTo(d.x, d.y);
-        } for (let x = b.minX; x <= b.maxX + 1; x++) {
-            const a = this.tileToWorld(x, b.minY, m.currentLevel), d = this.tileToWorld(x, b.maxY + 1, m.currentLevel);
-            c.moveTo(a.x, a.y);
-            c.lineTo(d.x, d.y);
-        } c.stroke(); if (this.hover) {
-            const p = this.tileToWorld(this.hover.x, this.hover.y, m.currentLevel);
-            c.fillStyle = 'rgba(60,165,255,.14)';
-            c.strokeStyle = 'rgba(80,190,255,.9)';
+        grid() {
+            const c = this.overlay.getContext('2d'), m = this.map(), { tw, th } = this.metrics(), b = this.tileBounds(m.currentLevel), displayScale = this.displayScale();
+            c.clearRect(0, 0, this.overlay.width, this.overlay.height);
+            c.save();
+            c.setTransform(this.camera.zoom, 0, 0, this.camera.zoom, this.camera.panX, this.camera.panY);
+            c.strokeStyle = this.nightMode ? 'rgba(190,210,220,.20)' : 'rgba(45,65,75,.20)';
+            c.lineWidth = 1 / this.camera.zoom;
             c.beginPath();
-            c.moveTo(p.x, p.y);
-            c.lineTo(p.x + tw / 2, p.y + th / 2);
-            c.lineTo(p.x, p.y + th);
-            c.lineTo(p.x - tw / 2, p.y + th / 2);
-            c.closePath();
-            c.fill();
+            for (let y = b.minY; y <= b.maxY + 1; y++) {
+                const a = this.tileToWorld(b.minX, y, m.currentLevel), d = this.tileToWorld(b.maxX + 1, y, m.currentLevel);
+                c.moveTo(a.x, a.y);
+                c.lineTo(d.x, d.y);
+            }
+            for (let x = b.minX; x <= b.maxX + 1; x++) {
+                const a = this.tileToWorld(x, b.minY, m.currentLevel), d = this.tileToWorld(x, b.maxY + 1, m.currentLevel);
+                c.moveTo(a.x, a.y);
+                c.lineTo(d.x, d.y);
+            }
             c.stroke();
-        } c.restore(); }
+            if (this.hover) {
+                const p = this.tileToWorld(this.hover.x, this.hover.y, m.currentLevel);
+                c.fillStyle = 'rgba(60,165,255,.14)';
+                c.strokeStyle = 'rgba(80,190,255,.9)';
+                c.beginPath();
+                c.moveTo(p.x, p.y);
+                c.lineTo(p.x + tw / 2, p.y + th / 2);
+                c.lineTo(p.x, p.y + th);
+                c.lineTo(p.x - tw / 2, p.y + th / 2);
+                c.closePath();
+                c.fill();
+                c.stroke();
+            }
+            c.imageSmoothingEnabled = false;
+            for (const g of this.placementGhost) {
+                const a = this.assets.asset(g.name);
+                if (!a)
+                    continue;
+                const bm = this.ghostBitmaps.get(a.sourceId);
+                if (!bm)
+                    continue;
+                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), support = this.supportSurfaceAt(g.z, g.x, g.y), lift = this.liftFor(g.name, support) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
+                c.globalAlpha = g.valid ? .46 : .22;
+                c.drawImage(bm, a.sx, a.sy, a.sw, a.sh, left, top, a.sw * s, a.sh * s);
+                if (!g.valid) {
+                    c.globalAlpha = .9;
+                    c.strokeStyle = 'rgba(255,95,85,.95)';
+                    c.lineWidth = 2 / this.camera.zoom;
+                    c.beginPath();
+                    c.moveTo(p.x, p.y);
+                    c.lineTo(p.x + tw / 2, p.y + th / 2);
+                    c.lineTo(p.x, p.y + th);
+                    c.lineTo(p.x - tw / 2, p.y + th / 2);
+                    c.closePath();
+                    c.stroke();
+                }
+            }
+            c.globalAlpha = 1;
+            c.restore();
+        }
     }
     PZODT.WebGLMapRenderer = WebGLMapRenderer;
 })(PZODT || (PZODT = {}));
@@ -1055,40 +1159,83 @@ var PZODT;
             this.onStatus = () => { };
             this.onChanged = () => { };
             this.onSelection = () => { };
+            this.onPickCandidates = () => { };
             this.bind();
         }
-        setTool(t) { this.tool = t; this.onSelection(); }
-        selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.tool = 'pencil'; this.onSelection(); }
-        selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.tool = 'furniture'; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.onSelection(); }
+        setTool(t) { this.tool = t; this.refreshPlacementGhost(); this.onSelection(); }
+        selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.tool = 'pencil'; this.refreshPlacementGhost(); this.onSelection(); }
+        selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.tool = 'furniture'; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.refreshPlacementGhost(); this.onSelection(); }
         rotateFurniture(delta = 1) { const d = this.selectedFurniture; if (!d)
-            return; const a = d.entries.map(e => e.orient), i = Math.max(0, a.indexOf(this.furnitureOrient)); this.furnitureOrient = a[(i + delta + a.length) % a.length]; this.onSelection(); }
-        bind() { const c = this.renderer.overlay; c.tabIndex = 0; c.addEventListener('contextmenu', e => e.preventDefault()); c.addEventListener('pointerdown', e => this.down(e)); c.addEventListener('pointermove', e => this.move(e)); c.addEventListener('pointerup', e => this.up(e)); c.addEventListener('pointercancel', e => this.up(e)); c.addEventListener('wheel', e => this.wheel(e), { passive: false }); window.addEventListener('keydown', e => this.key(e)); }
+            return; const a = d.entries.map(e => e.orient), i = Math.max(0, a.indexOf(this.furnitureOrient)); this.furnitureOrient = a[(i + delta + a.length) % a.length]; this.refreshPlacementGhost(); this.onSelection(); }
+        refreshPlacementGhost() { const p = this.renderer.hover; if (p)
+            this.updatePlacementGhost(p);
+        else
+            this.renderer.clearPlacementGhost(); }
+        bind() {
+            const c = this.renderer.overlay;
+            c.tabIndex = 0;
+            c.addEventListener('contextmenu', e => e.preventDefault());
+            c.addEventListener('pointerdown', e => this.down(e));
+            c.addEventListener('pointermove', e => this.move(e));
+            c.addEventListener('pointerup', e => this.up(e));
+            c.addEventListener('pointercancel', e => this.up(e));
+            c.addEventListener('pointerleave', () => { if (!this.isDown) {
+                this.renderer.hover = null;
+                this.renderer.clearPlacementGhost();
+                this.renderer.request();
+            } });
+            c.addEventListener('wheel', e => this.wheel(e), { passive: false });
+            window.addEventListener('keydown', e => this.key(e));
+        }
         point(e) { const r = this.renderer.overlay.getBoundingClientRect(); return this.renderer.screenToTile(e.clientX - r.left, e.clientY - r.top, this.map().currentLevel); }
         valid(p) { const m = this.map(); return p.x >= 0 && p.y >= 0 && p.x < m.width && p.y < m.height; }
-        down(e) { this.renderer.overlay.focus(); this.isDown = true; this.last = { x: e.clientX, y: e.clientY }; this.pan = this.tool === 'pan' || e.button === 1 || e.button === 2 || e.shiftKey; this.changes.clear(); this.renderer.overlay.setPointerCapture(e.pointerId); if (this.pan)
-            return; const p = this.point(e); if (!this.valid(p))
-            return; if (this.tool === 'picker') {
-            this.pick(p);
-            return;
-        } if (this.tool === 'rect') {
-            this.rectStart = p;
-            return;
-        } if (this.tool === 'furniture') {
-            this.placeFurniture(p);
-            this.commit();
-            return;
-        } this.paint(p); }
-        move(e) { const p = this.point(e); this.renderer.hover = this.valid(p) ? p : null; this.renderer.request(); if (!this.isDown)
-            return; if (this.pan) {
-            const q = this.renderer.ratio();
-            this.renderer.camera.panX += (e.clientX - this.last.x) * q;
-            this.renderer.camera.panY += (e.clientY - this.last.y) * q;
+        down(e) {
+            this.renderer.overlay.focus();
+            this.isDown = true;
             this.last = { x: e.clientX, y: e.clientY };
+            this.pan = this.tool === 'pan' || e.button === 1 || e.button === 2 || e.shiftKey;
+            this.changes.clear();
+            this.renderer.overlay.setPointerCapture(e.pointerId);
+            if (this.pan)
+                return;
+            const p = this.point(e);
+            if (!this.valid(p))
+                return;
+            if (this.tool === 'picker') {
+                this.pick(p);
+                return;
+            }
+            if (this.tool === 'rect') {
+                this.rectStart = p;
+                return;
+            }
+            if (this.tool === 'furniture') {
+                this.placeFurniture(p);
+                this.commit();
+                this.updatePlacementGhost(p);
+                return;
+            }
+            this.paint(p);
+        }
+        move(e) {
+            const p = this.point(e);
+            this.renderer.hover = this.valid(p) ? p : null;
+            this.updatePlacementGhost(p);
             this.renderer.request();
-            return;
-        } if (this.tool === 'pencil' || this.tool === 'eraser')
-            if (this.valid(p))
-                this.paint(p); }
+            if (!this.isDown)
+                return;
+            if (this.pan) {
+                const q = this.renderer.ratio();
+                this.renderer.camera.panX += (e.clientX - this.last.x) * q;
+                this.renderer.camera.panY += (e.clientY - this.last.y) * q;
+                this.last = { x: e.clientX, y: e.clientY };
+                this.renderer.request();
+                return;
+            }
+            if (this.tool === 'pencil' || this.tool === 'eraser')
+                if (this.valid(p))
+                    this.paint(p);
+        }
         up(e) { if (!this.isDown)
             return; this.isDown = false; if (this.pan) {
             this.pan = false;
@@ -1113,6 +1260,24 @@ var PZODT;
             return;
         } const k = { '1': 'pencil', '2': 'eraser', '3': 'rect', '4': 'picker', '5': 'pan' }; if (k[e.key])
             this.setTool(k[e.key]); }
+        updatePlacementGhost(p) {
+            const m = this.map();
+            if (this.tool === 'furniture' && this.selectedFurniture) {
+                const e = this.catalog.entry(this.selectedFurniture, this.furnitureOrient);
+                if (!e) {
+                    this.renderer.clearPlacementGhost();
+                    return;
+                }
+                const cells = e.cells.map(([dx, dy, name]) => { const x = p.x + dx, y = p.y + dy; return { x, y, z: m.currentLevel, name, valid: x >= 0 && y >= 0 && x < m.width && y < m.height && !!this.catalog.assets.asset(name) }; });
+                this.renderer.setPlacementGhost(cells);
+                return;
+            }
+            if (this.tool === 'pencil' && this.selectedAsset) {
+                this.renderer.setPlacementGhost([{ x: p.x, y: p.y, z: m.currentLevel, name: this.selectedAsset, valid: this.valid(p) && !!this.catalog.assets.asset(this.selectedAsset) }]);
+                return;
+            }
+            this.renderer.clearPlacementGhost();
+        }
         layerChange(l, x, y, after) { const m = this.map(), before = l.get(x, y, m.width), key = `L:${l.id}:${x}:${y}`, old = this.changes.get(key); if (old)
             old.after = after;
         else
@@ -1151,7 +1316,7 @@ var PZODT;
                 let target = l;
                 if (l.get(p.x, p.y, m.width)) {
                     const cat = this.classifier(this.selectedAsset);
-                    target = m.findStackLayer(cat, m.currentLevel, [p], true);
+                    target = m.findStackLayer(cat, m.currentLevel, [p], true, true);
                 }
                 this.layerChange(target, p.x, p.y, this.selectedAsset);
                 m.activeTarget = target.id;
@@ -1164,43 +1329,68 @@ var PZODT;
             return; const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y); for (let y = y0; y <= y1; y++)
             for (let x = x0; x <= x1; x++)
                 this.paint({ x, y }, false); this.renderer.request(); this.onChanged(); }
-        pick(p) { const m = this.map(); for (let i = m.layers.length - 1; i >= 0; i--) {
-            const l = m.layers[i];
-            if (!l.visible || l.level !== m.currentLevel)
-                continue;
-            const n = l.get(p.x, p.y, m.width);
-            if (n && this.visible(n)) {
-                m.activeTarget = l.id;
-                this.selectedAsset = n;
-                this.selectedFurniture = null;
-                this.tool = 'pencil';
-                this.onSelection();
+        pick(p) {
+            const m = this.map(), items = [];
+            for (let i = m.layers.length - 1; i >= 0; i--) {
+                const l = m.layers[i];
+                if (!l.visible || l.opacity <= .001 || l.level !== m.currentLevel)
+                    continue;
+                const n = l.get(p.x, p.y, m.width);
+                if (n && this.visible(n))
+                    items.push({ name: n, targetId: l.id, sourceLabel: l.name, category: this.classifier(n), z: m.currentLevel, x: p.x, y: p.y });
+            }
+            if (m.baseVisible && m.baseOpacity > .001) {
+                const s = m.stack(m.currentLevel, p.x, p.y);
+                for (let i = s.length - 1; i >= 0; i--)
+                    if (this.visible(s[i]))
+                        items.push({ name: s[i], targetId: 'base', sourceLabel: `Imported Base · stack ${i + 1}`, category: this.classifier(s[i]), z: m.currentLevel, x: p.x, y: p.y });
+            }
+            if (!items.length) {
+                this.onStatus('Nothing visible to pick on this cell.');
                 return;
             }
-        } const s = m.stack(m.currentLevel, p.x, p.y); for (let i = s.length - 1; i >= 0; i--)
-            if (this.visible(s[i])) {
-                m.activeTarget = 'base';
-                this.selectedAsset = s[i];
-                this.selectedFurniture = null;
-                this.tool = 'pencil';
-                this.onSelection();
+            if (items.length === 1) {
+                this.applyPickCandidate(items[0]);
                 return;
-            } }
-        placeFurniture(p) { const d = this.selectedFurniture, e = d ? this.catalog.entry(d, this.furnitureOrient) : null; if (!d || !e)
-            return; const m = this.map(), cells = []; let missing = 0; for (const [dx, dy, n] of e.cells) {
-            const x = p.x + dx, y = p.y + dy;
-            if (x < 0 || y < 0 || x >= m.width || y >= m.height)
-                continue;
-            if (!this.catalog.assets.asset(n)) {
-                missing++;
-                continue;
             }
-            cells.push({ x, y, name: n });
-        } if (!cells.length) {
-            this.onStatus('Furniture assets are not available.');
-            return;
-        } const target = m.findStackLayer('Furniture', m.currentLevel, cells, true); for (const c of cells)
-            this.layerChange(target, c.x, c.y, c.name); m.activeTarget = target.id; this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing ? ` · ${missing} missing` : ''}.`); this.renderer.request(); this.onChanged(); }
+            this.onPickCandidates(items, p);
+        }
+        applyPickCandidate(c) { const m = this.map(); if (c.targetId === 'base' || m.layers.some(l => l.id === c.targetId))
+            m.activeTarget = c.targetId; this.selectedAsset = c.name; this.selectedFurniture = null; this.tool = 'pencil'; this.refreshPlacementGhost(); this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`); this.onSelection(); }
+        placeFurniture(p) {
+            const d = this.selectedFurniture, e = d ? this.catalog.entry(d, this.furnitureOrient) : null;
+            if (!d || !e)
+                return;
+            const m = this.map(), cells = [];
+            let missing = 0, outside = 0;
+            for (const [dx, dy, n] of e.cells) {
+                const x = p.x + dx, y = p.y + dy;
+                if (x < 0 || y < 0 || x >= m.width || y >= m.height) {
+                    outside++;
+                    continue;
+                }
+                if (!this.catalog.assets.asset(n)) {
+                    missing++;
+                    continue;
+                }
+                cells.push({ x, y, name: n });
+            }
+            if (outside) {
+                this.onStatus('Furniture does not fit inside the current map area.');
+                return;
+            }
+            if (!cells.length) {
+                this.onStatus('Furniture assets are not available.');
+                return;
+            }
+            const target = m.findStackLayer('Furniture', m.currentLevel, cells, true, true);
+            for (const c of cells)
+                this.layerChange(target, c.x, c.y, c.name);
+            m.activeTarget = target.id;
+            this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing ? ` · ${missing} missing` : ''}.`);
+            this.renderer.request();
+            this.onChanged();
+        }
         commit() { const c = [...this.changes.values()]; this.changes.clear(); this.history.push(c); }
         undo() { const c = this.history.undo(this.map()); if (c) {
             this.renderer.invalidateChanges(c);
@@ -1217,7 +1407,8 @@ var PZODT;
 })(PZODT || (PZODT = {}));
 var PZODT;
 (function (PZODT) {
-    const APP_VERSION = '1.0.0';
+    PZODT.V11_NATIVE = true;
+    const APP_VERSION = '1.1.0';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1262,16 +1453,27 @@ var PZODT;
             this.furnitureObserver = null;
             this.tutorialIndex = 0;
             this.tutorialActive = false;
+            this.tutorialBlocked = [];
+            this.worldOverview = null;
+            this.worldMapDataset = '';
+            this.worldMapScale = 1;
+            this.worldMapMinScale = .01;
+            this.worldMapPanX = 0;
+            this.worldMapPanY = 0;
+            this.worldMapSelection = null;
+            this.worldMapDragging = false;
+            this.worldMapDragMoved = false;
+            this.worldMapLast = { x: 0, y: 0 };
             this.tutorialSteps = [
                 { title: 'Welcome', text: 'This short guide walks through the normal workflow: load a Project Zomboid location, browse assets, decorate the map, and save the project.' },
-                { title: 'Load a PZ location', text: 'Start here. Continue and the location loader will open so you can see the full import workflow.', target: 'loadLocationBtn', closeLoad: true },
-                { title: 'The location loader', text: 'Everything needed for importing a base is in this window: media folder, map dataset, world coordinates, and load mode.', target: 'loadDialog', openLoad: true },
+                { title: 'Load a PZ location', text: 'Click the highlighted Load PZ Location button. The tutorial will continue automatically when the location loader opens.', target: 'loadLocationBtn', closeLoad: true },
+                { title: 'The location loader', text: 'Everything needed for importing a base is in this window: media folder, map dataset, world coordinates, map coordinate picker, and load mode.', target: 'loadDialog', openLoad: true },
                 { title: 'Choose the media folder', text: 'Choose the ProjectZomboid\\media folder. Map data, texture packs, PNG tilesheets, and tile definitions are indexed locally in the browser.', target: 'chooseMediaBtn', openLoad: true },
-                { title: 'Enter world coordinates', text: 'Enter the World X and World Y coordinates for the building or area you want to load.', target: 'worldX', openLoad: true },
+                { title: 'Enter world coordinates', text: 'Enter World X and World Y manually, or use Choose from map to select a coordinate from the loaded world overview.', target: 'worldX', openLoad: true },
                 { title: 'Load the building', text: 'For the usual base-planning workflow, keep Building at coordinate selected and press Load Location.', target: 'loadBtn', openLoad: true },
-                { title: 'Control what you see', text: 'View Filters hide walls, roofs, furniture, and other categories without rewriting the imported object stacks.', target: 'viewFilters', closeLoad: true },
+                { title: 'Control what you see', text: 'View Filters affect only the currently selected Z level. Lower visible levels keep their walls, roofs, furniture, and other categories.', target: 'viewFilters', closeLoad: true },
                 { title: 'Browse furniture', text: 'The Furniture tab contains categorized, searchable multi-tile objects with thumbnails. Select one, then place it on the map.', target: 'furnitureTabButton' },
-                { title: 'Edit the plan', text: 'Use Pencil, Erase, Rectangle, Picker, and Pan. Layers and Z levels are available in the inspector on the right.', target: 'toolrow' },
+                { title: 'Edit the plan', text: 'Use Pencil, Erase, Rectangle, Picker, and Pan. Picker shows a choice list when several objects share a cell, and placement previews appear under the cursor.', target: 'toolrow' },
                 { title: 'Save the project', text: 'Use Save as .json to keep the plan and Open .json file to continue later. Feedback is available from the top bar.', target: 'saveJsonBtn' }
             ];
             this.status = el('status');
@@ -1295,11 +1497,12 @@ var PZODT;
             this.performanceStatsToggle = el('performanceStatsToggle');
             this.performanceStatsBox = el('performanceStats');
             this.nightModeToggle = el('nightModeToggle');
-            this.renderer = new PZODT.WebGLMapRenderer(el('glCanvas'), el('overlayCanvas'), this.assets, () => this.map, this.camera, n => this.classify(n), c => this.filters.get(c) !== false);
+            this.renderer = new PZODT.WebGLMapRenderer(el('glCanvas'), el('overlayCanvas'), this.assets, () => this.map, this.camera, n => this.classify(n), c => this.filters.get(c) !== false, n => this.tileDefs.surfaceInfo(n));
             this.editor = new PZODT.EditorController(this.renderer, () => this.map, this.catalog, n => this.classify(n), n => this.objectVisible(n), this.history);
             this.editor.onStatus = s => this.setStatus(s);
             this.editor.onChanged = () => this.mapChanged();
             this.editor.onSelection = () => this.selectionChanged();
+            this.editor.onPickCandidates = (items, p) => this.showPickerChoices(items, p);
             this.assets.onChanged = () => this.assetsChanged();
             this.bind();
             this.renderFilterButtons();
@@ -1330,7 +1533,7 @@ var PZODT;
             el('redoBtn').onclick = () => this.editor.redo();
             el('centerBtn').onclick = () => this.renderer.center();
             el('newMapBtn').onclick = () => this.newMap();
-            el('loadLocationBtn').onclick = () => el('loadDialog').showModal();
+            el('loadLocationBtn').onclick = () => this.openLoadDialog();
             el('saveJsonBtn').onclick = () => save('pz-online-decoration.json', new Blob([JSON.stringify({ map: this.map.toJSON(), filters: Object.fromEntries(this.filters) })], { type: 'application/json' }));
             el('openJsonBtn').onclick = () => el('jsonInput').click();
             el('settingsBtn').onclick = () => el('settingsDialog').showModal();
@@ -1358,7 +1561,7 @@ var PZODT;
             this.furnitureSearch.oninput = () => this.renderFurniture();
             this.furnitureCategory.onchange = () => this.renderFurniture();
             this.availableOnly.onchange = () => this.renderFurniture();
-            this.zLevel.onchange = () => { this.map.currentLevel = +this.zLevel.value; this.stageBadge.textContent = `Z ${this.map.currentLevel} · perspective`; this.renderLayers(); this.renderer.request(); };
+            this.zLevel.onchange = () => { this.map.currentLevel = +this.zLevel.value; this.stageBadge.textContent = `Z ${this.map.currentLevel} · perspective`; this.renderLayers(); this.editor.refreshPlacementGhost(); this.renderer.request(); };
             el('addLevelBtn').onclick = () => { this.map.currentLevel = this.map.maxLevel() + 1; this.renderLevels(); this.renderer.request(); };
             el('addLayerBtn').onclick = () => { const n = (prompt('Layer name', 'Decoration') || '').trim().slice(0, 128); if (!n)
                 return; this.map.addLayer(n, this.map.currentLevel, 'Custom'); this.renderLayers(); };
@@ -1366,15 +1569,126 @@ var PZODT;
             el('loadCancelBtn').onclick = () => el('loadDialog').close();
             el('loadMode').onchange = () => this.updateLoadMode();
             el('loadBtn').onclick = () => this.loadLocation();
-            el('versionHistoryBtn').onclick = () =>
-            el('versionHistoryDialog').showModal();
-            el('versionHistoryCloseBtn').onclick = () =>
-            el('versionHistoryDialog').close();
+            el('versionHistoryBtn').onclick = () => el('versionHistoryDialog').showModal();
+            el('versionHistoryCloseBtn').onclick = () => el('versionHistoryDialog').close();
             el('indexMediaBtn').onclick = () => this.indexMediaOnly();
+            el('chooseFromMapBtn').onclick = () => this.openWorldMap();
+            el('datasetSelect').onchange = () => { this.worldOverview = null; this.worldMapDataset = ''; };
+            el('worldMapCloseBtn').onclick = el('worldMapCancelBtn').onclick = () => el('worldMapDialog').close();
+            el('worldMapFitBtn').onclick = () => this.fitWorldMap();
+            el('worldMapUseBtn').onclick = () => this.useWorldMapSelection();
+            el('pickerCloseBtn').onclick = el('pickerCancelBtn').onclick = () => el('pickerDialog').close();
+            const worldCanvas = el('worldMapCanvas');
+            worldCanvas.addEventListener('contextmenu', e => e.preventDefault());
+            worldCanvas.addEventListener('wheel', e => this.worldMapWheel(e), { passive: false });
+            worldCanvas.addEventListener('pointerdown', e => this.worldMapPointerDown(e));
+            worldCanvas.addEventListener('pointermove', e => this.worldMapPointerMove(e));
+            worldCanvas.addEventListener('pointerup', e => this.worldMapPointerUp(e));
+            worldCanvas.addEventListener('pointercancel', e => this.worldMapPointerUp(e));
             el('mediaInput').onchange = e => this.mediaSelected(e);
             el('jsonInput').onchange = e => this.jsonSelected(e);
             this.renderer.overlay.addEventListener('pointermove', e => { const r = this.renderer.overlay.getBoundingClientRect(), p = this.renderer.screenToTile(e.clientX - r.left, e.clientY - r.top, this.map.currentLevel), ox = Number(this.map.properties['pzodt.worldOriginX']), oy = Number(this.map.properties['pzodt.worldOriginY']); this.coords.textContent = Number.isFinite(ox) && Number.isFinite(oy) ? `local ${p.x},${p.y} · world ${ox + p.x},${oy + p.y},${this.map.currentLevel}` : `x ${p.x} · y ${p.y} · Z ${this.map.currentLevel}`; });
         }
+        openLoadDialog() { const d = el('loadDialog'); if (this.tutorialActive) {
+            d.classList.add('tutorialVisibleDialog');
+            if (!d.open)
+                d.show();
+            if (this.tutorialIndex === 1) {
+                this.tutorialIndex = 2;
+                this.showTutorialStep();
+            }
+        }
+        else if (!d.open)
+            d.showModal(); }
+        showPickerChoices(items, p) { const box = el('pickerChoices'); box.replaceChildren(); el('pickerInfo').textContent = `${items.length} objects at ${p.x}, ${p.y}, Z ${this.map.currentLevel}. Choose which one to pick.`; for (const item of items) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'pickerChoice';
+            const c = document.createElement('canvas');
+            c.width = 68;
+            c.height = 64;
+            const text = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small');
+            title.textContent = item.name;
+            meta.textContent = `${item.sourceLabel} · ${item.category}`;
+            text.append(title, meta);
+            b.append(c, text);
+            b.onclick = () => { this.editor.applyPickCandidate(item); el('pickerDialog').close(); };
+            box.appendChild(b);
+            this.assets.drawPreview(c, item.name).catch(() => { });
+        } const d = el('pickerDialog'); if (!d.open)
+            d.showModal(); }
+        async openWorldMap() { const dataset = el('datasetSelect').value, dialog = el('worldMapDialog'), info = el('worldMapInfo'), use = el('worldMapUseBtn'); if (!dataset) {
+            this.setStatus('Select the Project Zomboid media folder first.');
+            return;
+        } if (!dialog.open)
+            dialog.showModal(); const x = Number(el('worldX').value), y = Number(el('worldY').value); this.worldMapSelection = Number.isFinite(x) && Number.isFinite(y) ? { x: Math.round(x), y: Math.round(y) } : null; use.disabled = !this.worldMapSelection; try {
+            if (!this.worldOverview || this.worldMapDataset !== dataset) {
+                info.textContent = 'Reading map overview from the selected local dataset…';
+                use.disabled = true;
+                this.worldOverview = await this.importer.worldOverview(dataset, s => { info.textContent = s; });
+                this.worldMapDataset = dataset;
+            }
+            const o = this.worldOverview;
+            info.textContent = `${o.cells.length.toLocaleString()} map cells · ${o.buildings.length.toLocaleString()} building footprints. Drag to pan, use the mouse wheel to zoom, and click a point to select it.`;
+            use.disabled = !this.worldMapSelection;
+            requestAnimationFrame(() => this.fitWorldMap());
+        }
+        catch (err) {
+            info.textContent = `Map overview error: ${String(err.message || err)}`;
+            this.worldOverview = null;
+            this.worldMapDataset = '';
+        } }
+        fitWorldMap() { const o = this.worldOverview, c = el('worldMapCanvas'); if (!o)
+            return; const r = c.getBoundingClientRect(), w = Math.max(1, r.width), h = Math.max(1, r.height), bw = Math.max(1, o.bounds.x1 - o.bounds.x0 + 1), bh = Math.max(1, o.bounds.y1 - o.bounds.y0 + 1), pad = 26; this.worldMapScale = Math.max(.0001, Math.min((w - pad * 2) / bw, (h - pad * 2) / bh)); this.worldMapMinScale = this.worldMapScale * .55; this.worldMapPanX = (w - bw * this.worldMapScale) / 2 - o.bounds.x0 * this.worldMapScale; this.worldMapPanY = (h - bh * this.worldMapScale) / 2 - o.bounds.y0 * this.worldMapScale; this.drawWorldMap(); }
+        worldMapPoint(e) { const r = el('worldMapCanvas').getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+        worldFromMapCanvas(p) { return { x: (p.x - this.worldMapPanX) / this.worldMapScale, y: (p.y - this.worldMapPanY) / this.worldMapScale }; }
+        worldMapPointerDown(e) { if (!this.worldOverview || e.button > 2)
+            return; const c = el('worldMapCanvas'); this.worldMapDragging = true; this.worldMapDragMoved = false; this.worldMapLast = { x: e.clientX, y: e.clientY }; c.setPointerCapture(e.pointerId); }
+        worldMapPointerMove(e) { if (!this.worldOverview)
+            return; const p = this.worldMapPoint(e), w = this.worldFromMapCanvas(p); el('worldMapCoords').textContent = `Cursor: X ${Math.floor(w.x)}, Y ${Math.floor(w.y)}${this.worldMapSelection ? ` · Selected: X ${this.worldMapSelection.x}, Y ${this.worldMapSelection.y}` : ''}`; if (!this.worldMapDragging)
+            return; const dx = e.clientX - this.worldMapLast.x, dy = e.clientY - this.worldMapLast.y; if (Math.hypot(dx, dy) > 1)
+            this.worldMapDragMoved = true; this.worldMapPanX += dx; this.worldMapPanY += dy; this.worldMapLast = { x: e.clientX, y: e.clientY }; this.drawWorldMap(); }
+        worldMapPointerUp(e) { if (!this.worldMapDragging || !this.worldOverview)
+            return; this.worldMapDragging = false; const c = el('worldMapCanvas'); if (c.hasPointerCapture(e.pointerId))
+            c.releasePointerCapture(e.pointerId); if (this.worldMapDragMoved || e.button !== 0)
+            return; const w = this.worldFromMapCanvas(this.worldMapPoint(e)), o = this.worldOverview; if (w.x < o.bounds.x0 || w.x > o.bounds.x1 || w.y < o.bounds.y0 || w.y > o.bounds.y1)
+            return; this.worldMapSelection = { x: Math.floor(w.x), y: Math.floor(w.y) }; el('worldMapUseBtn').disabled = false; el('worldMapCoords').textContent = `Selected: X ${this.worldMapSelection.x}, Y ${this.worldMapSelection.y}`; this.drawWorldMap(); }
+        worldMapWheel(e) { if (!this.worldOverview)
+            return; e.preventDefault(); const p = this.worldMapPoint(e), w = this.worldFromMapCanvas(p), old = this.worldMapScale, max = Math.max(this.worldMapMinScale * 500, 8); this.worldMapScale = Math.max(this.worldMapMinScale, Math.min(max, old * Math.exp(-e.deltaY * .0015))); this.worldMapPanX = p.x - w.x * this.worldMapScale; this.worldMapPanY = p.y - w.y * this.worldMapScale; this.drawWorldMap(); }
+        drawWorldMap() { const o = this.worldOverview, c = el('worldMapCanvas'); if (!o)
+            return; const r = c.getBoundingClientRect(), cssW = Math.max(1, Math.round(r.width)), cssH = Math.max(1, Math.round(r.height)), dpr = Math.max(1, devicePixelRatio || 1); if (c.width !== Math.round(cssW * dpr) || c.height !== Math.round(cssH * dpr)) {
+            c.width = Math.round(cssW * dpr);
+            c.height = Math.round(cssH * dpr);
+        } const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); const light = document.body.classList.contains('lightMode'); ctx.fillStyle = light ? '#e8edf1' : '#101519'; ctx.fillRect(0, 0, cssW, cssH); const sx = (x) => x * this.worldMapScale + this.worldMapPanX, sy = (y) => y * this.worldMapScale + this.worldMapPanY; ctx.lineWidth = 1; for (const cell of o.cells) {
+            const x = sx(cell.x0), y = sy(cell.y0), w = (cell.x1 - cell.x0 + 1) * this.worldMapScale, h = (cell.y1 - cell.y0 + 1) * this.worldMapScale;
+            if (x > cssW || y > cssH || x + w < 0 || y + h < 0)
+                continue;
+            ctx.fillStyle = light ? 'rgba(23,106,157,.10)' : 'rgba(49,158,220,.09)';
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = light ? 'rgba(70,100,120,.36)' : 'rgba(145,170,185,.30)';
+            ctx.strokeRect(x, y, w, h);
+        } ctx.fillStyle = light ? 'rgba(46,72,88,.40)' : 'rgba(180,205,220,.32)'; for (const b of o.buildings) {
+            const x = sx(b.x0), y = sy(b.y0), w = Math.max(1, (b.x1 - b.x0 + 1) * this.worldMapScale), h = Math.max(1, (b.y1 - b.y0 + 1) * this.worldMapScale);
+            if (x > cssW || y > cssH || x + w < 0 || y + h < 0)
+                continue;
+            ctx.fillRect(x, y, w, h);
+        } if (this.worldMapSelection) {
+            const x = sx(this.worldMapSelection.x + .5), y = sy(this.worldMapSelection.y + .5);
+            ctx.strokeStyle = '#ffb347';
+            ctx.fillStyle = '#ffb347';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y);
+            ctx.lineTo(x + 10, y);
+            ctx.moveTo(x, y - 10);
+            ctx.lineTo(x, y + 10);
+            ctx.stroke();
+        } }
+        useWorldMapSelection() { if (!this.worldMapSelection)
+            return; el('worldX').value = String(this.worldMapSelection.x); el('worldY').value = String(this.worldMapSelection.y); el('worldMapDialog').close(); this.setStatus(`World coordinate selected: ${this.worldMapSelection.x}, ${this.worldMapSelection.y}.`); }
         collapse(side, yes) { const l = document.querySelector('.layout'); l.classList.toggle(`${side}-collapsed`, yes); el(side === 'left' ? 'openLeftPanelBtn' : 'openRightPanelBtn').classList.toggle('hidden', !yes); setTimeout(() => { this.renderer.resize(); this.renderer.request(); }, 0); }
         setTab(t) { document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === t)); el('tilesTab').classList.toggle('active', t === 'tiles'); el('furnitureTab').classList.toggle('active', t === 'furniture'); t === 'tiles' ? this.renderTiles() : this.renderFurniture(); }
         newMap() { if ((this.map.layers.some(l => l.cells.size) || [...this.map.baseStacks.values()].some(m => m.size)) && !confirm('Start a new map? Unsaved edits will be lost.'))
@@ -1389,7 +1703,7 @@ var PZODT;
             o.value = d.id;
             o.textContent = `${d.label} · ${d.headers} headers / ${d.packs} lotpacks`;
             select.appendChild(o);
-        } el('loadBtn').disabled = !list.length; el('indexMediaBtn').disabled = !list.length; el('mediaInfo').textContent = list.length ? `${list.length} map dataset(s) found. ${this.importer.assetFiles().length} texture source file(s), ${this.importer.tileDefFiles().length} .tiles definition file(s).` : 'No map dataset found in this media folder.'; if (this.mediaReadySignature && this.mediaReadySignature !== this.importer.mediaSignature) {
+        } el('loadBtn').disabled = !list.length; el('indexMediaBtn').disabled = !list.length; el('chooseFromMapBtn').disabled = !list.length; this.worldOverview = null; this.worldMapDataset = ''; el('mediaInfo').textContent = list.length ? `${list.length} map dataset(s) found. ${this.importer.assetFiles().length} texture source file(s), ${this.importer.tileDefFiles().length} .tiles definition file(s).` : 'No map dataset found in this media folder.'; if (this.mediaReadySignature && this.mediaReadySignature !== this.importer.mediaSignature) {
             this.assets.clear();
             this.tileDefs.clear();
             this.classificationCache.clear();
@@ -1632,14 +1946,26 @@ var PZODT;
             ctx.drawImage(p.b, a.sx, a.sy, a.sw, a.sh, ox + p.l * fit, oy + p.t * fit, a.sw * p.s * fit, a.sh * p.s * fit);
         } }
         configureRelease() { const cfg = releaseConfig(), support = safeHttpsUrl(cfg.supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
-        applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (persist)
+        applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (el('worldMapDialog')?.open)
+            this.drawWorldMap(); if (persist)
             storeSet('pzodt.nightMode', enabled ? '1' : '0'); }
-        maybeStartTutorial() { if (storeGet('pzodt.tutorialDismissed.1.0') !== '1')
+        maybeStartTutorial() { if (storeGet('pzodt.tutorialDismissed.1.1') !== '1')
             this.startTutorial(false); }
+        clearTutorialInteractivity() { for (const x of this.tutorialBlocked)
+            x.inert = false; this.tutorialBlocked = []; document.querySelectorAll('header,.toolrow,.layout,footer').forEach(x => x.inert = false); }
+        setTutorialInteractivity(targetId) { this.clearTutorialInteractivity(); const roots = [...document.querySelectorAll('header,.toolrow,.layout,footer')], target = targetId ? document.getElementById(targetId) : null; for (const root of roots) {
+            const contains = !!target && (root === target || root.contains(target));
+            root.inert = !contains;
+            if (contains && target && root !== target) {
+                root.querySelectorAll('button,input,select,textarea,a,[tabindex]').forEach(control => { if (control === target || control.contains(target) || target.contains(control))
+                    return; control.inert = true; this.tutorialBlocked.push(control); });
+            }
+        } }
         startTutorial(force = false) { if (this.tutorialActive)
             return; if (force)
-            storeRemove('pzodt.tutorialDismissed.1.0'); this.tutorialActive = true; this.tutorialIndex = 0; el('tutorialRemember').checked = true; document.querySelectorAll('header,.toolrow,.layout,footer').forEach(x => x.inert = true); const overlay = el('tutorialOverlay'); overlay.inert = false; overlay.classList.remove('hidden'); this.showTutorialStep(); setTimeout(() => el('tutorialNextBtn').focus(), 0); }
+            storeRemove('pzodt.tutorialDismissed.1.1'); this.tutorialActive = true; this.tutorialIndex = 0; el('tutorialRemember').checked = true; const overlay = el('tutorialOverlay'); overlay.inert = false; overlay.classList.remove('hidden'); this.showTutorialStep(); setTimeout(() => el('tutorialNextBtn').focus(), 0); }
         moveTutorial(delta) { if (!this.tutorialActive)
+            return; if (this.tutorialIndex === 1 && delta > 0)
             return; const next = this.tutorialIndex + delta; if (next < 0)
             return; if (next >= this.tutorialSteps.length) {
             this.finishTutorial();
@@ -1647,20 +1973,20 @@ var PZODT;
         } this.tutorialIndex = next; this.showTutorialStep(); }
         finishTutorial() { if (!this.tutorialActive)
             return; this.tutorialActive = false; if (el('tutorialRemember').checked)
-            storeSet('pzodt.tutorialDismissed.1.0', '1');
+            storeSet('pzodt.tutorialDismissed.1.1', '1');
         else
-            storeRemove('pzodt.tutorialDismissed.1.0'); const overlay = el('tutorialOverlay'); overlay.classList.add('hidden'); overlay.classList.remove('noTarget', 'cardTop'); document.querySelectorAll('header,.toolrow,.layout,footer').forEach(x => x.inert = false); const d = el('loadDialog'); d.classList.remove('tutorialVisibleDialog'); if (d.open)
+            storeRemove('pzodt.tutorialDismissed.1.1'); const overlay = el('tutorialOverlay'); overlay.classList.add('hidden'); overlay.classList.remove('noTarget', 'cardTop'); this.clearTutorialInteractivity(); const d = el('loadDialog'); d.classList.remove('tutorialVisibleDialog'); if (d.open)
             d.close(); el('tutorialSpotlight').classList.remove('active'); }
-        showTutorialStep() { const step = this.tutorialSteps[this.tutorialIndex], load = el('loadDialog'); if (step.closeLoad && load.open) {
+        showTutorialStep() { const step = this.tutorialSteps[this.tutorialIndex], load = el('loadDialog'); if (!step.openLoad && load.open) {
             load.classList.remove('tutorialVisibleDialog');
             load.close();
         } if (step.openLoad) {
             load.classList.add('tutorialVisibleDialog');
             if (!load.open)
                 load.show();
-        } if (step.target === 'viewFilters')
+        } this.setTutorialInteractivity(step.target); if (step.target === 'viewFilters')
             this.collapse('right', false); if (step.target === 'furnitureTabButton')
-            this.collapse('left', false); el('tutorialTitle').textContent = step.title; el('tutorialText').textContent = step.text; el('tutorialProgress').textContent = `${this.tutorialIndex + 1} / ${this.tutorialSteps.length}`; el('tutorialBackBtn').disabled = this.tutorialIndex === 0; el('tutorialNextBtn').textContent = this.tutorialIndex === this.tutorialSteps.length - 1 ? 'Finish' : 'Continue'; requestAnimationFrame(() => this.positionTutorial()); }
+            this.collapse('left', false); el('tutorialTitle').textContent = step.title; el('tutorialText').textContent = step.text; el('tutorialProgress').textContent = `${this.tutorialIndex + 1} / ${this.tutorialSteps.length}`; el('tutorialBackBtn').disabled = this.tutorialIndex === 0; const next = el('tutorialNextBtn'); next.disabled = this.tutorialIndex === 1; next.textContent = this.tutorialIndex === 1 ? 'Click highlighted button' : this.tutorialIndex === this.tutorialSteps.length - 1 ? 'Finish' : 'Continue'; requestAnimationFrame(() => this.positionTutorial()); }
         positionTutorial() { if (!this.tutorialActive)
             return; const step = this.tutorialSteps[this.tutorialIndex], spot = el('tutorialSpotlight'), overlay = el('tutorialOverlay'); overlay.classList.toggle('noTarget', !step.target); overlay.classList.remove('cardTop'); if (!step.target) {
             spot.classList.remove('active');

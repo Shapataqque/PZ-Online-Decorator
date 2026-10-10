@@ -11,6 +11,9 @@ The tool reads the Project Zomboid `media` folder locally in the browser. I do n
 - Preserve imported squares as ordered sprite/object stacks.
 - Browse searchable furniture categories with thumbnails and multi-tile placement.
 - Edit with Pencil, Erase, Rectangle, Picker, and Pan tools.
+- Preview tiles and furniture before placement and choose between stacked objects with Picker.
+- Choose World X / Y coordinates from a zoomable map overview generated locally from the selected dataset.
+- Place compatible tabletop items such as TVs and radios on furniture surfaces.
 - Save projects as JSON and open them later.
 
 ## Quick start
@@ -18,7 +21,7 @@ The tool reads the Project Zomboid `media` folder locally in the browser. I do n
 1. Open the site.
 2. Click **Load PZ Location**.
 3. Select the local `steamapps/common/ProjectZomboid/media` folder. under 
-4. Enter the World X and World Y coordinates of the location you want.
+4. Enter the World X and World Y coordinates of the location you want, or use **Choose from map**.
 5. Load the building or area.
 6. Browse **Tiles** or **Furniture**, use **View Filters** when walls or roofs are in the way, and decorate the map.
 7. Use **Save as .json** to keep the project.
