@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2 — 10 October 2026
+
+- Replaced the coarse coordinate overview with a locally rendered top-view map using per-square map data, following the same general top-view approach used by PZmap/pzmap2dzi.
+- View Filters now prioritize tiles whose names contain `appliances` or `furniture` as Furniture even when conflicting tile properties suggest another category.
+- Aligned the Z-level dropdown and up/down controls.
+- Picker now matches imported multi-tile furniture by canonical tileset name and tile index, not only exact sprite spelling.
+- Replaced automatic tabletop guessing with explicit **Ground**, **Surface**, and **OnTable** placement modes.
+- Hardened tutorial step 2 so clicking **Load PZ Location** opens the loader before the tutorial advances.
+
 ## 1.1.1 — 10 October 2026
 
 - Reworked the coordinate picker into a colored semantic map showing vegetation, roads/ground, water, urban areas, and building footprints.
