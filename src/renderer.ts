@@ -121,11 +121,11 @@ namespace PZODT {
     private placementLift(a:AssetRef,height:number){return Math.max(0,Math.min(128,Number(height)||0))-this.authoredPlacementOffset(a);}
 
     private buildChunk(z:number,cx:number,cy:number,key:string):ChunkCache{
-      const m=this.map(),old=this.chunkCache.get(key);if(old?.buffer)this.gl.deleteBuffer(old.buffer);if(old)this.cachedBatchCount-=old.segments.length;
+      const m=this.map(),old=this.chunkCache.get(key),originX=Number.parseInt(m.properties['pzodt.worldOriginX']??'0',10)||0,originY=Number.parseInt(m.properties['pzodt.worldOriginY']??'0',10)||0;if(old?.buffer)this.gl.deleteBuffer(old.buffer);if(old)this.cachedBatchCount-=old.segments.length;
       const x0=cx*SPATIAL_CHUNK_SIZE,y0=cy*SPATIAL_CHUNK_SIZE,x1=Math.min(m.width,x0+SPATIAL_CHUNK_SIZE),y1=Math.min(m.height,y0+SPATIAL_CHUNK_SIZE),cmds:BuildCommand[]=[];
       const base=m.baseStacks.get(z);
       for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
-        const k=m.key(x,y),stack=base?.get(k);if(stack)for(let i=0;i<stack.length;i++){const n=stack[i],a=this.assets.asset(n);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,i),diag:x+y,ownerId:'base',category:this.classify(n),lift:0,height:0});}
+        const k=m.key(x,y),stack=base?.get(k);if(stack)for(let i=0;i<stack.length;i++){const n=stack[i];let a=this.assets.asset(n);if(!a&&/^vegetation_trees_01_\d+$/i.test(n))a=this.assets.legacyTreeAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,i),diag:x+y,ownerId:'base',category:this.classify(n),lift:0,height:0});}
       }
       for(let li=0;li<m.layers.length;li++){
         const l=m.layers[li];if(l.level!==z)continue;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.11 — 10 October 2026
+
+- Removed the arbitrary global jumbo-tree alias fallback from 1.1.10.
+- `vegetation_trees_01_*` lot placeholders are now resolved per world coordinate using the loaded erosion-tree (`e_*`) families.
+- The resolver selects normal/green seasonal frames instead of snow frames and uses a weighted mix of growth sizes; XXL trees are rare rather than being repeated for every placeholder.
+- Tree selection is deterministic for a given world coordinate, so reloading the same imported location produces the same preview.
+- If the required erosion tree textures are unavailable, the placeholder is left unresolved instead of displaying a confidently wrong jumbo/snow sprite.
+
 ## 1.1.10 — 10 October 2026
 
 - Added a Build 42 jumbo-tree fallback for missing `vegetation_trees_01_*` map placeholders. The game stores the rendered jumbo tree art in separate tree texture packs under different sprite names, so unresolved legacy tree tiles now receive stable preview aliases.

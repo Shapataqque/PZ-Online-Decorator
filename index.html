@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.10</title>
+  <title>PZ Online Decoration Tool 1.1.11</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="mediaNeeded">
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.10</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.11</button></div>
   <button id="newMapBtn">New</button>
   <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
   <button id="loadLocationBtn" disabled>Load World Location</button>
@@ -90,6 +90,17 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.11</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Replaced the incorrect legacy-tree alias fallback introduced in 1.1.10.</li>
+        <li>vegetation_trees_01 placeholders are now resolved per world coordinate against erosion tree families instead of mapping one tile name globally to an arbitrary jumbo sprite.</li>
+        <li>Tree previews use normal non-snow seasonal frames and a weighted size distribution, so imported forests no longer become rows of identical snowy XXL trees.</li>
+        <li>The resolver remains deterministic for the same world coordinates, keeping imported areas visually stable between reloads.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.10</h4>
