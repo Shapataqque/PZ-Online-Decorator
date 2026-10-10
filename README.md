@@ -4,6 +4,8 @@ I built PZ Online Decoration Tool as a browser-based way to load an existing Pro
 
 The tool reads the Project Zomboid `media` folder locally in the browser. I do not bundle Project Zomboid game assets in this repository, and the selected game files are not uploaded by the application.
 
+> **AI development disclosure:** PZ Online Decoration Tool and its website were developed with substantial assistance from generative AI, including code generation, debugging, documentation, and UI implementation. Project direction, requirements, testing, review, publishing, and maintenance are handled by the project owner.
+
 ## What it can do
 
 - Load an existing Project Zomboid building, area, or map cell from `.lotheader` / `.lotpack` data.
