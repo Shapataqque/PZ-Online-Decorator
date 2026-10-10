@@ -4,6 +4,13 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 namespace PZODT {
+  const SEARCH_SYNONYMS:Record<string,string[]>={
+    oil:['fuel','gas','petrol'],fuel:['oil','gas','petrol'],gas:['fuel','oil','petrol'],petrol:['fuel','gas','oil'],
+    couch:['sofa'],sofa:['couch'],fridge:['refrigerator'],refrigerator:['fridge'],tv:['television'],television:['tv'],
+    trash:['garbage','bin'],garbage:['trash','bin'],bin:['trash','garbage']
+  };
+  export function normalizeSearchText(value:string):string{return String(value??'').replace(/([a-z0-9])([A-Z])/g,'$1 $2').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
+  export function searchMatches(text:string,query:string):boolean{const hay=normalizeSearchText(text),tokens=normalizeSearchText(query).split(' ').filter(Boolean);return tokens.every(t=>hay.includes(t)||(SEARCH_SYNONYMS[t]??[]).some(s=>hay.includes(s)));}
   export type ToolName='pencil'|'eraser'|'rect'|'picker'|'pan'|'furniture';
   export type GraphicsQuality='low'|'medium'|'high';
   export type ViewCategory='Floor'|'Wall'|'Doors & Windows'|'Furniture'|'Roof'|'Decor / Overlay'|'Roads & Ground'|'Vegetation'|'Fences & Railings'|'Exterior'|'Other';

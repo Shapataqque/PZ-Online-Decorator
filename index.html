@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.9</title>
+  <title>PZ Online Decoration Tool 1.1.10</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="mediaNeeded">
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.9</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.10</button></div>
   <button id="newMapBtn">New</button>
   <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
   <button id="loadLocationBtn" disabled>Load World Location</button>
@@ -44,15 +44,15 @@
 <main class="layout">
   <aside class="left panel" id="leftPanel">
     <div class="panelHeader"><span>Assets</span><button id="collapseLeftBtn" class="panelToggle">&lt;&lt;</button></div>
-    <div class="tabs"><button class="tab active" data-tab="tiles">Tiles</button><button class="tab" id="furnitureTabButton" data-tab="furniture">Furniture</button></div>
-    <section id="tilesTab" class="tabbody active">
-      <input id="tileSearch" class="search" placeholder="Search tile or tileset…" autocomplete="off">
+    <div class="tabs"><button class="tab active" id="furnitureTabButton" data-tab="furniture">Furniture</button><button class="tab" data-tab="tiles">Tiles</button></div>
+    <section id="tilesTab" class="tabbody">
+      <input id="tileSearch" class="search" placeholder="Search tile name, metadata, property…" autocomplete="off">
       <select id="tilesetSelect"><option value="">All tilesets</option></select>
       <div id="assetSummary" class="hint">Choose the Project Zomboid media folder to index the media library.</div>
       <div id="tileList" class="tilelist"></div>
     </section>
-    <section id="furnitureTab" class="tabbody">
-      <input id="furnitureSearch" class="search" placeholder="Search beds, tables, group, tile…" autocomplete="off">
+    <section id="furnitureTab" class="tabbody active">
+      <input id="furnitureSearch" class="search" placeholder="Search object name, metadata, category, tile…" autocomplete="off">
       <select id="furnitureCategory"><option value="">All furniture categories</option></select>
       <label class="check"><input id="availableOnly" type="checkbox" checked> only objects with all required tiles loaded</label>
       <div id="furnitureList" class="furniturelist"></div>
@@ -90,6 +90,19 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.10</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Restored previews for legacy vegetation_trees_01 placeholders by resolving missing tree tiles against the Build 42 jumbo-tree texture packs.</li>
+        <li>Tiles whose names contain roof/roofs are now always classified as Roof before overlay metadata is considered.</li>
+        <li>Catalog furniture matching now treats padded and unpadded sprite indices as equivalent, fixing imported-base classification for Vegetation - Indoor and similar objects.</li>
+        <li>Furniture is now the default left-side tab and appears before Tiles.</li>
+        <li>Furniture and Tiles search now includes .tiles metadata such as CustomName, GroupName, material and other property values; common search synonyms are also supported.</li>
+        <li>Furniture cards prefer metadata-derived object names while keeping the original catalog category and index visible underneath.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.9</h4>

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.10 — 10 October 2026
+
+- Added a Build 42 jumbo-tree fallback for missing `vegetation_trees_01_*` map placeholders. The game stores the rendered jumbo tree art in separate tree texture packs under different sprite names, so unresolved legacy tree tiles now receive stable preview aliases.
+- Tiles with `roof` / `roofs` in the sprite name are classified as **Roof** before overlay metadata can move them into Decor / Overlay.
+- Furniture-catalog membership now matches canonical tileset + numeric index, so padded catalog names such as `_007` match imported map names such as `_7`. This fixes **Vegetation - Indoor #7** and the same class of imported-base mismatch.
+- **Furniture** is now the default first tab; **Tiles** is second.
+- `.tiles` metadata is searchable for both Furniture and Tiles, including keys and values such as `CustomName`, `GroupName`, materials, container types and other properties.
+- Furniture cards prefer metadata-derived names such as `GroupName + CustomName`, while retaining the source catalog category/index as secondary text.
+- Added a small synonym layer for common terms such as oil/fuel/gas/petrol, sofa/couch, fridge/refrigerator, TV/television and trash/bin/garbage.
+
 ## 1.1.9 — 10 October 2026
 
 - Removed the Inspector's **Map / Center** controls and all user-facing **Layers** controls.
