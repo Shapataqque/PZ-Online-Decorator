@@ -46,3 +46,6 @@ PZ Online Decoration Tool is an unofficial community project and is not affiliat
 ## License
 
 See `LICENSE`, `NOTICE`, `CREDITS.md`, and the license texts under `licenses/`.
+
+
+> **AI development disclosure:** PZ Online Decoration Tool and its website were developed with substantial assistance from generative AI, including code generation, debugging, documentation, and UI implementation. Project direction, requirements, testing, review, publishing, and maintenance are handled by me.
