@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.7</title>
+  <title>PZ Online Decoration Tool 1.1.8</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="mediaNeeded">
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.7</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.8</button></div>
   <button id="newMapBtn">New</button>
   <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
   <button id="loadLocationBtn" disabled>Load World Location</button>
@@ -95,6 +95,18 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.8</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Imported Base is editable again: unlock it to erase imported game objects while keeping undo/redo support.</li>
+        <li>Picker now treats catalog-matched sprites as full furniture objects, including single-tile furniture, so R rotation works after picking.</li>
+        <li>Pencil now places the currently selected furniture object as well as selected single tiles.</li>
+        <li>Placement-height presets are shown only as H-codes, with + / − keyboard shortcuts and Inspector controls for one-step adjustment.</li>
+        <li>Simplified furniture information in the Inspector by removing repeated Furniture labels and layer text.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.7</h4>
