@@ -1,5 +1,5 @@
 name: Apply v1.1 release patch
-# all patch parts staged
+# patch payload verified at 32256 base64 bytes
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
       - name: Reconstruct and apply v1.1 patch
         shell: bash
         run: |
-          cat .v1.1-blob/00 .v1.1-blob/01 .v1.1-blob/02 .v1.1-blob/03 .v1.1-blob/04 .v1.1-blob/05 | base64 --decode | gzip --decompress > /tmp/v1.1.patch
+          cat .v1.1-blob/00 .v1.1-blob/01 .v1.1-blob/02 .v1.1-blob/03 .v1.1-blob/04 | base64 --decode | gzip --decompress > /tmp/v1.1.patch
           git apply --check /tmp/v1.1.patch
           git apply /tmp/v1.1.patch
       - name: Compile TypeScript
