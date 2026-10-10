@@ -98,3 +98,7 @@ body.mediaNeeded .mediaNotice{display:flex}
 body.mediaNeeded .layout{height:calc(100% - 142px)}
 body.lightMode .mediaNotice{background:#dce8ef;border-color:#b2c3ce;color:#324650}
 @media(max-width:700px){.mediaNotice{justify-content:flex-start;overflow-x:auto;white-space:nowrap}}
+
+.orientationLabel{flex:0 0 100%;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#8999a5;margin-top:2px}
+body.lightMode .orientationLabel{color:#60717d}
+body.lightMode .tab.active,body.lightMode [data-tool].active,body.lightMode .orientations button.active,body.lightMode .placementHeightButtons button.active{color:#fff;background:#176a9d;border-color:#176a9d}

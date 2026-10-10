@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://tally.so; style-src 'self'; img-src 'self' data: blob: https://tally.so; connect-src 'self' https://tally.so; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://tally.so; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
-  <title>PZ Online Decoration Tool 1.1.8</title>
+  <title>PZ Online Decoration Tool 1.1.9</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="mediaNeeded">
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.8</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.1.9</button></div>
   <button id="newMapBtn">New</button>
   <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
   <button id="loadLocationBtn" disabled>Load World Location</button>
@@ -74,14 +74,9 @@
     <div id="selectionInfo" class="selectionInfo">Nothing selected.</div>
     <div id="orientationButtons" class="orientations"></div>
     <div id="placementHeightControls" class="placementHeights"></div>
-    <h3>Map</h3>
-    <div class="row"><button id="centerBtn">Center</button></div>
     <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
     <h3>View filters</h3>
     <div id="viewFilters" class="viewFilters"></div>
-    <h3>Layers</h3>
-    <div class="row"><button id="addLayerBtn">+ Layer</button></div>
-    <div id="layersList" class="layers"></div>
   </aside>
 </main>
 <footer><span id="status">Ready.</span><span id="coords">x — y —</span></footer>
@@ -95,6 +90,18 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.1.9</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Removed Map/Center and all user-facing layer controls from the Inspector; internal stacking now works as one unified editable scene.</li>
+        <li>Pencil no longer creates duplicate backing layers when a drag revisits the same cell, and Erase works across all internal layers plus Imported Base.</li>
+        <li>Furniture variants are now labeled as Alternative appearance 1, 2, 3… instead of exposing W/N/E/S direction codes; R still cycles appearances.</li>
+        <li>Fixtures - Railings objects are classified under Fences &amp; Railings, and animated_clock_01_1 is classified as Furniture for imported-base filtering.</li>
+        <li>Renamed Settings help labels to Credits/Display and improved selected-button contrast in light mode.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.1.8</h4>
@@ -227,7 +234,7 @@
 </dialog>  
 <dialog id="settingsDialog" class="dialog">
   <form method="dialog">
-    <div class="dialogTitle"><div><b>Settings</b><small>Display and help</small></div><button id="settingsCloseBtn" type="button">×</button></div>
+    <div class="dialogTitle"><div><b>Settings</b><small>Display</small></div><button id="settingsCloseBtn" type="button">×</button></div>
     <div class="dialogBody">
       <section><h4>Graphics</h4>
         <label>Quality<select id="graphicsQuality"><option value="low">Low — lower render and sprite texture resolution</option><option value="medium">Medium — balanced</option><option value="high">High — full resolution</option></select></label>
@@ -238,7 +245,7 @@
         <div class="hint">Records recent edit actions locally in this browser so erase/stacking bugs can be reproduced. No log is uploaded automatically.</div>
         <div class="row"><button id="copyEditLogBtn" type="button">Copy log</button><button id="downloadEditLogBtn" type="button">Download log</button><button id="clearEditLogBtn" type="button">Clear</button></div>
       </section>
-      <section><h4>Help</h4><div class="row"><button id="creditsBtn" type="button">Credits</button></div></section>
+      <section><h4>Credits</h4><div class="row"><button id="creditsBtn" type="button">Credits</button></div></section>
     </div>
     <div class="dialogActions"><button id="settingsDoneBtn" class="primary" type="button">Done</button></div>
   </form>

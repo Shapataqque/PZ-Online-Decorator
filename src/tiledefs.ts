@@ -18,7 +18,8 @@ namespace PZODT {
     placementHeightValues(limit=5):Array<{height:number;count:number}>{const hist=new Map<number,number>(),add=(h:number,w:number)=>{if(!Number.isFinite(h)||h<=0||h>128)return;const n=Math.round(h);hist.set(n,(hist.get(n)??0)+w);};for(const [key,p] of this.props){const entries=Object.entries(p).map(([k,v])=>[k.toLowerCase(),String(v).trim().toLowerCase()] as [string,string]),value=(k:string)=>entries.find(([x])=>x===k)?.[1],num=(k:string)=>{const n=Number.parseInt(value(k)??'0',10);return Number.isFinite(n)?n:0;},flag=(k:string)=>{const e=entries.find(([x])=>x===k);return !!e&&!['false','0','no','off'].includes(e[1]);},tableLike=flag('istable')||flag('istabletop')||/(table|counter|desk|workbench|cabinet|dresser|vanity|shelf)/.test(key),surface=num('surface'),item=num('itemheight');if(tableLike){add(surface,5);add(item,2);}else if(surface>0)add(surface,1);}const raw=[...hist].sort((a,b)=>a[0]-b[0]),clusters:Array<{height:number;count:number;sum:number}> = [];for(const [height,count] of raw){const last=clusters[clusters.length-1];if(last&&height-last.height<=2){last.sum+=height*count;last.count+=count;last.height=Math.round(last.sum/last.count);}else clusters.push({height,count,sum:height*count});}return clusters.sort((a,b)=>b.count-a.count).slice(0,Math.max(1,limit)).sort((a,b)=>a.height-b.height).map(({height,count})=>({height,count}));}
     classify(name:string,furniture:Set<string>):ViewCategory{const p=this.properties(name),keys=Object.keys(p).map(x=>x.toLowerCase()),vals=Object.values(p).map(x=>String(x).toLowerCase()),all=keys.concat(vals).join(' '),n=name.toLowerCase(),canonical=n.replace(/_0*(\d+)$/,(_,d)=>`_${Number(d)}`);
       const has=(...q:string[])=>q.some(x=>keys.includes(x.toLowerCase())||all.includes(x.toLowerCase()));
-      if(canonical==='vegetation_indoor_01_11'||canonical==='location_community_school_01_33'||canonical==='fixtures_counters_01_151')return 'Furniture';
+      if(canonical==='vegetation_indoor_01_11'||canonical==='location_community_school_01_33'||canonical==='fixtures_counters_01_151'||canonical==='animated_clock_01_1')return 'Furniture';
+      if(/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))return 'Fences & Railings';
       if(n.includes('appliances')||n.includes('furniture')||furniture.has(name))return 'Furniture';
       if(has('solidfloor')||/(^|_)(floor|floors|flooring)(_|$)/.test(n)||BUILDING_TILE_CATEGORIES['Floors']?.has(name))return 'Floor';
       if(has('walln','wallw','wallnw','wallse','wall','treataswallorder')||n.includes('wall')||BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name)||BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))return 'Wall';
@@ -28,7 +29,6 @@ namespace PZODT {
       if(has('roof')||n.includes('roof')||BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name)||BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))return 'Roof';
       if(/(^|_)(blends_street|street|road|roads|asphalt|pavement|sidewalk|parking|curb|curbs)(_|$)/.test(n)||n.includes('blends_street'))return 'Roads & Ground';
       if(/(^|_)(vegetation|tree|trees|bush|bushes|grass|plants?|natural|forest)(_|$)/.test(n)||n.includes('blends_natural'))return 'Vegetation';
-      if(/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))return 'Fences & Railings';
       if(/(^|_)(outdoor|exterior|clutter|street_decoration|streetdecor|trash|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n)||n.includes('outdoor_clutter')||n.includes('exterior_'))return 'Exterior';
       return 'Other';}
   }

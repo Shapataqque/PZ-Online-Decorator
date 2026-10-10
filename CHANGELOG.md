@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.9 — 10 October 2026
+
+- Removed the Inspector's **Map / Center** controls and all user-facing **Layers** controls.
+- Internal layers remain only as a compatibility/stacking implementation detail and are normalized to visible, unlocked, full-opacity behavior when projects are loaded.
+- Pencil and Rectangle no longer depend on an active user-selected layer. Repeated Pencil events on the same cell during one drag are ignored, preventing duplicate Floor/Furniture backing layers.
+- Eraser now searches all internal layers at the current Z level before Imported Base, so editing behaves as one unified scene.
+- Furniture entry variants are shown as **Alternative appearance 1, 2, 3…** instead of exposing W/N/E/S direction codes. **R Rotate object** still cycles through the available appearances.
+- `fixtures_railings_*` tiles are prioritized as **Fences & Railings** even when they also exist in the furniture catalog.
+- `animated_clock_01_1` is explicitly classified as **Furniture**, including for imported-base view filtering.
+- Settings wording now uses **Display** and **Credits** instead of Help.
+- Selected buttons use white text in light mode for better contrast.
+
 ## 1.1.8 — 10 October 2026
 
 - Restored editable **Imported Base** behavior. Imported map objects can be erased again when the base is unlocked, with undo/redo support.

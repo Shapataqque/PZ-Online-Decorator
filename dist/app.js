@@ -70,12 +70,12 @@ var PZODT;
         maxLevel() { return Math.max(0, ...this.levels()); }
         minLevel() { return Math.min(0, ...this.levels()); }
         activeLayer() { return this.layers.find(l => l.id === this.activeTarget) ?? null; }
-        addLayer(name, level = this.currentLevel, category = 'Custom') { const l = new UserLayerModel(name, level, category); this.layers.push(l); this.activeTarget = l.id; return l; }
+        addLayer(name, level = this.currentLevel, category = 'Custom') { const l = new UserLayerModel(name, level, category); this.layers.push(l); return l; }
         deleteLayer(id) { this.layers = this.layers.filter(l => l.id !== id); if (this.activeTarget === id)
             this.activeTarget = 'base'; }
         moveLayer(id, d) { const i = this.layers.findIndex(l => l.id === id); if (i < 0)
             return; const j = Math.max(0, Math.min(this.layers.length - 1, i + d)); const [x] = this.layers.splice(i, 1); this.layers.splice(j, 0, x); }
-        findStackLayer(category, level, cells, create = true, preferTop = false) { const candidates = this.layers.filter(l => l.level === level && l.category === category && !l.locked), ordered = preferTop ? [...candidates].reverse() : candidates; for (const l of ordered)
+        findStackLayer(category, level, cells, create = true, preferTop = false) { const candidates = this.layers.filter(l => l.level === level && l.category === category), ordered = preferTop ? [...candidates].reverse() : candidates; for (const l of ordered)
             if (cells.every(c => !l.get(c.x, c.y, this.width)))
                 return l; if (!create)
             return null; let n = 1; let name = category; while (this.layers.some(l => l.level === level && l.name === name)) {
@@ -83,7 +83,7 @@ var PZODT;
             name = `${category} ${n}`;
         } return this.addLayer(name, level, category); }
         toJSON() { return { format: 'PZOnlineDecorationTool', version: 4, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: this.baseLocked, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementHeights: [...l.placementHeights] })) }; }
-        static fromJSON(o) { const m = new PZMapModel(o.width || 64, o.height || 64); m.tileWidth = o.tileWidth || 64; m.tileHeight = o.tileHeight || 32; m.cellsPerLevelY = o.cellsPerLevelY || 3; m.currentLevel = o.currentLevel || 0; m.properties = o.properties || {}; m.baseVisible = o.baseVisible !== false; m.baseOpacity = Number.isFinite(o.baseOpacity) ? o.baseOpacity : 1; m.baseLocked = o.baseLocked === true; m.activeTarget = o.activeTarget || 'base'; m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])])); m.layers = []; for (const q of o.layers || []) {
+        static fromJSON(o) { const m = new PZMapModel(o.width || 64, o.height || 64); m.tileWidth = o.tileWidth || 64; m.tileHeight = o.tileHeight || 32; m.cellsPerLevelY = o.cellsPerLevelY || 3; m.currentLevel = o.currentLevel || 0; m.properties = o.properties || {}; m.baseVisible = true; m.baseOpacity = 1; m.baseLocked = false; m.activeTarget = 'base'; m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])])); m.layers = []; for (const q of o.layers || []) {
             const imported = /^(Imported Base|Imported ·|Base ·)/.test(q.name || '');
             if (imported && !o.baseStacks) {
                 const z = q.level || 0;
@@ -101,9 +101,9 @@ var PZODT;
             }
             const l = new UserLayerModel(q.name || 'Layer', q.level || 0, q.category || 'Custom');
             l.id = q.id || l.id;
-            l.visible = q.visible !== false;
-            l.opacity = Number.isFinite(q.opacity) ? q.opacity : 1;
-            l.locked = q.locked === true;
+            l.visible = true;
+            l.opacity = 1;
+            l.locked = false;
             l.cells = new Map(q.cells || []);
             const heights = Array.isArray(q.placementHeights) ? q.placementHeights : [];
             l.placementHeights = new Map(heights.filter((x) => x && x.length >= 2 && Number.isFinite(+x[1])).map((x) => [+x[0], Math.max(0, Math.min(512, Math.round(+x[1])))]));
@@ -462,8 +462,10 @@ var PZODT;
         classify(name, furniture) {
             const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => `_${Number(d)}`);
             const has = (...q) => q.some(x => keys.includes(x.toLowerCase()) || all.includes(x.toLowerCase()));
-            if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151')
+            if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
                 return 'Furniture';
+            if (/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))
+                return 'Fences & Railings';
             if (n.includes('appliances') || n.includes('furniture') || furniture.has(name))
                 return 'Furniture';
             if (has('solidfloor') || /(^|_)(floor|floors|flooring)(_|$)/.test(n) || PZODT.BUILDING_TILE_CATEGORIES['Floors']?.has(name))
@@ -482,8 +484,6 @@ var PZODT;
                 return 'Roads & Ground';
             if (/(^|_)(vegetation|tree|trees|bush|bushes|grass|plants?|natural|forest)(_|$)/.test(n) || n.includes('blends_natural'))
                 return 'Vegetation';
-            if (/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))
-                return 'Fences & Railings';
             if (/(^|_)(outdoor|exterior|clutter|street_decoration|streetdecor|trash|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n) || n.includes('outdoor_clutter') || n.includes('exterior_'))
                 return 'Exterior';
             return 'Other';
@@ -1346,59 +1346,47 @@ var PZODT;
             old.after = [...after];
         else
             this.changes.set(key, { kind: 'base', z, x, y, before, after: [...after] }); m.setStack(z, x, y, after); this.renderer.invalidateCell(z, x, y); }
-        targetLocked() { const m = this.map(); if (m.activeTarget === 'base')
-            return m.baseLocked; return m.activeLayer()?.locked ?? false; }
         paint(p, notify = true) {
-            const m = this.map();
-            if (this.targetLocked()) {
-                this.onStatus('Selected layer is locked.');
+            const m = this.map(), strokeKey = `${m.currentLevel}:${p.x}:${p.y}`;
+            if ((this.tool === 'pencil' || this.tool === 'eraser') && this.strokeCells.has(strokeKey))
                 return;
-            }
-            const strokeKey = `${m.currentLevel}:${p.x}:${p.y}`;
-            if (this.tool === 'eraser' && this.strokeCells.has(strokeKey))
-                return;
-            if (this.tool === 'eraser')
+            if (this.tool === 'pencil' || this.tool === 'eraser')
                 this.strokeCells.add(strokeKey);
-            if (m.activeTarget === 'base') {
-                if (this.tool === 'eraser') {
+            if (this.tool === 'eraser') {
+                let removed = false;
+                for (let i = m.layers.length - 1; i >= 0; i--) {
+                    const l = m.layers[i];
+                    if (l.level !== m.currentLevel)
+                        continue;
+                    const before = l.get(p.x, p.y, m.width);
+                    if (before && this.visible(before)) {
+                        this.layerChange(l, p.x, p.y, null, 0);
+                        this.onDebugLog({ type: 'erase', strokeId: this.strokeId, target: l.id, layer: l.name, z: l.level, x: p.x, y: p.y, removed: before, before, after: null, time: new Date().toISOString() });
+                        removed = true;
+                        break;
+                    }
+                }
+                if (!removed) {
                     const before = [...m.stack(m.currentLevel, p.x, p.y)], s = [...before];
-                    let removed = null;
+                    let removedName = null;
                     for (let i = s.length - 1; i >= 0; i--)
                         if (this.visible(s[i])) {
-                            removed = s[i];
+                            removedName = s[i];
                             s.splice(i, 1);
                             break;
                         }
-                    if (removed) {
+                    if (removedName) {
                         this.baseChange(m.currentLevel, p.x, p.y, s);
-                        this.onDebugLog({ type: 'erase', strokeId: this.strokeId, target: 'base', z: m.currentLevel, x: p.x, y: p.y, removed, before, after: [...s], time: new Date().toISOString() });
+                        this.onDebugLog({ type: 'erase', strokeId: this.strokeId, target: 'base', z: m.currentLevel, x: p.x, y: p.y, removed: removedName, before, after: [...s], time: new Date().toISOString() });
                     }
-                }
-                else if (this.selectedAsset) {
-                    const cat = this.classifier(this.selectedAsset), target = m.findStackLayer(cat, m.currentLevel, [p], true, true);
-                    this.layerChange(target, p.x, p.y, this.selectedAsset, this.placementHeight);
-                    m.activeTarget = target.id;
                 }
             }
-            else {
-                const l = m.activeLayer();
-                if (!l)
-                    return;
-                if (this.tool === 'eraser') {
-                    const before = l.get(p.x, p.y, m.width);
-                    if (before) {
-                        this.layerChange(l, p.x, p.y, null, 0);
-                        this.onDebugLog({ type: 'erase', strokeId: this.strokeId, target: l.id, layer: l.name, z: l.level, x: p.x, y: p.y, removed: before, before, after: null, time: new Date().toISOString() });
-                    }
-                }
-                else if (this.selectedAsset) {
-                    let target = l;
-                    if (l.get(p.x, p.y, m.width)) {
-                        const cat = this.classifier(this.selectedAsset);
-                        target = m.findStackLayer(cat, m.currentLevel, [p], true, true);
-                    }
-                    this.layerChange(target, p.x, p.y, this.selectedAsset, this.placementHeight);
-                    m.activeTarget = target.id;
+            else if (this.selectedAsset) {
+                const already = m.layers.some(l => l.level === m.currentLevel && l.get(p.x, p.y, m.width) === this.selectedAsset) || m.stack(m.currentLevel, p.x, p.y).includes(this.selectedAsset);
+                if (!already) {
+                    const cat = this.classifier(this.selectedAsset), target = m.findStackLayer(cat, m.currentLevel, [p], true, true);
+                    if (target)
+                        this.layerChange(target, p.x, p.y, this.selectedAsset, this.placementHeight);
                 }
             }
             if (notify) {
@@ -1406,7 +1394,7 @@ var PZODT;
                 this.onChanged();
             }
         }
-        rect(a, b) { if (!this.selectedAsset || this.targetLocked())
+        rect(a, b) { if (!this.selectedAsset)
             return; const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y); for (let y = y0; y <= y1; y++)
             for (let x = x0; x <= x1; x++)
                 this.paint({ x, y }, false); this.renderer.request(); this.onChanged(); }
@@ -1414,7 +1402,7 @@ var PZODT;
             const m = this.map(), items = [];
             for (let i = m.layers.length - 1; i >= 0; i--) {
                 const l = m.layers[i];
-                if (!l.visible || l.opacity <= .001 || l.level !== m.currentLevel)
+                if (l.level !== m.currentLevel)
                     continue;
                 const n = l.get(p.x, p.y, m.width);
                 if (n && this.visible(n))
@@ -1443,10 +1431,8 @@ var PZODT;
             }
             this.onPickCandidates(items, p);
         }
-        applyPickCandidate(c) { const m = this.map(); if (c.targetId !== 'base' && m.layers.some(l => l.id === c.targetId))
-            m.activeTarget = c.targetId; this.selectedAsset = c.name; this.selectedFurniture = null; this.tool = 'pencil'; this.placementHeight = 0; this.refreshPlacementGhost(); this.onStatus(`Picked ${c.name} from ${c.sourceLabel}. New placements start at H0.`); this.onSelection(); }
-        applyPickFurniture(match, c) { const m = this.map(); if (c.targetId !== 'base' && m.layers.some(l => l.id === c.targetId))
-            m.activeTarget = c.targetId; this.selectedFurniture = match.def; this.selectedAsset = null; this.tool = 'furniture'; this.placementHeight = 0; this.furnitureOrient = match.orient; this.refreshPlacementGhost(); this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}). New placements start at H0.`); this.onSelection(); }
+        applyPickCandidate(c) { this.selectedAsset = c.name; this.selectedFurniture = null; this.tool = 'pencil'; this.placementHeight = 0; this.refreshPlacementGhost(); this.onStatus(`Picked ${c.name} from ${c.sourceLabel}. New placements start at H0.`); this.onSelection(); }
+        applyPickFurniture(match, c) { this.selectedFurniture = match.def; this.selectedAsset = null; this.tool = 'furniture'; this.placementHeight = 0; this.furnitureOrient = match.orient; this.refreshPlacementGhost(); const appearance = Math.max(0, match.def.entries.findIndex(e => e.orient === match.orient)) + 1; this.onStatus(`Picked furniture ${match.group.label} · #${match.def.index} (appearance ${appearance}). New placements start at H0.`); this.onSelection(); }
         placeFurniture(p) {
             const d = this.selectedFurniture, e = d ? this.catalog.entry(d, this.furnitureOrient) : null;
             if (!d || !e)
@@ -1476,8 +1462,7 @@ var PZODT;
             const target = m.findStackLayer('Furniture', m.currentLevel, cells, true, true);
             for (const c of cells)
                 this.layerChange(target, c.x, c.y, c.name, this.placementHeight);
-            m.activeTarget = target.id;
-            this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing ? ` · ${missing} missing` : ''}.`);
+            this.onStatus(`${cells.length} furniture tile(s) placed${missing ? ` · ${missing} missing` : ''}.`);
             this.renderer.request();
             this.onChanged();
         }
@@ -1499,7 +1484,7 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     PZODT.V11_NATIVE = true;
-    const APP_VERSION = '1.1.8';
+    const APP_VERSION = '1.1.9';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1555,7 +1540,6 @@ var PZODT;
             this.orientationButtons = el('orientationButtons');
             this.placementHeightControls = el('placementHeightControls');
             this.selectionLabel = el('selectionLabel');
-            this.layersList = el('layersList');
             this.zLevel = el('zLevel');
             this.stageBadge = el('stageBadge');
             this.graphicsQuality = el('graphicsQuality');
@@ -1609,7 +1593,6 @@ var PZODT;
             el('rotateBtn').onclick = () => this.editor.rotateFurniture(1);
             el('undoBtn').onclick = () => this.editor.undo();
             el('redoBtn').onclick = () => this.editor.redo();
-            el('centerBtn').onclick = () => this.renderer.center();
             el('newMapBtn').onclick = () => this.newMap();
             el('chooseMediaBtn').onclick = () => el('mediaInput').click();
             el('mediaNoticeChooseBtn').onclick = () => el('mediaInput').click();
@@ -1642,9 +1625,7 @@ var PZODT;
             this.zLevel.onchange = () => this.setZLevel(+this.zLevel.value);
             el('zDownBtn').onclick = () => this.stepZ(-1);
             el('zUpBtn').onclick = () => this.stepZ(1);
-            el('addLevelBtn').onclick = () => { this.map.currentLevel = this.map.maxLevel() + 1; this.renderLevels(); this.renderLayers(); this.editor.refreshPlacementGhost(); this.renderer.request(); };
-            el('addLayerBtn').onclick = () => { const n = (prompt('Layer name', 'Decoration') || '').trim().slice(0, 128); if (!n)
-                return; this.map.addLayer(n, this.map.currentLevel, 'Custom'); this.renderLayers(); };
+            el('addLevelBtn').onclick = () => { this.map.currentLevel = this.map.maxLevel() + 1; this.renderLevels(); this.editor.refreshPlacementGhost(); this.renderer.request(); };
             el('loadCancelBtn').onclick = () => el('loadDialog').close();
             el('loadMode').onchange = () => this.updateLoadMode();
             el('datasetSelect').onchange = () => this.updateMediaUi(this.mediaReadySignature ? 'ready' : 'needed');
@@ -1683,7 +1664,7 @@ var PZODT;
                     pc.height = 64;
                     const pt = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small');
                     title.textContent = `${match.group.label} · #${match.def.index}`;
-                    meta.textContent = `Furniture object · ${match.orient} · ${this.catalog.entry(match.def, match.orient)?.cells.length ?? 0} tile(s)`;
+                    meta.textContent = `Furniture object · appearance ${Math.max(0, match.def.entries.findIndex(e => e.orient === match.orient)) + 1} · ${this.catalog.entry(match.def, match.orient)?.cells.length ?? 0} tile(s)`;
                     pt.append(title, meta);
                     parent.append(pc, pt);
                     parent.onclick = () => { this.selectedFurnitureHit = this.furnitureHitFromMatch(match); this.editor.applyPickFurniture(match, item); el('pickerDialog').close(); };
@@ -1828,11 +1809,11 @@ var PZODT;
             b.onclick = () => { const v = this.filters.get(c); this.filters.set(c, !v); b.classList.toggle('off', v); this.renderer.request(); };
             box.appendChild(b);
         } }
-        refreshAll() { this.renderLevels(); this.renderLayers(); this.renderTilesets(); this.renderTiles(); this.renderFurnitureCategories(); this.renderFurniture(); this.selectionChanged(); this.renderFilterState(); this.renderer.request(); }
-        mapChanged() { this.renderLevels(); this.renderLayers(); this.renderer.request(); }
+        refreshAll() { this.renderLevels(); this.renderTilesets(); this.renderTiles(); this.renderFurnitureCategories(); this.renderFurniture(); this.selectionChanged(); this.renderFilterState(); this.renderer.request(); }
+        mapChanged() { this.renderLevels(); this.renderer.request(); }
         assetsChanged() { this.classificationCache.clear(); this.renderer.assetsChanged(); this.renderTilesets(); this.renderTiles(); this.renderFurniture(); this.selectionChanged(); this.renderer.request(); }
         renderFilterState() { const box = el('viewFilters'); [...box.querySelectorAll('.viewFilter')].forEach(b => b.classList.toggle('off', this.filters.get(b.textContent) === false)); }
-        setZLevel(z) { this.map.currentLevel = z; this.zLevel.value = String(z); this.stageBadge.textContent = `Z ${z} · perspective`; this.renderLayers(); this.editor.refreshPlacementGhost(); this.updateZButtons(); this.renderer.request(); }
+        setZLevel(z) { this.map.currentLevel = z; this.zLevel.value = String(z); this.stageBadge.textContent = `Z ${z} · perspective`; this.editor.refreshPlacementGhost(); this.updateZButtons(); this.renderer.request(); }
         stepZ(delta) { const levels = this.map.levels().sort((a, b) => a - b), i = levels.indexOf(this.map.currentLevel), j = Math.max(0, Math.min(levels.length - 1, (i < 0 ? 0 : i) + delta)); if (levels[j] !== undefined)
             this.setZLevel(levels[j]); }
         updateZButtons() { const levels = this.map.levels().sort((a, b) => a - b), i = levels.indexOf(this.map.currentLevel); el('zDownBtn').disabled = i <= 0; el('zUpBtn').disabled = i < 0 || i >= levels.length - 1; }
@@ -1843,53 +1824,6 @@ var PZODT;
             o.textContent = `Z ${z}`;
             this.zLevel.appendChild(o);
         } this.zLevel.value = String(this.map.currentLevel); this.stageBadge.textContent = `Z ${this.map.currentLevel} · perspective`; this.updateZButtons(); }
-        renderLayers() {
-            this.layersList.replaceChildren();
-            const base = document.createElement('div');
-            base.className = 'layer' + (this.map.activeTarget === 'base' ? ' active' : '');
-            const eye = this.icon(this.map.baseVisible ? '●' : '○', 'Visibility', () => { this.map.baseVisible = !this.map.baseVisible; this.renderLayers(); this.renderer.request(); });
-            const lock = this.icon(this.map.baseLocked ? '🔒' : '🔓', 'Lock / unlock Imported Base', () => { this.map.baseLocked = !this.map.baseLocked; this.renderLayers(); });
-            const name = document.createElement('div');
-            name.className = 'lname';
-            name.textContent = 'Imported Base';
-            name.title = 'Imported game objects. Unlock to erase or edit the imported stack.';
-            name.onclick = () => { this.map.activeTarget = 'base'; this.renderLayers(); };
-            const op = document.createElement('input');
-            op.type = 'range';
-            op.min = '0';
-            op.max = '1';
-            op.step = '.05';
-            op.value = String(this.map.baseOpacity);
-            op.oninput = () => { this.map.baseOpacity = +op.value; this.renderer.request(); };
-            base.append(eye, lock, name, op, document.createElement('span'), document.createElement('span'), document.createElement('span'));
-            this.layersList.appendChild(base);
-            const arr = this.map.layers.map((l, i) => ({ l, i })).filter(x => x.l.level === this.map.currentLevel).sort((a, b) => b.i - a.i);
-            for (const { l } of arr) {
-                const row = document.createElement('div');
-                row.className = 'layer' + (this.map.activeTarget === l.id ? ' active' : '');
-                const e = this.icon(l.visible ? '●' : '○', 'Visibility', () => { l.visible = !l.visible; this.renderLayers(); this.renderer.request(); }), k = this.icon(l.locked ? '🔒' : '🔓', 'Lock / unlock', () => { l.locked = !l.locked; this.renderLayers(); }), n = document.createElement('div');
-                n.className = 'lname';
-                n.textContent = l.name;
-                n.title = l.category;
-                n.onclick = () => { this.map.activeTarget = l.id; this.renderLayers(); };
-                const o = document.createElement('input');
-                o.type = 'range';
-                o.min = '0';
-                o.max = '1';
-                o.step = '.05';
-                o.value = String(l.opacity);
-                o.oninput = () => { l.opacity = +o.value; this.renderer.request(); };
-                const up = this.icon('↑', 'Move up', () => { this.map.moveLayer(l.id, 1); this.renderer.invalidateAllGeometry(); this.renderLayers(); this.renderer.request(); }), dn = this.icon('↓', 'Move down', () => { this.map.moveLayer(l.id, -1); this.renderer.invalidateAllGeometry(); this.renderLayers(); this.renderer.request(); }), del = this.icon('×', 'Delete', () => { if (confirm(`Delete ${l.name}?`)) {
-                    this.map.deleteLayer(l.id);
-                    this.renderer.invalidateAllGeometry();
-                    this.renderLayers();
-                    this.renderer.request();
-                } });
-                row.append(e, k, n, o, up, dn, del);
-                this.layersList.appendChild(row);
-            }
-        }
-        icon(t, title, fn) { const b = document.createElement('button'); b.className = 'iconbtn'; b.textContent = t; b.title = title; b.onclick = fn; return b; }
         renderTilesets() { const old = this.tilesetSelect.value; this.tilesetSelect.replaceChildren(); const all = document.createElement('option'); all.value = ''; all.textContent = 'All tilesets'; this.tilesetSelect.appendChild(all); for (const n of this.assets.tilesetNames()) {
             const o = document.createElement('option');
             o.value = n;
@@ -1940,7 +1874,7 @@ var PZODT;
             const title = document.createElement('b');
             title.textContent = `${h.group.label} · #${h.def.index}`;
             const meta = document.createElement('small');
-            meta.textContent = `${h.def.entries.length} orientations · ${h.available}/${h.total} tiles`;
+            meta.textContent = `${h.def.entries.length} alternative appearance${h.def.entries.length === 1 ? '' : 's'} · ${h.available}/${h.total} tiles`;
             t.append(title, meta);
             d.append(c, t);
             d.onclick = () => { this.selectedFurnitureHit = h; this.editor.selectFurniture(h.def); this.renderFurniture(); };
@@ -1983,11 +1917,16 @@ var PZODT;
                 h = this.catalog.search('', '', 5000).find(x => x.def === d) ?? null;
                 this.selectedFurnitureHit = h;
             }
-            this.selectionLabel.textContent = `${h?.group.label || 'Furniture'} · ${this.editor.furnitureOrient}`;
+            const orientations = this.catalog.orientations(d), appearanceIndex = Math.max(0, orientations.indexOf(this.editor.furnitureOrient));
+            this.selectionLabel.textContent = `${h?.group.label || 'Furniture'} · Appearance ${appearanceIndex + 1}`;
             this.selectionInfo.textContent = `${h?.group.label || 'Furniture'} · #${d.index}\nHeight: H${this.editor.placementHeight}`;
-            for (const o of this.catalog.orientations(d)) {
-                const b = document.createElement('button');
-                b.textContent = o;
+            const appearanceLabel = document.createElement('span');
+            appearanceLabel.className = 'orientationLabel';
+            appearanceLabel.textContent = 'Alternative appearance';
+            this.orientationButtons.appendChild(appearanceLabel);
+            for (let i = 0; i < orientations.length; i++) {
+                const o = orientations[i], b = document.createElement('button');
+                b.textContent = String(i + 1);
                 b.classList.toggle('active', o === this.editor.furnitureOrient);
                 b.onclick = () => { this.editor.furnitureOrient = o; this.selectionChanged(); };
                 this.orientationButtons.appendChild(b);
