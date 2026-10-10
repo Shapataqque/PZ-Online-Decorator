@@ -114,9 +114,15 @@ namespace PZODT {
     private categoryIndex(c:ViewCategory){const i=VIEW_CATEGORIES.indexOf(c);return i<0?VIEW_CATEGORIES.length-1:i;}
     private filterMask(){let mask=0;for(let i=0;i<VIEW_CATEGORIES.length;i++)if(this.categoryVisible(VIEW_CATEGORIES[i]))mask|=(1<<i);return mask;}
     private allFilterMask(){return(1<<VIEW_CATEGORIES.length)-1;}
-    private advanceSurface(current:number,name:string){const i=this.surfaceInfo(name);if(i.isSurfaceOffset)return i.itemHeight>0?Math.max(current,current+i.itemHeight):current;return i.surface>0?Math.max(current,i.surface):current;}
+    private tabletopItem(name:string){const i=this.surfaceInfo(name),n=name.toLowerCase();if(i.isSurfaceOffset||i.isTableTop)return true;return /(television|(^|_)tv(_|$)|radio|computer|monitor|microwave|toaster|kettle|coffee_machine|coffeemaker|lamp|telephone|phone|clock|stereo|speaker|cash_?register|small_?appliance)/.test(n);}
+    private supportHeight(name:string){const i=this.surfaceInfo(name),n=name.toLowerCase();if(this.tabletopItem(name))return 0;const explicit=Math.max(i.surface,i.itemHeight);if(explicit>0)return explicit;
+      if(/(furniture_tables_high|table_high|counter|kitchen|island|workbench|desk|cabinet|dresser|vanity)/.test(n))return 32;
+      if(/(furniture_tables_low|table_low|coffee_table|coffee_?table|side_?table|end_?table|nightstand)/.test(n))return 18;
+      if(/(^|_)table(s)?(_|$)/.test(n)||n.includes('furniture_table'))return 26;
+      return 0;}
+    private advanceSurface(current:number,name:string){const h=this.supportHeight(name);return h>0?Math.max(current,h):current;}
     private supportSurfaceAt(z:number,x:number,y:number){const m=this.map();let h=0;for(const n of m.stack(z,x,y))h=this.advanceSurface(h,n);for(const l of m.layers){if(l.level!==z)continue;const n=l.get(x,y,m.width);if(n)h=this.advanceSurface(h,n);}return h;}
-    private liftFor(name:string,support:number){const i=this.surfaceInfo(name);return i.isSurfaceOffset?Math.max(0,support-i.surface):0;}
+    private liftFor(name:string,support:number){return this.tabletopItem(name)&&support>0?support:0;}
 
     private buildChunk(z:number,cx:number,cy:number,key:string):ChunkCache{
       const m=this.map(),old=this.chunkCache.get(key);if(old?.buffer)this.gl.deleteBuffer(old.buffer);if(old)this.cachedBatchCount-=old.segments.length;
