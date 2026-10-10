@@ -1479,7 +1479,7 @@ var PZODT;
                 this.onStatus('Nothing visible to pick on this cell.');
                 return;
             }
-            if (items.length === 1) {
+            if (items.length === 1 && !this.catalog.matchesTile(items[0].name, true).length) {
                 this.applyPickCandidate(items[0]);
                 return;
             }
