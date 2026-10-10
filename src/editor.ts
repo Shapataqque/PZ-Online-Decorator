@@ -9,7 +9,7 @@ namespace PZODT {
     selectedAsset:string|null=null;
     selectedFurniture:FurnitureDef|null=null;
     furnitureOrient='N';
-    placementMode:PlacementMode='ground';
+    placementMode:PlacementMode='auto';
     isDown=false;
     pan=false;
     last={x:0,y:0};
@@ -33,8 +33,8 @@ namespace PZODT {
 
     setTool(t:ToolName){this.tool=t;this.refreshPlacementGhost();this.onSelection();}
     setPlacementMode(mode:PlacementMode){this.placementMode=mode;this.refreshPlacementGhost();this.onSelection();}
-    selectAsset(n:string){this.selectedAsset=n;this.selectedFurniture=null;this.tool='pencil';this.placementMode='ground';this.refreshPlacementGhost();this.onSelection();}
-    selectFurniture(d:FurnitureDef){this.selectedFurniture=d;this.selectedAsset=null;this.tool='furniture';this.placementMode='ground';this.furnitureOrient=d.entries.find(e=>e.orient==='N')?.orient??d.entries[0]?.orient??'N';this.refreshPlacementGhost();this.onSelection();}
+    selectAsset(n:string){this.selectedAsset=n;this.selectedFurniture=null;this.tool='pencil';this.placementMode='auto';this.refreshPlacementGhost();this.onSelection();}
+    selectFurniture(d:FurnitureDef){this.selectedFurniture=d;this.selectedAsset=null;this.tool='furniture';this.placementMode='auto';this.furnitureOrient=d.entries.find(e=>e.orient==='N')?.orient??d.entries[0]?.orient??'N';this.refreshPlacementGhost();this.onSelection();}
     rotateFurniture(delta=1){const d=this.selectedFurniture;if(!d)return;const a=d.entries.map(e=>e.orient),i=Math.max(0,a.indexOf(this.furnitureOrient));this.furnitureOrient=a[(i+delta+a.length)%a.length];this.refreshPlacementGhost();this.onSelection();}
     refreshPlacementGhost(){const p=this.renderer.hover;if(p)this.updatePlacementGhost(p);else this.renderer.clearPlacementGhost();}
 
@@ -94,8 +94,8 @@ namespace PZODT {
       if(items.length===1&&!this.catalog.matchesTile(items[0].name,true).length){this.applyPickCandidate(items[0]);return;}
       this.onPickCandidates(items,p);
     }
-    applyPickCandidate(c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedAsset=c.name;this.selectedFurniture=null;this.tool='pencil';this.placementMode=c.placementMode??'ground';this.refreshPlacementGhost();this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`);this.onSelection();}
-    applyPickFurniture(match:FurnitureTileMatch,c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedFurniture=match.def;this.selectedAsset=null;this.tool='furniture';this.placementMode='ground';this.furnitureOrient=match.orient;this.refreshPlacementGhost();this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}).`);this.onSelection();}
+    applyPickCandidate(c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedAsset=c.name;this.selectedFurniture=null;this.tool='pencil';this.placementMode='auto';this.refreshPlacementGhost();this.onStatus(`Picked ${c.name} from ${c.sourceLabel}.`);this.onSelection();}
+    applyPickFurniture(match:FurnitureTileMatch,c:PickCandidate){const m=this.map();if(c.targetId==='base'||m.layers.some(l=>l.id===c.targetId))m.activeTarget=c.targetId;this.selectedFurniture=match.def;this.selectedAsset=null;this.tool='furniture';this.placementMode='auto';this.furnitureOrient=match.orient;this.refreshPlacementGhost();this.onStatus(`Picked multi-tile furniture ${match.group.label} · #${match.def.index} (${match.orient}).`);this.onSelection();}
 
     private placeFurniture(p:{x:number;y:number}){
       const d=this.selectedFurniture,e=d?this.catalog.entry(d,this.furnitureOrient):null;if(!d||!e)return;const m=this.map(),cells:Array<{x:number;y:number;name:string}>=[];let missing=0,outside=0;
