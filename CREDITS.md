@@ -1,6 +1,6 @@
 # Credits
 
-I built PZ Online Decoration Tool on top of years of work by people in the Project Zomboid and open-source mapping communities. I want those contributions to stay visible in this repository and in forks of it.
+PZ Online Decoration Tool builds on years of work from the Project Zomboid and open-source mapping communities. The upstream contributions below are retained for attribution and license provenance.
 
 ## Project Zomboid mapping tools
 
@@ -11,7 +11,7 @@ I built PZ Online Decoration Tool on top of years of work by people in the Proje
 
 ## Tiled
 
-TileZed has roots in the open-source Tiled map editor ecosystem. I also want to preserve the upstream credit given to:
+TileZed has roots in the open-source Tiled map editor ecosystem. Upstream Tiled credits include:
 
 - **Thorbjørn Lindeijer** — original Tiled developer and maintainer.
 - **Andrew G. Crowell**
@@ -30,7 +30,6 @@ The upstream Tiled authorship records also credit translators including Alexande
 
 - **The Indie Stone** — creators of Project Zomboid and the game ecosystem this tool is built around. This repository is unofficial and is not affiliated with or endorsed by The Indie Stone.
 - The broader **Project Zomboid community**, especially mapping, modding, base-building, documentation, and tooling communities, for the workflows and ideas that made this project useful to build.
-- **pzmap.org** — a useful community reference for browsing world coordinates and understanding how players inspect map locations and texture information. No pzmap.org code or assets are bundled here.
 
 ## Source and license provenance
 
@@ -38,4 +37,4 @@ The browser implementation is source-derived from and behavior-compatible with p
 
 No Project Zomboid tiles, textures, map binaries, or other game assets are distributed with PZ Online Decoration Tool. Users select their own local game files at runtime.
 
-If you fork or redistribute this project, please keep this file and the PZ Online Decoration Tool attribution so the upstream work remains visible too.
+Keep this file and the applicable license notices when redistributing the project.

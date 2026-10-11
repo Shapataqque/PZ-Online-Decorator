@@ -4,28 +4,47 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'; media-src 'none'; worker-src 'none'">
-  <title>PZ Online Decoration Tool 1.0.0</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src https://tally.so; media-src 'none'; worker-src 'none';">
+  <title>Project Zomboid Base Planner &amp; Decoration Tool | PZ Decorator</title>
+  <meta name="description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://pzdecorator.org/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="PZ Decorator">
+  <meta property="og:title" content="Project Zomboid Base Planner &amp; Decoration Tool">
+  <meta property="og:description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
+  <meta property="og:url" content="https://pzdecorator.org/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Project Zomboid Base Planner &amp; Decoration Tool">
+  <meta name="twitter:description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="mediaNeeded">
+<div data-nosnippet>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><span>1.0.0</span></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.2.0</button></div>
   <button id="newMapBtn">New</button>
-  <button id="loadLocationBtn" class="primary">Load PZ Location</button>
+  <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
+  <button id="loadLocationBtn" disabled>Load World Location</button>
   <span class="sep"></span>
   <button id="openJsonBtn">Open .json file</button>
   <button id="saveJsonBtn">Save as .json</button>
   <span class="grow"></span>
   <button id="feedbackBtn">Feedback</button>
   <label class="nightModeSwitch" title="Toggle night mode"><span>Night</span><input id="nightModeToggle" type="checkbox" checked aria-label="Night mode"><span class="switchTrack" aria-hidden="true"><span class="switchKnob"></span></span></label>
-  <button id="supportBtn" class="hidden">Support</button>
+  <button id="supportBtn" class="hidden">Buy Me a Coffee</button>
   <button id="settingsBtn">Settings</button>
   <button id="undoBtn">Undo</button>
   <button id="redoBtn">Redo</button>
 </header>
+</div>
 
-<div class="toolrow" id="toolrow">
+<div id="mediaNotice" class="mediaNotice" role="status" data-nosnippet>
+  <span id="mediaNoticeText">Start by selecting your Project Zomboid media folder: steamapps/common/ProjectZomboid/media. Select the media folder itself, not the ProjectZomboid folder. Your game files are read locally in the browser and are never uploaded.</span>
+  <button id="mediaNoticeChooseBtn" type="button">Choose Media Folder…</button>
+</div>
+
+<div class="toolrow" id="toolrow" data-nosnippet>
   <button data-tool="pencil" class="active">1 Pencil</button>
   <button data-tool="eraser">2 Erase</button>
   <button data-tool="rect">3 Rectangle</button>
@@ -36,18 +55,18 @@
   <span id="selectionLabel">No tile selected</span>
 </div>
 
-<main class="layout">
+<main class="layout" data-nosnippet>
   <aside class="left panel" id="leftPanel">
     <div class="panelHeader"><span>Assets</span><button id="collapseLeftBtn" class="panelToggle">&lt;&lt;</button></div>
-    <div class="tabs"><button class="tab active" data-tab="tiles">Tiles</button><button class="tab" id="furnitureTabButton" data-tab="furniture">Furniture</button></div>
-    <section id="tilesTab" class="tabbody active">
-      <input id="tileSearch" class="search" placeholder="Search tile or tileset…" autocomplete="off">
+    <div class="tabs"><button class="tab active" id="furnitureTabButton" data-tab="furniture">Furniture</button><button class="tab" data-tab="tiles">Tiles</button></div>
+    <section id="tilesTab" class="tabbody">
+      <input id="tileSearch" class="search" placeholder="Search tile name, metadata, property…" autocomplete="off">
       <select id="tilesetSelect"><option value="">All tilesets</option></select>
-      <div id="assetSummary" class="hint">Load a PZ location to index the media library.</div>
+      <div id="assetSummary" class="hint">Choose the Project Zomboid media folder to index the media library.</div>
       <div id="tileList" class="tilelist"></div>
     </section>
-    <section id="furnitureTab" class="tabbody">
-      <input id="furnitureSearch" class="search" placeholder="Search beds, tables, group, tile…" autocomplete="off">
+    <section id="furnitureTab" class="tabbody active">
+      <input id="furnitureSearch" class="search" placeholder="Search object name, metadata, category, tile…" autocomplete="off">
       <select id="furnitureCategory"><option value="">All furniture categories</option></select>
       <label class="check"><input id="availableOnly" type="checkbox" checked> only objects with all required tiles loaded</label>
       <div id="furnitureList" class="furniturelist"></div>
@@ -68,29 +87,68 @@
     <canvas id="previewCanvas" width="260" height="180"></canvas>
     <div id="selectionInfo" class="selectionInfo">Nothing selected.</div>
     <div id="orientationButtons" class="orientations"></div>
-    <h3>Map</h3>
-    <div class="row"><button id="centerBtn">Center</button></div>
-    <div class="row"><label>Z level<select id="zLevel"></select></label><button id="addLevelBtn">+ Level</button></div>
+    <div id="placementHeightControls" class="placementHeights"></div>
+    <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
     <h3>View filters</h3>
     <div id="viewFilters" class="viewFilters"></div>
-    <div class="hint">Display-only filters. Imported object stacks are not rewritten.</div>
-    <h3>Layers</h3>
-    <div class="row"><button id="addLayerBtn">+ Layer</button></div>
-    <div id="layersList" class="layers"></div>
   </aside>
 </main>
-<footer><span id="status">Ready.</span><span id="coords">x — y —</span></footer>
+<footer data-nosnippet><span id="status">Ready.</span><span id="coords">x — y —</span></footer>
+<div data-nosnippet>
+<dialog id="versionHistoryDialog" class="dialog">
+  <div class="dialogTitle">
+    <div>
+      <b>Changelog</b>
+      <small>PZ Online Decoration Tool changes</small>
+    </div>
+    <button id="versionHistoryCloseBtn" type="button">×</button>
+  </div>
 
+  <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.2.0</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>Faster local media indexing and metadata-aware Furniture / Tiles search.</li>
+        <li>Furniture is the default asset tab with numbered alternative appearances.</li>
+        <li>Unified scene editing with editable imported objects and no user-facing layer controls.</li>
+        <li>Picker supports stacked and multi-tile objects; Erase can remove selected stacked objects.</li>
+        <li>Explicit H-code placement heights, keyboard height controls, placement previews, and Esc to clear selection.</li>
+        <li>Improved Z-level navigation and adjacent-level grid references.</li>
+        <li>Refined View Filters and imported tree rendering.</li>
+        <li>Stricter validation for local media and JSON project files.</li>
+        <li>Updated browser security policy and sandboxed, on-demand feedback loading.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h4>1.0.0</h4>
+      <small>10 October 2026</small>
+      <ul>
+        <li>First public release.</li>
+        <li>Project Zomboid location import.</li>
+        <li>Furniture and tile catalog.</li>
+        <li>Multi-Z-level editing.</li>
+        <li>View filters and editable layers.</li>
+        <li>Graphics quality settings and performance optimizations.</li>
+        <li>Dark and light themes.</li>
+        <li>Feedback integration.</li>
+      </ul>
+    </section>
+
+  </div>
+</dialog>  
 <dialog id="settingsDialog" class="dialog">
   <form method="dialog">
-    <div class="dialogTitle"><div><b>Settings</b><small>Display and help</small></div><button id="settingsCloseBtn" type="button">×</button></div>
+    <div class="dialogTitle"><div><b>Settings</b><small>Display</small></div><button id="settingsCloseBtn" type="button">×</button></div>
     <div class="dialogBody">
       <section><h4>Graphics</h4>
         <label>Quality<select id="graphicsQuality"><option value="low">Low — lower render and sprite texture resolution</option><option value="medium">Medium — balanced</option><option value="high">High — full resolution</option></select></label>
         <div class="hint">Low reduces canvas and GPU sprite-texture resolution for better performance on large imported buildings.</div>
         <label class="check"><input id="performanceStatsToggle" type="checkbox"> Show Performance Stats</label>
       </section>
-      <section><h4>Help</h4><div class="row"><button id="startTutorialBtn" type="button">Start tutorial</button><button id="creditsBtn" type="button">Credits</button></div></section>
+      <section><h4>Credits</h4><div class="row"><button id="creditsBtn" type="button">Credits</button></div></section>
     </div>
     <div class="dialogActions"><button id="settingsDoneBtn" class="primary" type="button">Done</button></div>
   </form>
@@ -113,55 +171,76 @@
 
 <dialog id="loadDialog" class="dialog importDialog">
   <form method="dialog">
-    <div class="dialogTitle"><div><b>Load PZ Location</b></div><button id="loadCancelBtn" type="button">×</button></div>
+    <div class="dialogTitle"><div><b>Load World Location</b><small>Load an existing building, area, or map cell from the indexed media folder.</small></div><button id="loadCancelBtn" type="button">×</button></div>
     <div class="dialogBody">
-      <section><h4>1. Project Zomboid media folder</h4>
-        <button id="chooseMediaBtn" type="button">Choose media Folder…</button>
-        <div class="hint">Select <b>...\ProjectZomboid\media</b>. Maps, .lotpack, .pack textures, PNG tilesheets and .tiles object definitions are read locally from this folder.</div>
-        <div id="mediaInfo" class="hint">No media folder selected.</div>
-        <label>Map dataset<select id="datasetSelect"><option value="">Select media folder first</option></select></label>
+      <section><h4>1. Location</h4>
+        <label>Map dataset<select id="datasetSelect"><option value="">Choose media folder first</option></select></label>
+        <div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div>
       </section>
-      <section><h4>2. Location</h4><div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div></section>
-      <section><h4>3. Load</h4>
-        <label>Mode<select id="loadMode"><option value="building">Building at coordinate</option><option value="area">Area around coordinate</option><option value="cell">Entire map cell</option></select></label>
-        <div id="marginRow"><label>Extra margin<input id="marginInput" type="number" min="0" max="20" value="2"></label></div>
-        <div id="areaRow" class="coords2 hidden"><label>Area width<input id="areaW" type="number" min="1" max="300" value="48"></label><label>Area height<input id="areaH" type="number" min="1" max="300" value="48"></label></div>
+      <section><h4>2. Load</h4>
+        <label>Mode<select id="loadMode"><option value="area" selected>Area around coordinate</option><option value="building">Building at coordinate</option><option value="cell">Entire map cell</option></select></label>
+        <div id="marginRow" class="hidden"><label>Extra margin<input id="marginInput" type="number" min="0" max="20" value="2"></label></div>
+        <div id="areaRow" class="coords2"><label>Area width<input id="areaW" type="number" min="1" max="300" value="48"></label><label>Area height<input id="areaH" type="number" min="1" max="300" value="48"></label></div>
       </section>
-      <div id="loadStatus" class="importStatus">Ready.</div>
+      <div id="loadStatus" class="importStatus">Media folder is not ready yet.</div>
     </div>
-    <div class="dialogActions"><button id="indexMediaBtn" type="button" disabled>Index media only</button><button id="loadBtn" type="button" class="primary" disabled>Load Location</button></div>
+    <div class="dialogActions"><button id="loadBtn" type="button" class="primary" disabled>Load Location</button></div>
   </form>
+</dialog>
+
+<dialog id="pickerDialog" class="dialog pickerDialog">
+  <div class="dialogTitle">
+    <div><b>Choose object</b><small>More than one object is stacked on this cell.</small></div>
+    <button id="pickerCloseBtn" type="button">×</button>
+  </div>
+  <div class="dialogBody">
+    <div id="pickerInfo" class="hint"></div>
+    <div id="pickerChoices" class="pickerChoices"></div>
+  </div>
+  <div class="dialogActions"><button id="pickerCancelBtn" type="button">Cancel</button></div>
+</dialog>
+
+<dialog id="eraseDialog" class="dialog eraseDialog">
+  <div class="dialogTitle">
+    <div><b>Erase objects</b><small>Select exactly which objects on this cell should be removed.</small></div>
+    <button id="eraseCloseBtn" type="button">×</button>
+  </div>
+  <div class="dialogBody">
+    <div id="eraseInfo" class="hint"></div>
+    <div id="eraseChoices" class="eraseChoices"></div>
+  </div>
+  <div class="dialogActions"><button id="eraseCancelBtn" type="button">Cancel</button><button id="eraseSelectedBtn" type="button" class="primary" disabled>Erase selected</button></div>
 </dialog>
 
 <dialog id="feedbackDialog" class="dialog feedbackDialog">
-  <form method="dialog">
-    <div class="dialogTitle"><div><b>Feedback</b><small>Bug report, feature request, or general feedback</small></div><button id="feedbackCloseBtn" type="button">×</button></div>
-    <div class="dialogBody">
-      <label>Type<select id="feedbackType"><option value="Bug report">Bug report</option><option value="Feature request">Feature request</option><option value="General feedback">General feedback</option></select></label>
-      <label>Message<textarea id="feedbackMessage" maxlength="6000" rows="8" placeholder="Describe what happened or what you would like to see."></textarea></label>
-      <label>Contact (optional)<input id="feedbackContact" maxlength="200" autocomplete="email" placeholder="Email or username"></label>
-      <label class="check"><input id="feedbackTechnical" type="checkbox" checked> Include basic technical information (app version, browser, graphics quality)</label>
-      <div class="hint">Local file paths, map coordinates, and project contents are never included automatically.</div>
-      <div id="feedbackStatus" class="importStatus">Your feedback stays in this browser until you submit or copy it.</div>
+  <div class="dialogTitle">
+    <div>
+      <b>Feedback</b>
+      <small>Bug report, feature request, or general feedback</small>
     </div>
-    <div class="dialogActions"><button id="feedbackCopyBtn" type="button">Copy</button><button id="feedbackSendBtn" class="primary" type="button">Send feedback</button></div>
-  </form>
-</dialog>
-
-<div id="tutorialOverlay" class="tutorialOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
-  <div id="tutorialSpotlight" class="tutorialSpotlight"></div>
-  <div class="tutorialCard">
-    <div class="tutorialProgress" id="tutorialProgress">1 / 9</div>
-    <h2 id="tutorialTitle">Welcome</h2>
-    <p id="tutorialText"></p>
-    <label class="tutorialRemember"><input id="tutorialRemember" type="checkbox" checked> Don't show this tutorial on startup again</label>
-    <div class="tutorialActions"><button id="tutorialSkipBtn" type="button">Skip tutorial</button><span class="grow"></span><button id="tutorialBackBtn" type="button">Back</button><button id="tutorialNextBtn" class="primary" type="button">Continue</button></div>
+    <button id="feedbackCloseBtn" type="button">×</button>
   </div>
+
+  <iframe
+    id="feedbackFrame"
+    data-src="https://tally.so/embed/lbPPlB?alignLeft=1&hideTitle=1&transparentBackground=1"
+    width="100%"
+    height="650"
+    frameborder="0"
+    marginheight="0"
+    marginwidth="0"
+    title="PZ Online Decoration Tool Feedback"
+    sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
+    referrerpolicy="no-referrer"
+    loading="lazy"
+    style="display:block;border:0;"
+  ></iframe>
+</dialog>
 </div>
 
 <input id="mediaInput" type="file" webkitdirectory multiple hidden>
 <input id="jsonInput" type="file" accept=".json,application/json" hidden>
 <script src="config/release-config.js"></script>
-<script src="dist/app.js"></script>
+<script src="dist/app.js?v=20261011-2"></script>
 </body>
 </html>

@@ -1,7 +1,16 @@
 "use strict";
 var PZODT;
 (function (PZODT) {
-    PZODT.VIEW_CATEGORIES = ['Floor', 'Wall', 'Doors & Windows', 'Furniture', 'Roof', 'Decor / Overlay', 'Exterior', 'Other'];
+    const SEARCH_SYNONYMS = {
+        oil: ['fuel', 'gas', 'petrol'], fuel: ['oil', 'gas', 'petrol'], gas: ['fuel', 'oil', 'petrol'], petrol: ['fuel', 'gas', 'oil'],
+        couch: ['sofa'], sofa: ['couch'], fridge: ['refrigerator'], refrigerator: ['fridge'], tv: ['television'], television: ['tv'],
+        trash: ['garbage', 'bin'], garbage: ['trash', 'bin'], bin: ['trash', 'garbage']
+    };
+    function normalizeSearchText(value) { return String(value ?? '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+    PZODT.normalizeSearchText = normalizeSearchText;
+    function searchMatches(text, query) { const hay = normalizeSearchText(text), tokens = normalizeSearchText(query).split(' ').filter(Boolean); return tokens.every(t => hay.includes(t) || (SEARCH_SYNONYMS[t] ?? []).some(s => hay.includes(s))); }
+    PZODT.searchMatches = searchMatches;
+    PZODT.VIEW_CATEGORIES = ['Floor', 'Wall', 'Doors & Windows', 'Furniture', 'Roof', 'Decor / Overlay', 'Roads & Ground', 'Vegetation', 'Fences & Railings', 'Exterior', 'Other'];
 })(PZODT || (PZODT = {}));
 var PZODT;
 (function (PZODT) {
@@ -14,6 +23,7 @@ var PZODT;
             this.opacity = 1;
             this.locked = false;
             this.cells = new Map();
+            this.placementHeights = new Map();
             this.name = name;
             this.level = level;
             this.category = category;
@@ -21,8 +31,15 @@ var PZODT;
         get(x, y, w) { return this.cells.get(y * w + x) ?? null; }
         set(x, y, w, v) { const k = y * w + x; if (v)
             this.cells.set(k, v);
+        else {
+            this.cells.delete(k);
+            this.placementHeights.delete(k);
+        } }
+        placementHeight(x, y, w) { return this.placementHeights.get(y * w + x) ?? 0; }
+        setPlacementHeight(x, y, w, height = 0) { const k = y * w + x, h = Math.max(0, Math.min(512, Math.round(Number(height) || 0))); if (h === 0)
+            this.placementHeights.delete(k);
         else
-            this.cells.delete(k); }
+            this.placementHeights.set(k, h); }
     }
     PZODT.UserLayerModel = UserLayerModel;
     class PZMapModel {
@@ -62,44 +79,86 @@ var PZODT;
         maxLevel() { return Math.max(0, ...this.levels()); }
         minLevel() { return Math.min(0, ...this.levels()); }
         activeLayer() { return this.layers.find(l => l.id === this.activeTarget) ?? null; }
-        addLayer(name, level = this.currentLevel, category = 'Custom') { const l = new UserLayerModel(name, level, category); this.layers.push(l); this.activeTarget = l.id; return l; }
+        addLayer(name, level = this.currentLevel, category = 'Custom') { const l = new UserLayerModel(name, level, category); this.layers.push(l); return l; }
         deleteLayer(id) { this.layers = this.layers.filter(l => l.id !== id); if (this.activeTarget === id)
             this.activeTarget = 'base'; }
         moveLayer(id, d) { const i = this.layers.findIndex(l => l.id === id); if (i < 0)
             return; const j = Math.max(0, Math.min(this.layers.length - 1, i + d)); const [x] = this.layers.splice(i, 1); this.layers.splice(j, 0, x); }
-        findStackLayer(category, level, cells, create = true) { const candidates = this.layers.filter(l => l.level === level && l.category === category && !l.locked); for (const l of candidates)
+        findStackLayer(category, level, cells, create = true, preferTop = false) { const candidates = this.layers.filter(l => l.level === level && l.category === category), ordered = preferTop ? [...candidates].reverse() : candidates; for (const l of ordered)
             if (cells.every(c => !l.get(c.x, c.y, this.width)))
                 return l; if (!create)
             return null; let n = 1; let name = category; while (this.layers.some(l => l.level === level && l.name === name)) {
             n++;
             name = `${category} ${n}`;
         } return this.addLayer(name, level, category); }
-        toJSON() { return { format: 'PZOnlineDecorationTool', version: 3, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: this.baseLocked, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells] })) }; }
-        static fromJSON(o) { const m = new PZMapModel(o.width || 64, o.height || 64); m.tileWidth = o.tileWidth || 64; m.tileHeight = o.tileHeight || 32; m.cellsPerLevelY = o.cellsPerLevelY || 3; m.currentLevel = o.currentLevel || 0; m.properties = o.properties || {}; m.baseVisible = o.baseVisible !== false; m.baseOpacity = Number.isFinite(o.baseOpacity) ? o.baseOpacity : 1; m.baseLocked = o.baseLocked === true; m.activeTarget = o.activeTarget || 'base'; m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])])); m.layers = []; for (const q of o.layers || []) {
-            const imported = /^(Imported Base|Imported ·|Base ·)/.test(q.name || '');
-            if (imported && !o.baseStacks) {
-                const z = q.level || 0;
-                let lev = m.baseStacks.get(z);
-                if (!lev) {
-                    lev = new Map();
-                    m.baseStacks.set(z, lev);
+        toJSON() { return { format: 'PZOnlineDecorationTool', version: 4, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: this.baseLocked, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementHeights: [...l.placementHeights] })) }; }
+        static fromJSON(o) {
+            const width = Math.max(1, Math.min(600, Math.trunc(Number(o.width) || 64)));
+            const height = Math.max(1, Math.min(600, Math.trunc(Number(o.height) || 64)));
+            const m = new PZMapModel(width, height);
+            m.tileWidth = Math.max(16, Math.min(512, Number(o.tileWidth) || 64));
+            m.tileHeight = Math.max(8, Math.min(256, Number(o.tileHeight) || 32));
+            m.cellsPerLevelY = Math.max(0, Math.min(64, Number(o.cellsPerLevelY) || 3));
+            m.currentLevel = Math.max(-64, Math.min(64, Math.trunc(Number(o.currentLevel) || 0)));
+            const props = Object.create(null);
+            if (o.properties && typeof o.properties === 'object' && !Array.isArray(o.properties)) {
+                for (const [k, v] of Object.entries(o.properties)) {
+                    if (typeof v === 'string' && k.length <= 128 && v.length <= 2048 && !['__proto__', 'prototype', 'constructor'].includes(k))
+                        props[k] = v;
                 }
-                for (const [k, v] of q.cells || []) {
-                    const stack = lev.get(+k) || [];
-                    stack.push(v);
-                    lev.set(+k, stack);
-                }
-                continue;
             }
-            const l = new UserLayerModel(q.name || 'Layer', q.level || 0, q.category || 'Custom');
-            l.id = q.id || l.id;
-            l.visible = q.visible !== false;
-            l.opacity = Number.isFinite(q.opacity) ? q.opacity : 1;
-            l.locked = q.locked === true;
-            l.cells = new Map(q.cells || []);
-            m.layers.push(l);
-        } if (m.activeTarget !== 'base' && !m.layers.some(l => l.id === m.activeTarget))
-            m.activeTarget = 'base'; return m; }
+            m.properties = props;
+            m.baseVisible = true;
+            m.baseOpacity = 1;
+            m.baseLocked = false;
+            m.activeTarget = 'base';
+            m.baseStacks = new Map((o.baseStacks || []).map((q) => [+q[0], new Map(q[1] || [])]));
+            m.layers = [];
+            const ids = new Set();
+            for (const q of o.layers || []) {
+                const name = typeof q.name === 'string' && q.name ? q.name.slice(0, 128) : 'Layer';
+                const imported = /^(Imported Base|Imported ·|Base ·)/.test(name);
+                if (imported && !o.baseStacks) {
+                    const z = Math.max(-64, Math.min(64, Math.trunc(Number(q.level) || 0)));
+                    let lev = m.baseStacks.get(z);
+                    if (!lev) {
+                        lev = new Map();
+                        m.baseStacks.set(z, lev);
+                    }
+                    for (const [k, v] of q.cells || []) {
+                        const stack = lev.get(+k) || [];
+                        stack.push(v);
+                        lev.set(+k, stack);
+                    }
+                    continue;
+                }
+                const level = Math.max(-64, Math.min(64, Math.trunc(Number(q.level) || 0)));
+                const category = PZODT.VIEW_CATEGORIES.includes(q.category) ? q.category : 'Custom';
+                const l = new UserLayerModel(name, level, category);
+                let id = typeof q.id === 'string' && q.id.length <= 128 ? q.id : l.id;
+                if (ids.has(id))
+                    id = l.id;
+                ids.add(id);
+                l.id = id;
+                l.visible = true;
+                l.opacity = 1;
+                l.locked = false;
+                l.cells = new Map(q.cells || []);
+                const heights = Array.isArray(q.placementHeights) ? q.placementHeights : [];
+                l.placementHeights = new Map(heights.filter((x) => x && x.length >= 2 && Number.isInteger(+x[0]) && Number.isFinite(+x[1])).map((x) => [+x[0], Math.max(0, Math.min(512, Math.round(+x[1])))]));
+                if (!heights.length && Array.isArray(q.placementModes)) {
+                    for (const x of q.placementModes) {
+                        if (!x || x.length < 2)
+                            continue;
+                        const legacy = x[1], h = legacy === 'ontable' ? 32 : legacy === 'surface' ? 16 : 0;
+                        if (h)
+                            l.placementHeights.set(+x[0], h);
+                    }
+                }
+                m.layers.push(l);
+            }
+            return m;
+        }
     }
     PZODT.PZMapModel = PZMapModel;
     class History {
@@ -116,8 +175,10 @@ var PZODT;
                 map.setStack(ch.z, ch.x, ch.y, reverse ? ch.before : ch.after);
             else {
                 const l = map.layers.find(x => x.id === ch.layerId);
-                if (l)
+                if (l) {
                     l.set(ch.x, ch.y, map.width, reverse ? ch.before : ch.after);
+                    l.setPlacementHeight(ch.x, ch.y, map.width, reverse ? (ch.beforeHeight ?? 0) : (ch.afterHeight ?? 0));
+                }
             }
         } }
         undo(map) { const c = this.undoStack.pop(); if (!c)
@@ -129,6 +190,10 @@ var PZODT;
 })(PZODT || (PZODT = {}));
 var PZODT;
 (function (PZODT) {
+    const MAX_PACK_BYTES = 1024 * 1024 * 1024;
+    PZODT.MAX_PNG_BYTES = 256 * 1024 * 1024;
+    const MAX_IMAGE_DIMENSION = 16384;
+    const MAX_IMAGE_PIXELS = 64 * 1024 * 1024;
     class BinReader {
         constructor(buf) {
             this.pos = 0;
@@ -137,7 +202,7 @@ var PZODT;
         }
         i32() { if (this.pos + 4 > this.view.byteLength)
             throw new Error('Truncated file'); const v = this.view.getInt32(this.pos, true); this.pos += 4; return v; }
-        str() { const n = this.i32(); if (n < 0 || n > 1024 * 1024 || this.pos + n > this.bytes.length)
+        str() { const n = this.i32(); if (n < 0 || n > 65536 || this.pos + n > this.bytes.length)
             throw new Error('Invalid string'); const b = this.bytes.subarray(this.pos, this.pos + n); this.pos += n; let s = ''; for (let i = 0; i < b.length; i += 8192)
             s += String.fromCharCode(...b.subarray(i, Math.min(i + 8192, b.length))); return s; }
         slice(n) { if (n < 0 || this.pos + n > this.bytes.length)
@@ -159,53 +224,80 @@ var PZODT;
         eh = 256;
     } return w >= ew * 1.75 || h >= eh * 1.75 ? 2 : 1; }
     PZODT.inferAssetScale = inferAssetScale;
-    async function parsePZPack(file, assets, progress) { const buf = await file.arrayBuffer(), r = new BinReader(buf), u = new Uint8Array(buf); let version = 0, pages = 0; if (u.length >= 4 && u[0] === 80 && u[1] === 90 && u[2] === 80 && u[3] === 75) {
-        r.pos = 4;
-        version = r.i32();
-        pages = r.i32();
-        if (version !== 1)
-            throw new Error(`Unsupported PZPK version ${version}`);
+    function pngSize(bytes) {
+        if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47 || bytes[4] !== 0x0d || bytes[5] !== 0x0a || bytes[6] !== 0x1a || bytes[7] !== 0x0a || bytes[12] !== 0x49 || bytes[13] !== 0x48 || bytes[14] !== 0x44 || bytes[15] !== 0x52)
+            throw new Error('Invalid PNG header');
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), width = view.getUint32(16, false), height = view.getUint32(20, false);
+        if (width < 1 || height < 1 || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION || width * height > MAX_IMAGE_PIXELS)
+            throw new Error('PNG dimensions exceed browser safety limits');
+        return { width, height };
     }
-    else
-        pages = r.i32(); if (pages < 0 || pages > 10000)
-        throw new Error('Invalid pack page count'); let count = 0; for (let p = 0; p < pages; p++) {
-        const pageName = r.str(), n = r.i32();
-        r.i32();
-        if (n < 0 || n > 1000000)
-            throw new Error('Invalid pack texture count');
-        const meta = [];
-        for (let i = 0; i < n; i++)
-            meta.push({ name: r.str(), x: r.i32(), y: r.i32(), w: r.i32(), h: r.i32(), ox: r.i32(), oy: r.i32(), fx: r.i32(), fy: r.i32() });
-        let png;
-        if (version === 0) {
-            const start = r.pos;
-            let end = -1;
-            for (let i = start; i + 3 < u.length; i++) {
-                if (u[i] === 0xef && u[i + 1] === 0xbe && u[i + 2] === 0xad && u[i + 3] === 0xde) {
-                    end = i;
-                    break;
+    PZODT.pngSize = pngSize;
+    async function readPngSize(blob) {
+        if (blob.size < 24 || blob.size > PZODT.MAX_PNG_BYTES)
+            throw new Error('PNG file size is outside supported limits');
+        return pngSize(new Uint8Array(await blob.slice(0, 24).arrayBuffer()));
+    }
+    PZODT.readPngSize = readPngSize;
+    async function parsePZPack(file, assets, progress) {
+        if (file.size < 4 || file.size > MAX_PACK_BYTES)
+            throw new Error('Texture pack size is outside supported limits');
+        const buf = await file.arrayBuffer(), r = new BinReader(buf), u = new Uint8Array(buf);
+        let version = 0, pages = 0;
+        if (u.length >= 4 && u[0] === 80 && u[1] === 90 && u[2] === 80 && u[3] === 75) {
+            r.pos = 4;
+            version = r.i32();
+            pages = r.i32();
+            if (version !== 1)
+                throw new Error(`Unsupported PZPK version ${version}`);
+        }
+        else
+            pages = r.i32();
+        if (pages < 0 || pages > 4096)
+            throw new Error('Invalid pack page count');
+        let count = 0;
+        for (let page = 0; page < pages; page++) {
+            const pageName = r.str(), n = r.i32();
+            r.i32();
+            if (n < 0 || n > 250000)
+                throw new Error('Invalid pack texture count');
+            const meta = [];
+            for (let i = 0; i < n; i++)
+                meta.push({ name: r.str(), x: r.i32(), y: r.i32(), w: r.i32(), h: r.i32(), ox: r.i32(), oy: r.i32(), fx: r.i32(), fy: r.i32() });
+            let png;
+            if (version === 0) {
+                const start = r.pos;
+                let end = -1;
+                for (let i = start; i + 3 < u.length; i++) {
+                    if (u[i] === 0xef && u[i + 1] === 0xbe && u[i + 2] === 0xad && u[i + 3] === 0xde) {
+                        end = i;
+                        break;
+                    }
                 }
+                if (end < 0 || end - start > PZODT.MAX_PNG_BYTES)
+                    throw new Error('Invalid legacy pack image');
+                png = u.slice(start, end);
+                r.pos = end + 4;
             }
-            if (end < 0)
-                throw new Error('Legacy pack terminator missing');
-            png = u.slice(start, end);
-            r.pos = end + 4;
+            else {
+                const len = r.i32();
+                if (len < 24 || len > PZODT.MAX_PNG_BYTES)
+                    throw new Error('Invalid pack image size');
+                png = r.slice(len);
+            }
+            const image = pngSize(png), sid = assets.addImageSource(`${file.name}:${pageName}`, new Blob([png], { type: 'image/png' }), image.width, image.height);
+            for (const m of meta) {
+                if (m.x < 0 || m.y < 0 || m.w <= 0 || m.h <= 0 || m.fx <= 0 || m.fy <= 0 || m.x + m.w > image.width || m.y + m.h > image.height || m.fx > 8192 || m.fy > 8192 || Math.abs(m.ox) > 8192 || Math.abs(m.oy) > 8192)
+                    continue;
+                const p = parseTileName(m.name), scale = inferAssetScale(m.fx, m.fy, p.tilesetName);
+                assets.addAsset({ name: m.name, sourceId: sid, tilesetName: p.tilesetName, tileIndex: p.tileIndex, sx: m.x, sy: m.y, sw: m.w, sh: m.h, frameW: m.fx, frameH: m.fy, offsetX: m.ox, offsetY: m.oy, scale });
+                count++;
+            }
+            if (page % 10 === 0 || page === pages - 1)
+                progress?.(`${file.name}: ${page + 1}/${pages} pages · ${count.toLocaleString()} sprites`);
         }
-        else {
-            const len = r.i32();
-            png = r.slice(len);
-        }
-        const sid = assets.addImageSource(`${file.name}:${pageName}`, new Blob([png], { type: 'image/png' }), 0, 0);
-        for (const m of meta) {
-            if (m.w <= 0 || m.h <= 0 || m.fx <= 0 || m.fy <= 0)
-                continue;
-            const p = parseTileName(m.name), scale = inferAssetScale(m.fx, m.fy, p.tilesetName);
-            assets.addAsset({ name: m.name, sourceId: sid, tilesetName: p.tilesetName, tileIndex: p.tileIndex, sx: m.x, sy: m.y, sw: m.w, sh: m.h, frameW: m.fx, frameH: m.fy, offsetX: m.ox, offsetY: m.oy, scale });
-            count++;
-        }
-        if (p % 10 === 0 || p === pages - 1)
-            progress?.(`${file.name}: ${p + 1}/${pages} pages · ${count.toLocaleString()} sprites`);
-    } return count; }
+        return count;
+    }
     PZODT.parsePZPack = parsePZPack;
 })(PZODT || (PZODT = {}));
 var PZODT;
@@ -216,7 +308,9 @@ var PZODT;
             this.sources = new Map();
             this.sheets = new Map();
             this.byKey = new Map();
+            this.tilesetStats = new Map();
             this.imageBitmaps = new Map();
+            this.legacyTreeFamilies = null;
             this.sourceSeq = 1;
             this.loadedFileKeys = new Set();
             this.onChanged = () => { };
@@ -225,17 +319,28 @@ var PZODT;
         addImageSource(label, blob, w, h) { const id = `src-${this.sourceSeq++}`, objectUrl = URL.createObjectURL(blob); this.sources.set(id, { id, label, width: w, height: h, blob, objectUrl }); return id; }
         tileKey(name) { const p = PZODT.parseTileName(name); return `${p.tilesetName.toLowerCase()}:${p.tileIndex}`; }
         addAsset(a) { const old = this.assets.get(a.name); if (!old || a.scale >= old.scale)
-            this.assets.set(a.name, a); const k = `${a.tilesetName.toLowerCase()}:${a.tileIndex}`, ok = this.byKey.get(k); if (!ok || a.scale >= ok.scale)
-            this.byKey.set(k, a); }
+            this.assets.set(a.name, a); const k = `${a.tilesetName.toLowerCase()}:${a.tileIndex}`, ok = this.byKey.get(k), ts = a.tilesetName.toLowerCase(); if (!ok) {
+            const stat = this.tilesetStats.get(ts) ?? { count: 0, maxScale: 0 };
+            stat.count++;
+            stat.maxScale = Math.max(stat.maxScale, a.scale);
+            this.tilesetStats.set(ts, stat);
+        }
+        else {
+            const stat = this.tilesetStats.get(ts) ?? { count: 1, maxScale: ok.scale };
+            stat.maxScale = Math.max(stat.maxScale, a.scale);
+            this.tilesetStats.set(ts, stat);
+        } if (!ok || a.scale >= ok.scale)
+            this.byKey.set(k, a); this.legacyTreeFamilies = null; }
+        tilesetCoverage(name) { return this.tilesetStats.get(name.toLowerCase()) ?? { count: 0, maxScale: 0 }; }
         asset(name) { return this.assets.get(name) ?? this.byKey.get(this.tileKey(name)) ?? null; }
+        isLegacyTreePlaceholder(name) { return /^vegetation_trees_01_\d+$/i.test(name); }
+        resolveAsset(name, worldX = 0, worldY = 0) { return this.isLegacyTreePlaceholder(name) ? this.legacyTreeAsset(name, worldX, worldY) : this.asset(name); }
         async bitmap(sourceId) { let p = this.imageBitmaps.get(sourceId); if (p)
             return p; const s = this.sources.get(sourceId); if (!s)
-            throw new Error('Missing source'); p = createImageBitmap(s.blob).then(b => { if (!s.width) {
-            s.width = b.width;
-            s.height = b.height;
-        } return b; }); this.imageBitmaps.set(sourceId, p); return p; }
+            throw new Error('Missing source'); if (s.width < 1 || s.height < 1 || s.width > 16384 || s.height > 16384 || s.width * s.height > 64 * 1024 * 1024)
+            throw new Error('Image dimensions exceed browser safety limits'); p = createImageBitmap(s.blob); this.imageBitmaps.set(sourceId, p); return p; }
         clear() { for (const s of this.sources.values())
-            URL.revokeObjectURL(s.objectUrl); this.assets.clear(); this.sources.clear(); this.sheets.clear(); this.byKey.clear(); this.imageBitmaps.clear(); this.loadedFileKeys.clear(); this.onChanged(); }
+            URL.revokeObjectURL(s.objectUrl); this.assets.clear(); this.sources.clear(); this.sheets.clear(); this.byKey.clear(); this.tilesetStats.clear(); this.imageBitmaps.clear(); this.legacyTreeFamilies = null; this.loadedFileKeys.clear(); this.onChanged(); }
         dominantScale() { let a = 0, b = 0, i = 0; for (const x of this.assets.values()) {
             x.scale >= 2 ? b++ : a++;
             if (++i > 5000)
@@ -258,10 +363,9 @@ var PZODT;
             return; const sid = this.addImageSource(sh.path, sh.file, sh.width, sh.height); sh.sourceId = sid; let id = 0; for (let y = 0; y < rows; y++)
             for (let x = 0; x < cols; x++, id++)
                 this.addAsset({ name: `${sh.name}_${String(id).padStart(3, '0')}`, sourceId: sid, tilesetName: sh.name, tileIndex: id, sx: x * fr.w, sy: y * fr.h, sw: fr.w, sh: fr.h, frameW: fr.w, frameH: fr.h, offsetX: 0, offsetY: 0, scale: sh.scale }); sh.indexed = true; }
-        async loadMediaFiles(files, progress) {
-            const fresh = files.filter(f => !this.loadedFileKeys.has(this.fileKey(f)));
-            const pngs = fresh.filter(f => /\.png$/i.test(f.name)), packs = fresh.filter(f => /\.pack$/i.test(f.name));
-            let skipped = files.length - fresh.length;
+        async loadMediaFiles(files, progress, expectedCounts) {
+            const fresh = files.filter(f => !this.loadedFileKeys.has(this.fileKey(f))), pngs = fresh.filter(f => /\.png$/i.test(f.name)), packs = fresh.filter(f => /\.pack$/i.test(f.name));
+            let skipped = files.length - fresh.length, pngSkipped = 0;
             const best = new Map();
             for (const f of pngs) {
                 const path = (f.webkitRelativePath || f.name).replace(/\\/g, '/'), scale = /(^|\/)2x(\/|$)/i.test(path) ? 2 : 1, key = f.name.toLowerCase(), old = best.get(key);
@@ -272,51 +376,70 @@ var PZODT;
                 const name = f.name.replace(/\.png$/i, '');
                 this.sheets.set(name, { name, file: f, path, scale, width: 0, height: 0, indexed: false });
             }
-            const q = [...this.sheets.values()].filter(x => !x.indexed);
+            const packQueue = [...packs];
+            let packDone = 0;
+            const packWorkers = Array.from({ length: Math.min(2, packQueue.length) }, async () => { while (packQueue.length) {
+                const f = packQueue.shift();
+                try {
+                    await PZODT.parsePZPack(f, this);
+                }
+                catch (e) {
+                    console.warn('Pack failed', f.name, e);
+                }
+                packDone++;
+                if (packDone === packs.length || packDone % 2 === 0)
+                    progress?.(`Texture packs ${packDone}/${packs.length} · ${this.assets.size.toLocaleString()} sprites`);
+            } });
+            await Promise.all(packWorkers);
+            const expected = expectedCounts ? await expectedCounts : undefined, q = [...this.sheets.values()].filter(x => !x.indexed).filter(sh => { const c = this.tilesetCoverage(sh.name), need = expected?.(sh.name) ?? 0, covered = c.maxScale >= sh.scale && need > 0 && c.count >= need; if (covered) {
+                sh.indexed = true;
+                pngSkipped++;
+                return false;
+            } return true; });
             let done = 0;
-            const total = q.length;
-            const workers = Array.from({ length: Math.min(6, q.length) }, async () => { while (q.length) {
+            const total = q.length, workers = Array.from({ length: Math.min(12, q.length) }, async () => { while (q.length) {
                 const sh = q.shift();
                 try {
-                    const bm = await createImageBitmap(sh.file);
-                    sh.width = bm.width;
-                    sh.height = bm.height;
-                    bm.close();
+                    const size = await PZODT.readPngSize(sh.file);
+                    sh.width = size.width;
+                    sh.height = size.height;
                     this.indexSheet(sh);
                 }
                 catch (e) {
-                    console.warn(e);
+                    console.warn('PNG sheet skipped', sh.path, e);
                 }
                 done++;
-                if (done % 10 === 0 || done === total)
-                    progress?.(`PNG tilesheets ${done}/${total} · ${this.assets.size.toLocaleString()} sprites`);
+                if (done === total || done % 20 === 0)
+                    progress?.(`PNG fallbacks ${done}/${total} · ${pngSkipped.toLocaleString()} duplicate sheet(s) skipped · ${this.assets.size.toLocaleString()} sprites`);
             } });
             await Promise.all(workers);
-            for (let i = 0; i < packs.length; i++) {
-                progress?.(`Reading texture pack ${i + 1}/${packs.length}: ${packs[i].name}`);
-                try {
-                    await PZODT.parsePZPack(packs[i], this, progress);
-                }
-                catch (e) {
-                    console.warn('Pack failed', packs[i].name, e);
-                }
-            }
             for (const f of fresh)
                 this.loadedFileKeys.add(this.fileKey(f));
             this.onChanged();
-            return { png: pngs.length, packs: packs.length, skipped };
+            return { png: pngs.length, packs: packs.length, skipped, pngSkipped };
         }
+        buildLegacyTreeFamilies() { if (this.legacyTreeFamilies)
+            return this.legacyTreeFamilies; const names = ['e_americanholly_1', 'e_canadianhemlock_1', 'e_virginiapine_1', 'e_riverbirch_1', 'e_cockspurhawthorn_1', 'e_dogwood_1', 'e_carolinasilverbell_1', 'e_yellowwood_1', 'e_easternredbud_1', 'e_redmaple_1', 'e_americanlinden_1']; this.legacyTreeFamilies = names.map(n => [0, 1, 2, 3].map(stage => this.asset(`${n}_${stage}`)).filter((a) => !!a)); return this.legacyTreeFamilies; }
+        legacyTreeAsset(name, worldX, worldY) { const p = PZODT.parseTileName(name); if (p.tilesetName.toLowerCase() !== 'vegetation_trees_01')
+            return null; const families = this.buildLegacyTreeFamilies(); if (!families.some(x => x.length))
+            return null; const soilRef = [[2, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5], [1, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5], [2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 3, 3, 4, 4, 4, 5], [1, 7, 7, 7, 9, 9, 9, 9, 9, 9, 9], [2, 2, 1, 1, 1, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 9, 9, 9, 9], [1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 7, 7, 7, 9], [1, 2, 8, 8, 8, 6, 6, 6, 6, 6, 6, 6, 6], [1, 1, 2, 2, 3, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 6, 6, 6, 6, 6], [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 8, 8, 8, 6], [3, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11], [1, 1, 3, 3, 3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11], [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 10, 10, 10, 11]]; let h = (Math.imul(worldX | 0, 73856093) ^ Math.imul(worldY | 0, 19349663) ^ Math.imul((p.tileIndex | 0) + 1, 83492791)) >>> 0; h ^= h >>> 13; h = Math.imul(h, 1274126177) >>> 0; const soil = h % soilRef.length, choices = soilRef[soil], familyIndex = choices[(h >>> 8) % choices.length] - 1, stage = 2 + (((h >>> 16) % 101) >= 51 ? 1 : 0); const family = families[familyIndex] ?? []; const exact = family.find(a => a.tileIndex === stage); if (exact)
+            return exact; for (const fallbackStage of [3, 2, 1, 0]) {
+            const a = family.find(x => x.tileIndex === fallbackStage);
+            if (a)
+                return a;
+        } for (const alt of families) {
+            const a = alt.find(x => x.tileIndex === stage) ?? alt.find(x => x.tileIndex === 3) ?? alt.find(x => x.tileIndex === 2);
+            if (a)
+                return a;
+        } return null; }
         tilesetNames() { const s = new Set(); for (const a of this.assets.values())
             s.add(a.tilesetName); return [...s].sort(); }
-        search(q, limit = 600) { q = q.trim().toLowerCase(); const out = []; for (const a of this.assets.values()) {
-            if (!q || a.name.toLowerCase().includes(q) || a.tilesetName.toLowerCase().includes(q)) {
+        search(q, limit = 600, extra) { const out = []; for (const a of this.assets.values()) {
+            if (!q || PZODT.searchMatches(`${a.name} ${a.tilesetName} ${extra?.(a) ?? ''}`, q))
                 out.push(a);
-                if (out.length >= limit)
-                    break;
-            }
-        } return out.sort((a, b) => a.name.localeCompare(b.name)); }
+        } return out.sort((a, b) => a.name.localeCompare(b.name)).slice(0, limit); }
         assetsForTileset(n) { return [...this.assets.values()].filter(a => a.tilesetName === n).sort((a, b) => a.tileIndex - b.tileIndex); }
-        async drawPreview(c, name) { const a = this.asset(name), ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); if (!a)
+        async drawPreview(c, name, worldX = 0, worldY = 0) { const a = this.resolveAsset(name, worldX, worldY), ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); if (!a)
             return; const b = await this.bitmap(a.sourceId), fit = Math.min(c.width / a.frameW, c.height / a.frameH, 1), x = (c.width - a.frameW * fit) / 2 + a.offsetX * fit, y = (c.height - a.frameH * fit) / 2 + a.offsetY * fit; ctx.imageSmoothingEnabled = false; ctx.drawImage(b, a.sx, a.sy, a.sw, a.sh, x, y, a.sw * fit, a.sh * fit); }
     }
     PZODT.AssetManager = AssetManager;
@@ -359,34 +482,40 @@ var PZODT;
             throw new Error('Truncated .tiles'); const v = this.view.getInt32(this.pos, true); this.pos += 4; return v; }
         u8() { if (this.pos >= this.bytes.length)
             throw new Error('Truncated .tiles'); return this.bytes[this.pos++]; }
-        line() { let s = ''; for (let i = 0; i < 1024 * 1024; i++) {
+        line() { let s = ''; for (let i = 0; i < 65536; i++) {
             const c = this.u8();
             if (c === 10)
                 return s;
             s += String.fromCharCode(c);
         } throw new Error('Invalid .tiles string'); }
-        seek(n) { this.pos = n; }
+        seek(n) { if (n < 0 || n > this.bytes.length)
+            throw new Error('Invalid .tiles offset'); this.pos = n; }
     }
     class TileDefDatabase {
         constructor() {
             this.props = new Map();
+            this.tilesetCounts = new Map();
             this.loadedFileKeys = new Set();
         }
         key(name) { const p = PZODT.parseTileName(name); return `${p.tilesetName.toLowerCase()}:${p.tileIndex}`; }
         properties(name) { return this.props.get(this.key(name)) ?? {}; }
-        clear() { this.props.clear(); this.loadedFileKeys.clear(); }
+        clear() { this.props.clear(); this.tilesetCounts.clear(); this.loadedFileKeys.clear(); }
         fileKey(f) { const p = (f.webkitRelativePath || f.name).replace(/\\/g, '/'); return `${p}|${f.size}|${f.lastModified}`; }
-        async loadFiles(files, progress) { const list = files.filter(f => /\.tiles$/i.test(f.name) && !this.loadedFileKeys.has(this.fileKey(f))); let total = 0; for (let i = 0; i < list.length; i++) {
+        async loadFiles(files, progress) { const list = files.filter(f => /\.tiles$/i.test(f.name) && !this.loadedFileKeys.has(this.fileKey(f))), q = [...list]; let total = 0, done = 0; const workers = Array.from({ length: Math.min(4, q.length) }, async () => { while (q.length) {
+            const f = q.shift();
             try {
-                total += await this.readBinary(list[i]);
-                this.loadedFileKeys.add(this.fileKey(list[i]));
-                progress?.(`Tile definitions ${i + 1}/${list.length} · ${total.toLocaleString()} property-bearing tiles`);
+                total += await this.readBinary(f);
+                this.loadedFileKeys.add(this.fileKey(f));
             }
             catch (e) {
-                console.warn('Tile definitions failed', list[i].name, e);
+                console.warn('Tile definitions failed', f.name, e);
             }
-        } return total; }
-        async readBinary(file) { const buf = await file.arrayBuffer(), r = new TileDefReader(buf); let version = 0; const magic = String.fromCharCode(r.u8(), r.u8(), r.u8(), r.u8()); if (magic === 'tdef') {
+            done++;
+            if (done === list.length || done % 2 === 0)
+                progress?.(`Tile definitions ${done}/${list.length} · ${total.toLocaleString()} property-bearing tiles`);
+        } }); await Promise.all(workers); return total; }
+        async readBinary(file) { if (file.size < 4 || file.size > 256 * 1024 * 1024)
+            throw new Error('.tiles file size is outside supported limits'); const buf = await file.arrayBuffer(), r = new TileDefReader(buf); let version = 0; const magic = String.fromCharCode(r.u8(), r.u8(), r.u8(), r.u8()); if (magic === 'tdef') {
             version = r.i32();
             if (version < 0 || version > 1)
                 throw new Error(`Unsupported .tiles version ${version}`);
@@ -400,11 +529,12 @@ var PZODT;
             if (version > 0)
                 r.i32();
             const count = r.i32();
-            if (cols < 0 || rows < 0 || count < 0 || count > cols * rows)
+            if (cols < 0 || rows < 0 || cols > 4096 || rows > 4096 || count < 0 || count > cols * rows)
                 throw new Error('Invalid tile-definition grid');
+            this.tilesetCounts.set(name.toLowerCase(), Math.max(this.tilesetCounts.get(name.toLowerCase()) ?? 0, count));
             for (let j = 0; j < count; j++) {
-                const np = r.i32(), p = {};
-                if (np < 0 || np > 100000)
+                const np = r.i32(), p = Object.create(null);
+                if (np < 0 || np > 4096)
                     throw new Error('Invalid property count');
                 for (let k = 0; k < np; k++)
                     p[r.line()] = r.line();
@@ -414,22 +544,70 @@ var PZODT;
                 }
             }
         } return stored; }
+        tilesetCount(name) { return this.tilesetCounts.get(name.toLowerCase()) ?? 0; }
+        searchText(name) { const p = this.properties(name), parts = [name]; for (const [k, v] of Object.entries(p)) {
+            parts.push(k);
+            if (v)
+                parts.push(String(v));
+        } return parts.join(' '); }
+        displayName(name) { const p = this.properties(name), entry = (key) => Object.entries(p).find(([k]) => k.toLowerCase() === key)?.[1]?.trim() ?? '', group = entry('groupname'), custom = entry('customname'), named = entry('name'); if (group && custom)
+            return `${group} ${custom}`; if (custom)
+            return custom; if (named && !/^(none|null)$/i.test(named))
+            return named; return name; }
+        surfaceInfo(name) {
+            const p = this.properties(name), entries = Object.entries(p).map(([k, v]) => [k.toLowerCase(), String(v).trim().toLowerCase()]), value = (k) => entries.find(([x]) => x === k)?.[1], number = (k) => { const n = Number.parseInt(value(k) ?? '0', 10); return Number.isFinite(n) ? Math.max(0, Math.min(512, n)) : 0; }, flag = (k) => { const e = entries.find(([x]) => x === k); if (!e)
+                return false; return !['false', '0', 'no', 'off'].includes(e[1]); };
+            return { surface: number('surface'), itemHeight: number('itemheight'), isSurfaceOffset: flag('issurfaceoffset') || flag('ontable') || flag('attachedsurface'), isTable: flag('istable'), isTableTop: flag('istabletop') };
+        }
+        placementHeightValues(limit = 5) { const hist = new Map(), add = (h, w) => { if (!Number.isFinite(h) || h <= 0 || h > 128)
+            return; const n = Math.round(h); hist.set(n, (hist.get(n) ?? 0) + w); }; for (const [key, p] of this.props) {
+            const entries = Object.entries(p).map(([k, v]) => [k.toLowerCase(), String(v).trim().toLowerCase()]), value = (k) => entries.find(([x]) => x === k)?.[1], num = (k) => { const n = Number.parseInt(value(k) ?? '0', 10); return Number.isFinite(n) ? n : 0; }, flag = (k) => { const e = entries.find(([x]) => x === k); return !!e && !['false', '0', 'no', 'off'].includes(e[1]); }, tableLike = flag('istable') || flag('istabletop') || /(table|counter|desk|workbench|cabinet|dresser|vanity|shelf)/.test(key), surface = num('surface'), item = num('itemheight');
+            if (tableLike) {
+                add(surface, 5);
+                add(item, 2);
+            }
+            else if (surface > 0)
+                add(surface, 1);
+        } const raw = [...hist].sort((a, b) => a[0] - b[0]), clusters = []; for (const [height, count] of raw) {
+            const last = clusters[clusters.length - 1];
+            if (last && height - last.height <= 2) {
+                last.sum += height * count;
+                last.count += count;
+                last.height = Math.round(last.sum / last.count);
+            }
+            else
+                clusters.push({ height, count, sum: height * count });
+        } return clusters.sort((a, b) => b.count - a.count).slice(0, Math.max(1, limit)).sort((a, b) => a.height - b.height).map(({ height, count }) => ({ height, count })); }
         classify(name, furniture) {
-            const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase();
+            const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => `_${Number(d)}`);
             const has = (...q) => q.some(x => keys.includes(x.toLowerCase()) || all.includes(x.toLowerCase()));
+            if (/(^|_)roofs?(_|$)/.test(n))
+                return 'Roof';
+            if (n.includes('vegetation_indoor'))
+                return 'Furniture';
+            if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
+                return 'Furniture';
+            if (/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))
+                return 'Fences & Railings';
             if (has('solidfloor') || /(^|_)(floor|floors|flooring)(_|$)/.test(n) || PZODT.BUILDING_TILE_CATEGORIES['Floors']?.has(name))
                 return 'Floor';
             if (has('walln', 'wallw', 'wallnw', 'wallse', 'wall', 'treataswallorder') || n.includes('wall') || PZODT.BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name) || PZODT.BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))
                 return 'Wall';
             if (has('windown', 'windoww', 'doorwalln', 'doorwallw', 'doorn', 'doorw', 'window', 'door') || /(^|_)(door|doors|window|windows|curtain|curtains|shutter|shutters)(_|$)/.test(n) || PZODT.BUILDING_TILE_CATEGORIES['Doors']?.has(name) || PZODT.BUILDING_TILE_CATEGORIES['Windows']?.has(name))
                 return 'Doors & Windows';
+            if (n.includes('appliances') || n.includes('furniture') || furniture.has(n) || furniture.has(canonical))
+                return 'Furniture';
             if (has('walloverlay', 'flooroverlay', 'overlay', 'attachedn', 'attacheds', 'attachede', 'attachedw', 'ontable') || /(overlay|graffiti|poster|sign_)/.test(n))
                 return 'Decor / Overlay';
-            if (furniture.has(name) || has('container', 'surface', 'table', 'tablen', 'tables', 'tablee', 'tablew', 'countertop', 'isstackable') || /(furniture|appliances|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|stove|sink|toilet|bath|cabinets?)/.test(n))
+            if (has('container', 'surface', 'table', 'tablen', 'tables', 'tablee', 'tablew', 'countertop', 'isstackable') || /(^|_)(cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n))
                 return 'Furniture';
             if (has('roof') || n.includes('roof') || PZODT.BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name) || PZODT.BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))
                 return 'Roof';
-            if (/(vegetation|trees?|bush|grass|plants?|natural|street_|curbs?|fencing|railings?|parking|pavement|road_|sidewalk|exterior)/.test(n))
+            if (/(^|_)(blends_street|street|road|roads|asphalt|pavement|sidewalk|parking|curb|curbs)(_|$)/.test(n) || n.includes('blends_street'))
+                return 'Roads & Ground';
+            if (/(^|_)(vegetation|tree|trees|bush|bushes|grass|plants?|natural|forest)(_|$)/.test(n) || n.includes('blends_natural'))
+                return 'Vegetation';
+            if (/(^|_)(outdoor|exterior|clutter|street_decoration|streetdecor|trash|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n) || n.includes('outdoor_clutter') || n.includes('exterior_'))
                 return 'Exterior';
             return 'Other';
         }
@@ -439,24 +617,52 @@ var PZODT;
 var PZODT;
 (function (PZODT) {
     class CatalogManager {
-        constructor(assets) {
+        constructor(assets, tileDefs) {
             this.assets = assets;
+            this.tileDefs = tileDefs;
             this.catalog = PZODT.BUILTIN_FURNITURE_CATALOG;
             this.furnitureTiles = new Set();
-            for (const g of this.catalog.groups)
-                for (const d of g.furniture)
+            this.tileMatches = new Map();
+            this.tileMatchesByKey = new Map();
+            for (let gi = 0; gi < this.catalog.groups.length; gi++) {
+                const g = this.catalog.groups[gi];
+                for (let fi = 0; fi < g.furniture.length; fi++) {
+                    const d = g.furniture[fi];
                     for (const e of d.entries)
-                        for (const c of e.cells)
-                            this.furnitureTiles.add(c[2]);
+                        for (const cell of e.cells) {
+                            const name = cell[2], p = PZODT.parseTileName(name), canonical = `${p.tilesetName.toLowerCase()}_${p.tileIndex}`;
+                            this.furnitureTiles.add(name.toLowerCase());
+                            this.furnitureTiles.add(canonical);
+                            const match = { group: g, def: d, groupIndex: gi, furnitureIndex: fi, orient: e.orient, dx: cell[0], dy: cell[1], tileName: name };
+                            const a = this.tileMatches.get(name) ?? [];
+                            a.push(match);
+                            this.tileMatches.set(name, a);
+                            const k = `${p.tilesetName.toLowerCase()}:${p.tileIndex}`, b = this.tileMatchesByKey.get(k) ?? [];
+                            b.push(match);
+                            this.tileMatchesByKey.set(k, b);
+                        }
+                }
+            }
         }
         categories() { return this.catalog.groups.map(g => g.label).filter((v, i, a) => a.indexOf(v) === i).sort(); }
-        search(query, category = '', limit = 350) { query = query.trim().toLowerCase(); category = category.toLowerCase(); const out = []; for (let gi = 0; gi < this.catalog.groups.length; gi++) {
+        displayName(d, g) { const counts = new Map(), seen = new Set(); for (const e of d.entries)
+            for (const c of e.cells) {
+                const tile = c[2];
+                if (seen.has(tile))
+                    continue;
+                seen.add(tile);
+                const name = this.tileDefs.displayName(tile);
+                if (name && name !== tile)
+                    counts.set(name, (counts.get(name) ?? 0) + 1);
+            } const best = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0]; if (best)
+            return best; const group = (g?.label ?? 'Furniture').replace(/^Location\s*-\s*/i, '').replace(/\s*-\s*/g, ' · '); return `${group} #${d.index}`; }
+        search(query, category = '', limit = 350) { category = category.toLowerCase(); const out = []; for (let gi = 0; gi < this.catalog.groups.length; gi++) {
             const g = this.catalog.groups[gi];
             if (category && g.label.toLowerCase() !== category)
                 continue;
             for (let fi = 0; fi < g.furniture.length; fi++) {
                 const d = g.furniture[fi], seen = new Set();
-                let total = 0, available = 0, text = '';
+                let total = 0, available = 0, text = `${g.label} ${d.layer} ${this.displayName(d, g)} #${d.index}`;
                 for (const e of d.entries)
                     for (const c of e.cells)
                         if (!seen.has(c[2])) {
@@ -464,10 +670,9 @@ var PZODT;
                             total++;
                             if (this.assets.asset(c[2]))
                                 available++;
-                            if (text.length < 400)
-                                text += ' ' + c[2].toLowerCase();
+                            text += ' ' + this.tileDefs.searchText(c[2]);
                         }
-                if (query && !g.label.toLowerCase().includes(query) && !d.layer.toLowerCase().includes(query) && !text.includes(query))
+                if (query && !PZODT.searchMatches(text, query))
                     continue;
                 out.push({ group: g, def: d, groupIndex: gi, furnitureIndex: fi, available, total });
                 if (out.length >= limit)
@@ -476,6 +681,7 @@ var PZODT;
         } return out; }
         entry(d, o) { return d.entries.find(e => e.orient === o) ?? d.entries[0] ?? null; }
         orientations(d) { return d.entries.map(e => e.orient); }
+        matchesTile(name, multiOnly = true) { const p = PZODT.parseTileName(name), k = `${p.tilesetName.toLowerCase()}:${p.tileIndex}`, a = this.tileMatches.get(name) ?? this.tileMatchesByKey.get(k) ?? []; return multiOnly ? a.filter(x => (this.entry(x.def, x.orient)?.cells.length ?? 0) > 1) : [...a]; }
     }
     PZODT.CatalogManager = CatalogManager;
 })(PZODT || (PZODT = {}));
@@ -493,15 +699,17 @@ var PZODT;
             throw new Error('Truncated map file'); const x = Number(this.v.getBigInt64(this.p, true)); this.p += 8; return x; }
         u8() { if (this.p >= this.b.length)
             throw new Error('Truncated map file'); return this.b[this.p++]; }
-        ascii(n) { let s = ''; while (n--)
+        ascii(n) { if (n < 0 || n > 64)
+            throw new Error('Invalid map string'); let s = ''; while (n--)
             s += String.fromCharCode(this.u8()); return s; }
-        line() { let s = ''; while (this.p < this.b.length) {
+        line() { let s = ''; for (let i = 0; i < 65536 && this.p < this.b.length; i++) {
             const c = this.u8();
             if (c === 10)
-                break;
+                return s.trim();
             s += String.fromCharCode(c);
-        } return s.trim(); }
-        seek(n) { this.p = n; }
+        } throw new Error('Invalid map string'); }
+        seek(n) { if (!Number.isSafeInteger(n) || n < 0 || n > this.b.length)
+            throw new Error('Invalid map offset'); this.p = n; }
     }
     const key = (x, y) => `${x},${y}`, path = (f) => (f.webkitRelativePath || f.name).replace(/\\/g, '/'), dir = (p) => p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '', base = (p) => p.slice(p.lastIndexOf('/') + 1), W = (b) => b.x1 - b.x0 + 1, H = (b) => b.y1 - b.y0 + 1;
     const union = (a, b) => a ? { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) } : b;
@@ -513,7 +721,7 @@ var PZODT;
             this.hcache = new Map();
             this.pcache = new Map();
         }
-        scan(files) { const arr = Array.from(files); this.allFiles = arr; this.datasets.clear(); this.hcache.clear(); this.pcache.clear(); let sigParts = []; for (const f of arr) {
+        scan(files) { const arr = Array.from(files).filter(f => /\.(png|pack|tiles|lotheader|lotpack)$/i.test(f.name)); this.allFiles = arr; this.datasets.clear(); this.hcache.clear(); this.pcache.clear(); let sigParts = []; for (const f of arr) {
             const p = path(f), bn = base(p);
             sigParts.push(`${p}:${f.size}:${f.lastModified}`);
             let m = bn.match(/^(-?\d+)_(-?\d+)\.lotheader$/i);
@@ -534,9 +742,11 @@ var PZODT;
                 hash ^= s.charCodeAt(i);
                 hash = Math.imul(hash, 16777619);
             } this.mediaSignature = `${arr.length}:${hash >>> 0}`; return [...this.datasets.values()].filter(d => d.headers.size).sort((a, b) => b.headers.size - a.headers.size).map(d => ({ id: d.id, label: d.path || '(media)', headers: d.headers.size, packs: d.packs.size })); }
+        selectedBytes() { return this.allFiles.reduce((n, f) => n + f.size, 0); }
         assetFiles() { return this.allFiles.filter(f => /\.(png|pack)$/i.test(f.name)); }
         tileDefFiles() { return this.allFiles.filter(f => /\.tiles$/i.test(f.name)); }
-        async header(ds, f, cx, cy) { const ck = `${ds.id}|H|${cx},${cy}`; let q = this.hcache.get(ck); if (q)
+        async header(ds, f, cx, cy) { if (f.size < 4 || f.size > 64 * 1024 * 1024)
+            throw new Error('Map header size is outside supported limits'); const ck = `${ds.id}|H|${cx},${cy}`; let q = this.hcache.get(ck); if (q)
             return q; q = (async () => { const r = new R(await f.arrayBuffer()); let version = 0, magic = r.ascii(4); if (magic === 'LOTH') {
             version = r.i32();
         }
@@ -547,26 +757,40 @@ var PZODT;
             throw new Error(`Unsupported lotheader version ${version}`); const nt = r.i32(), tiles = []; if (nt < 0 || nt > 300000)
             throw new Error('Invalid tile list'); for (let i = 0; i < nt; i++)
             tiles.push(r.line()); if (version === 0)
-            r.u8(); const chunkW = r.i32(), chunkH = r.i32(); let min = 0, max = 0; if (version === 0) {
+            r.u8(); const chunkW = r.i32(), chunkH = r.i32(); if (chunkW < 1 || chunkH < 1 || chunkW > 256 || chunkH > 256)
+            throw new Error('Invalid map chunk dimensions'); let min = 0, max = 0; if (version === 0) {
             min = 0;
             max = r.i32() - 1;
         }
         else {
             min = r.i32();
             max = r.i32();
-        } const nr = r.i32(), rooms = []; for (let i = 0; i < nr; i++) {
+        } if (min < -64 || max > 64 || min > max)
+            throw new Error('Invalid map Z range'); const nr = r.i32(), rooms = []; if (nr < 0 || nr > 10000)
+            throw new Error('Invalid room count'); for (let i = 0; i < nr; i++) {
             const name = r.line(), level = r.i32(), rc = r.i32(), rects = [];
-            for (let j = 0; j < rc; j++)
-                rects.push({ x: r.i32(), y: r.i32(), w: r.i32(), h: r.i32() });
+            if (level < -64 || level > 64 || rc < 0 || rc > 10000)
+                throw new Error('Invalid room data');
+            for (let j = 0; j < rc; j++) {
+                const x = r.i32(), y = r.i32(), w = r.i32(), h = r.i32();
+                if (w < 0 || h < 0 || w > 10000 || h > 10000)
+                    throw new Error('Invalid room rectangle');
+                rects.push({ x, y, w, h });
+            }
             const no = r.i32();
+            if (no < 0 || no > 100000)
+                throw new Error('Invalid room object count');
             for (let j = 0; j < no; j++) {
                 r.i32();
                 r.i32();
                 r.i32();
             }
             rooms.push({ id: i, name, level, rects, buildingIndex: -1 });
-        } const nb = r.i32(), buildings = []; for (let i = 0; i < nb; i++) {
+        } const nb = r.i32(), buildings = []; if (nb < 0 || nb > 10000)
+            throw new Error('Invalid building count'); for (let i = 0; i < nb; i++) {
             const n = r.i32(), ids = [];
+            if (n < 0 || n > 10000)
+                throw new Error('Invalid building room count');
             for (let j = 0; j < n; j++) {
                 const id = r.i32();
                 ids.push(id);
@@ -575,7 +799,8 @@ var PZODT;
             }
             buildings.push({ id: i, roomIds: ids });
         } return { cellX: cx, cellY: cy, version, tiles, chunkW, chunkH, minLevel: min, maxLevel: max, rooms, buildings }; })(); this.hcache.set(ck, q); return q; }
-        async pack(ds, f, k) { const ck = `${ds.id}|P|${k}`; let q = this.pcache.get(ck); if (q)
+        async pack(ds, f, k) { if (f.size < 4 || f.size > 1024 * 1024 * 1024)
+            throw new Error('Map pack size is outside supported limits'); const ck = `${ds.id}|P|${k}`; let q = this.pcache.get(ck); if (q)
             return q; q = (async () => { const data = await f.arrayBuffer(), r = new R(data); let version = 0, n = 0, magic = r.ascii(4); if (magic === 'LOTP') {
             version = r.i32();
             n = r.i32();
@@ -696,7 +921,7 @@ var PZODT;
         readRect(h, p, zWanted, b, emit) { const cw = h.chunkW, ch = h.chunkH, cpc = p.chunksPerCell; for (let cx = Math.floor(b.x0 / cw); cx <= Math.floor(b.x1 / cw); cx++)
             for (let cy = Math.floor(b.y0 / ch); cy <= Math.floor(b.y1 / ch); cy++) {
                 const idx = cx * cpc + cy, off = p.offsets[idx];
-                if (!Number.isFinite(off) || off < 0 || off >= p.data.byteLength)
+                if (!Number.isSafeInteger(off) || off < 0 || off >= p.data.byteLength)
                     continue;
                 const r = new R(p.data);
                 r.seek(off);
@@ -738,7 +963,7 @@ var PZODT;
 (function (PZODT) {
     const SPATIAL_CHUNK_SIZE = 16;
     class WebGLMapRenderer {
-        constructor(canvas, overlay, assets, map, camera, classify, categoryVisible) {
+        constructor(canvas, overlay, assets, map, camera, classify, categoryVisible, surfaceInfo) {
             this.canvas = canvas;
             this.overlay = overlay;
             this.assets = assets;
@@ -746,12 +971,15 @@ var PZODT;
             this.camera = camera;
             this.classify = classify;
             this.categoryVisible = categoryVisible;
+            this.surfaceInfo = surfaceInfo;
             this.textures = new Map();
             this.resolved = new Map();
             this.quality = 'high';
             this.nightMode = true;
             this.raf = 0;
             this.hover = null;
+            this.placementGhost = [];
+            this.ghostBitmaps = new Map();
             this.chunkCache = new Map();
             this.dirtyChunks = new Set();
             this.cachedBatchCount = 0;
@@ -795,9 +1023,17 @@ var PZODT;
         setQuality(q) { if (this.quality === q)
             return; this.quality = q; this.resetTextures(); this.resize(); this.request(); }
         setNightMode(enabled) { this.nightMode = enabled; this.request(); }
+        setPlacementGhost(cells) { this.placementGhost = cells; const m = this.map(), ox = Number(m.properties['pzodt.worldOriginX']) || 0, oy = Number(m.properties['pzodt.worldOriginY']) || 0; for (const c of cells) {
+            const a = this.assets.resolveAsset(c.name, ox + c.x, oy + c.y);
+            if (!a || this.ghostBitmaps.has(a.sourceId))
+                continue;
+            this.assets.bitmap(a.sourceId).then(b => { this.ghostBitmaps.set(a.sourceId, b); this.request(); }).catch(() => { });
+        } this.request(); }
+        clearPlacementGhost() { if (!this.placementGhost.length)
+            return; this.placementGhost = []; this.request(); }
         resetTextures() { this.textureEpoch++; for (const t of this.resolved.values())
             this.gl.deleteTexture(t.tex); this.textures.clear(); this.resolved.clear(); this.request(); }
-        assetsChanged() { this.resetTextures(); this.invalidateAllGeometry(); }
+        assetsChanged() { this.ghostBitmaps.clear(); this.resetTextures(); this.invalidateAllGeometry(); }
         resize() { const r = this.canvas.getBoundingClientRect(), q = this.ratio(), w = Math.max(1, Math.round(r.width * q)), h = Math.max(1, Math.round(r.height * q)); if (this.canvas.width !== w || this.canvas.height !== h) {
             this.canvas.width = w;
             this.canvas.height = h;
@@ -858,8 +1094,14 @@ var PZODT;
         filterMask() { let mask = 0; for (let i = 0; i < PZODT.VIEW_CATEGORIES.length; i++)
             if (this.categoryVisible(PZODT.VIEW_CATEGORIES[i]))
                 mask |= (1 << i); return mask; }
+        allFilterMask() { return (1 << PZODT.VIEW_CATEGORIES.length) - 1; }
+        sourceSurfaceOffset(name) { const i = this.surfaceInfo(name); return i.isSurfaceOffset ? i.surface : 0; }
+        inferredArtOffset(a) { const scale = Math.max(1, a.scale || 1), floorCenter = a.frameH - 16 * scale, trimBottom = a.offsetY + a.sh; return Math.max(0, (floorCenter - trimBottom) / scale); }
+        authoredPlacementOffset(a) { const explicit = this.sourceSurfaceOffset(a.name); if (explicit > 0)
+            return explicit; const cat = this.classify(a.name); return cat === 'Furniture' || cat === 'Decor / Overlay' ? this.inferredArtOffset(a) : 0; }
+        placementLift(a, height) { return Math.max(0, Math.min(128, Number(height) || 0)) - this.authoredPlacementOffset(a); }
         buildChunk(z, cx, cy, key) {
-            const m = this.map(), old = this.chunkCache.get(key);
+            const m = this.map(), old = this.chunkCache.get(key), originX = Number.parseInt(m.properties['pzodt.worldOriginX'] ?? '0', 10) || 0, originY = Number.parseInt(m.properties['pzodt.worldOriginY'] ?? '0', 10) || 0;
             if (old?.buffer)
                 this.gl.deleteBuffer(old.buffer);
             if (old)
@@ -871,10 +1113,10 @@ var PZODT;
                     const k = m.key(x, y), stack = base?.get(k);
                     if (stack)
                         for (let i = 0; i < stack.length; i++) {
-                            const n = stack[i], a = this.assets.asset(n);
+                            const n = stack[i], a = this.assets.resolveAsset(n, originX + x, originY + y);
                             if (!a)
                                 continue;
-                            cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n) });
+                            cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category: this.classify(n), lift: 0, height: 0 });
                         }
                 }
             for (let li = 0; li < m.layers.length; li++) {
@@ -886,21 +1128,23 @@ var PZODT;
                         const n = l.get(x, y, m.width);
                         if (!n)
                             continue;
-                        const a = this.assets.asset(n);
+                        const a = this.assets.resolveAsset(n, originX + x, originY + y);
                         if (!a)
                             continue;
-                        cmds.push({ a, x, y, order: this.order(z, x, y, 1000 + li), diag: x + y, ownerId: l.id, category: this.classify(n) });
+                        cmds.push({ a, x, y, order: this.order(z, x, y, 1000 + li), diag: x + y, ownerId: l.id, category: this.classify(n), lift: 0, height: l.placementHeight(x, y, m.width) });
                     }
             }
             cmds.sort((a, b) => a.order - b.order);
+            for (const d of cmds)
+                d.lift = d.ownerId === 'base' ? 0 : this.placementLift(d.a, d.height);
             const floats = [], segments = [];
             let seg = null, vertexCursor = 0;
             const { th } = this.metrics(), displayScale = this.displayScale();
             for (const d of cmds) {
-                const a = d.a, s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(d.x, d.y, z), left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s, right = left + a.sw * s, bottom = top + a.sh * s, cat = this.categoryIndex(d.category), catBit = 1 << cat;
+                const a = d.a, s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(d.x, d.y, z), lift = d.lift * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift, right = left + a.sw * s, bottom = top + a.sh * s, cat = this.categoryIndex(d.category), catBit = 1 << cat;
                 const same = seg && seg.sourceId === a.sourceId && seg.ownerId === d.ownerId && seg.diag === d.diag;
                 if (!same) {
-                    seg = { order: d.order, orderEnd: d.order, firstVertex: vertexCursor, vertexCount: 0, spriteCount: 0, sourceId: a.sourceId, ownerId: d.ownerId, categoryMask: 0, categoryCounts: new Array(PZODT.VIEW_CATEGORIES.length).fill(0), chunkKey: key, buffer: null, diag: d.diag };
+                    seg = { order: d.order, orderEnd: d.order, firstVertex: vertexCursor, vertexCount: 0, spriteCount: 0, sourceId: a.sourceId, ownerId: d.ownerId, categoryMask: 0, categoryCounts: new Array(PZODT.VIEW_CATEGORIES.length).fill(0), chunkKey: key, buffer: null, diag: d.diag, z };
                     segments.push(seg);
                 }
                 seg.orderEnd = d.order;
@@ -950,19 +1194,18 @@ var PZODT;
             gl.uniform2f(this.up, this.camera.panX, this.camera.panY);
             gl.uniform1f(this.uz, this.camera.zoom);
             gl.uniform1i(this.ut, 0);
-            const mask = this.filterMask();
-            gl.uniform1i(this.ufm, mask);
+            const mask = this.filterMask(), allMask = this.allFilterMask();
             const chunks = this.visibleChunkCoords(), segments = [], layerMap = new Map(m.layers.map(l => [l.id, l]));
             let visibleSprites = 0;
             for (const q of chunks) {
                 const c = this.getChunk(q.z, q.cx, q.cy, q.key);
                 for (const s of c.segments) {
-                    const owner = this.ownerState(s.ownerId, layerMap);
-                    if (!owner.visible || owner.alpha <= .001 || (s.categoryMask & mask) === 0)
+                    const owner = this.ownerState(s.ownerId, layerMap), segmentMask = s.z === m.currentLevel ? mask : allMask;
+                    if (!owner.visible || owner.alpha <= .001 || (s.categoryMask & segmentMask) === 0)
                         continue;
                     let count = 0;
                     for (let i = 0; i < PZODT.VIEW_CATEGORIES.length; i++)
-                        if (mask & (1 << i))
+                        if (segmentMask & (1 << i))
                             count += s.categoryCounts[i];
                     if (!count)
                         continue;
@@ -971,7 +1214,7 @@ var PZODT;
                 }
             }
             segments.sort((a, b) => a.order - b.order);
-            let drawCalls = 0, lastBuffer = null, lastTexture = null;
+            let drawCalls = 0, lastBuffer = null, lastTexture = null, lastMask = -1;
             const stride = 5 * 4;
             gl.enableVertexAttribArray(this.lp);
             gl.enableVertexAttribArray(this.lu);
@@ -985,6 +1228,11 @@ var PZODT;
                 const owner = this.ownerState(s.ownerId, layerMap);
                 if (!owner.visible || owner.alpha <= .001)
                     continue;
+                const segmentMask = s.z === m.currentLevel ? mask : allMask;
+                if (segmentMask !== lastMask) {
+                    gl.uniform1i(this.ufm, segmentMask);
+                    lastMask = segmentMask;
+                }
                 if (s.buffer !== lastBuffer) {
                     gl.bindBuffer(gl.ARRAY_BUFFER, s.buffer);
                     gl.vertexAttribPointer(this.lp, 2, gl.FLOAT, false, stride, 0);
@@ -1009,27 +1257,82 @@ var PZODT;
             if (this.statsEnabled)
                 this.request();
         }
-        grid() { const c = this.overlay.getContext('2d'), m = this.map(), { tw, th } = this.metrics(), b = this.tileBounds(m.currentLevel); c.clearRect(0, 0, this.overlay.width, this.overlay.height); c.save(); c.setTransform(this.camera.zoom, 0, 0, this.camera.zoom, this.camera.panX, this.camera.panY); c.strokeStyle = this.nightMode ? 'rgba(190,210,220,.20)' : 'rgba(45,65,75,.20)'; c.lineWidth = 1 / this.camera.zoom; c.beginPath(); for (let y = b.minY; y <= b.maxY + 1; y++) {
-            const a = this.tileToWorld(b.minX, y, m.currentLevel), d = this.tileToWorld(b.maxX + 1, y, m.currentLevel);
-            c.moveTo(a.x, a.y);
-            c.lineTo(d.x, d.y);
-        } for (let x = b.minX; x <= b.maxX + 1; x++) {
-            const a = this.tileToWorld(x, b.minY, m.currentLevel), d = this.tileToWorld(x, b.maxY + 1, m.currentLevel);
-            c.moveTo(a.x, a.y);
-            c.lineTo(d.x, d.y);
-        } c.stroke(); if (this.hover) {
-            const p = this.tileToWorld(this.hover.x, this.hover.y, m.currentLevel);
-            c.fillStyle = 'rgba(60,165,255,.14)';
-            c.strokeStyle = 'rgba(80,190,255,.9)';
-            c.beginPath();
-            c.moveTo(p.x, p.y);
-            c.lineTo(p.x + tw / 2, p.y + th / 2);
-            c.lineTo(p.x, p.y + th);
-            c.lineTo(p.x - tw / 2, p.y + th / 2);
-            c.closePath();
-            c.fill();
-            c.stroke();
-        } c.restore(); }
+        grid() {
+            const c = this.overlay.getContext('2d'), m = this.map(), z = m.currentLevel, { tw, th } = this.metrics(), b = this.tileBounds(z), displayScale = this.displayScale(), originX = Number(m.properties['pzodt.worldOriginX']) || 0, originY = Number(m.properties['pzodt.worldOriginY']) || 0;
+            const diamond = (x, y, level) => { const p = this.tileToWorld(x, y, level); c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + tw / 2, p.y + th / 2); c.lineTo(p.x, p.y + th); c.lineTo(p.x - tw / 2, p.y + th / 2); c.closePath(); return p; };
+            const drawGrid = (level, style, dashed = false) => { c.strokeStyle = style; c.lineWidth = (level === z && z !== 0 ? 1.35 : 1) / this.camera.zoom; c.setLineDash(dashed ? [5 / this.camera.zoom, 5 / this.camera.zoom] : []); c.beginPath(); for (let y = b.minY; y <= b.maxY + 1; y++) {
+                const a = this.tileToWorld(b.minX, y, level), d = this.tileToWorld(b.maxX + 1, y, level);
+                c.moveTo(a.x, a.y);
+                c.lineTo(d.x, d.y);
+            } for (let x = b.minX; x <= b.maxX + 1; x++) {
+                const a = this.tileToWorld(x, b.minY, level), d = this.tileToWorld(x, b.maxY + 1, level);
+                c.moveTo(a.x, a.y);
+                c.lineTo(d.x, d.y);
+            } c.stroke(); c.setLineDash([]); };
+            c.clearRect(0, 0, this.overlay.width, this.overlay.height);
+            c.save();
+            c.setTransform(this.camera.zoom, 0, 0, this.camera.zoom, this.camera.panX, this.camera.panY);
+            if (z !== 0) {
+                const lower = z > 0 ? z - 1 : z + 1;
+                drawGrid(lower, this.nightMode ? 'rgba(155,175,185,.12)' : 'rgba(70,90,100,.13)', true);
+                const corners = [[b.minX, b.minY], [b.maxX + 1, b.minY], [b.minX, b.maxY + 1], [b.maxX + 1, b.maxY + 1]];
+                c.strokeStyle = this.nightMode ? 'rgba(80,190,255,.25)' : 'rgba(25,125,185,.28)';
+                c.lineWidth = 1 / this.camera.zoom;
+                c.setLineDash([4 / this.camera.zoom, 4 / this.camera.zoom]);
+                c.beginPath();
+                for (const [x, y] of corners) {
+                    const a = this.tileToWorld(x, y, lower), d = this.tileToWorld(x, y, z);
+                    c.moveTo(a.x, a.y);
+                    c.lineTo(d.x, d.y);
+                }
+                c.stroke();
+                c.setLineDash([]);
+            }
+            drawGrid(z, this.nightMode ? 'rgba(190,210,220,.20)' : 'rgba(45,65,75,.20)');
+            if (this.hover) {
+                if (z !== 0) {
+                    const lower = z > 0 ? z - 1 : z + 1, lp = this.tileToWorld(this.hover.x, this.hover.y, lower), hp = this.tileToWorld(this.hover.x, this.hover.y, z);
+                    c.strokeStyle = this.nightMode ? 'rgba(95,200,255,.55)' : 'rgba(20,125,190,.60)';
+                    c.lineWidth = 1.5 / this.camera.zoom;
+                    c.setLineDash([4 / this.camera.zoom, 4 / this.camera.zoom]);
+                    c.beginPath();
+                    c.moveTo(lp.x, lp.y + th / 2);
+                    c.lineTo(hp.x, hp.y + th / 2);
+                    c.stroke();
+                    c.setLineDash([]);
+                    c.strokeStyle = this.nightMode ? 'rgba(145,195,220,.32)' : 'rgba(40,100,130,.34)';
+                    diamond(this.hover.x, this.hover.y, lower);
+                    c.stroke();
+                }
+                const p = this.tileToWorld(this.hover.x, this.hover.y, z);
+                c.fillStyle = 'rgba(60,165,255,.14)';
+                c.strokeStyle = 'rgba(80,190,255,.9)';
+                diamond(this.hover.x, this.hover.y, z);
+                c.fill();
+                c.stroke();
+            }
+            c.imageSmoothingEnabled = false;
+            for (const g of this.placementGhost) {
+                const a = this.assets.resolveAsset(g.name, originX + g.x, originY + g.y);
+                if (!a)
+                    continue;
+                const bm = this.ghostBitmaps.get(a.sourceId);
+                if (!bm)
+                    continue;
+                const s = displayScale / (a.scale || 1), fw = a.frameW * s, fh = a.frameH * s, p = this.tileToWorld(g.x, g.y, g.z), lift = this.placementLift(a, g.height ?? 0) * displayScale, left = p.x - fw / 2 + a.offsetX * s, top = p.y + th - fh + a.offsetY * s - lift;
+                c.globalAlpha = g.valid ? .46 : .22;
+                c.drawImage(bm, a.sx, a.sy, a.sw, a.sh, left, top, a.sw * s, a.sh * s);
+                if (!g.valid) {
+                    c.globalAlpha = .9;
+                    c.strokeStyle = 'rgba(255,95,85,.95)';
+                    c.lineWidth = 2 / this.camera.zoom;
+                    diamond(g.x, g.y, g.z);
+                    c.stroke();
+                }
+            }
+            c.globalAlpha = 1;
+            c.restore();
+        }
     }
     PZODT.WebGLMapRenderer = WebGLMapRenderer;
 })(PZODT || (PZODT = {}));
@@ -1046,49 +1349,106 @@ var PZODT;
             this.tool = 'pencil';
             this.selectedAsset = null;
             this.selectedFurniture = null;
+            this.selectedContext = null;
             this.furnitureOrient = 'N';
+            this.placementHeight = 0;
             this.isDown = false;
             this.pan = false;
             this.last = { x: 0, y: 0 };
             this.rectStart = null;
             this.changes = new Map();
+            this.strokeCells = new Set();
+            this.strokeId = 0;
             this.onStatus = () => { };
             this.onChanged = () => { };
             this.onSelection = () => { };
+            this.onPickCandidates = () => { };
+            this.onEraseCandidates = () => { };
             this.bind();
         }
-        setTool(t) { this.tool = t; this.onSelection(); }
-        selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.tool = 'pencil'; this.onSelection(); }
-        selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.tool = 'furniture'; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.onSelection(); }
+        setTool(t) { this.tool = t; this.refreshPlacementGhost(); this.onSelection(); }
+        setPlacementHeight(height) { this.placementHeight = Math.max(0, Math.min(128, Math.round(Number(height) || 0))); this.refreshPlacementGhost(); this.onSelection(); }
+        selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.selectedContext = null; this.tool = 'pencil'; this.placementHeight = 0; this.refreshPlacementGhost(); this.onSelection(); }
+        selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.selectedContext = null; this.tool = 'furniture'; this.placementHeight = 0; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.refreshPlacementGhost(); this.onSelection(); }
+        clearSelection() { if (!this.selectedAsset && !this.selectedFurniture)
+            return; this.selectedAsset = null; this.selectedFurniture = null; this.selectedContext = null; this.placementHeight = 0; this.renderer.clearPlacementGhost(); this.onStatus('Selection cleared.'); this.onSelection(); }
         rotateFurniture(delta = 1) { const d = this.selectedFurniture; if (!d)
-            return; const a = d.entries.map(e => e.orient), i = Math.max(0, a.indexOf(this.furnitureOrient)); this.furnitureOrient = a[(i + delta + a.length) % a.length]; this.onSelection(); }
-        bind() { const c = this.renderer.overlay; c.tabIndex = 0; c.addEventListener('contextmenu', e => e.preventDefault()); c.addEventListener('pointerdown', e => this.down(e)); c.addEventListener('pointermove', e => this.move(e)); c.addEventListener('pointerup', e => this.up(e)); c.addEventListener('pointercancel', e => this.up(e)); c.addEventListener('wheel', e => this.wheel(e), { passive: false }); window.addEventListener('keydown', e => this.key(e)); }
+            return; const a = d.entries.map(e => e.orient), i = Math.max(0, a.indexOf(this.furnitureOrient)); this.furnitureOrient = a[(i + delta + a.length) % a.length]; this.refreshPlacementGhost(); this.onSelection(); }
+        refreshPlacementGhost() { const p = this.renderer.hover; if (p)
+            this.updatePlacementGhost(p);
+        else
+            this.renderer.clearPlacementGhost(); }
+        bind() {
+            const c = this.renderer.overlay;
+            c.tabIndex = 0;
+            c.addEventListener('contextmenu', e => e.preventDefault());
+            c.addEventListener('pointerdown', e => this.down(e));
+            c.addEventListener('pointermove', e => this.move(e));
+            c.addEventListener('pointerup', e => this.up(e));
+            c.addEventListener('pointercancel', e => this.up(e));
+            c.addEventListener('pointerleave', () => { if (!this.isDown) {
+                this.renderer.hover = null;
+                this.renderer.clearPlacementGhost();
+                this.renderer.request();
+            } });
+            c.addEventListener('wheel', e => this.wheel(e), { passive: false });
+            window.addEventListener('keydown', e => this.key(e));
+        }
         point(e) { const r = this.renderer.overlay.getBoundingClientRect(); return this.renderer.screenToTile(e.clientX - r.left, e.clientY - r.top, this.map().currentLevel); }
         valid(p) { const m = this.map(); return p.x >= 0 && p.y >= 0 && p.x < m.width && p.y < m.height; }
-        down(e) { this.renderer.overlay.focus(); this.isDown = true; this.last = { x: e.clientX, y: e.clientY }; this.pan = this.tool === 'pan' || e.button === 1 || e.button === 2 || e.shiftKey; this.changes.clear(); this.renderer.overlay.setPointerCapture(e.pointerId); if (this.pan)
-            return; const p = this.point(e); if (!this.valid(p))
-            return; if (this.tool === 'picker') {
-            this.pick(p);
-            return;
-        } if (this.tool === 'rect') {
-            this.rectStart = p;
-            return;
-        } if (this.tool === 'furniture') {
-            this.placeFurniture(p);
-            this.commit();
-            return;
-        } this.paint(p); }
-        move(e) { const p = this.point(e); this.renderer.hover = this.valid(p) ? p : null; this.renderer.request(); if (!this.isDown)
-            return; if (this.pan) {
-            const q = this.renderer.ratio();
-            this.renderer.camera.panX += (e.clientX - this.last.x) * q;
-            this.renderer.camera.panY += (e.clientY - this.last.y) * q;
+        down(e) {
+            this.renderer.overlay.focus();
+            this.isDown = true;
             this.last = { x: e.clientX, y: e.clientY };
+            this.pan = this.tool === 'pan' || e.button === 1 || e.button === 2 || e.shiftKey;
+            this.changes.clear();
+            this.strokeCells.clear();
+            this.strokeId++;
+            this.renderer.overlay.setPointerCapture(e.pointerId);
+            if (this.pan)
+                return;
+            const p = this.point(e);
+            if (!this.valid(p))
+                return;
+            if (this.tool === 'picker') {
+                this.pick(p);
+                return;
+            }
+            if (this.tool === 'eraser') {
+                this.requestErase(p);
+                return;
+            }
+            if (this.tool === 'rect') {
+                this.rectStart = p;
+                this.updatePlacementGhost(p);
+                return;
+            }
+            if (this.selectedFurniture && (this.tool === 'furniture' || this.tool === 'pencil')) {
+                this.placeFurniture(p);
+                this.commit();
+                this.updatePlacementGhost(p);
+                return;
+            }
+            this.paint(p);
+        }
+        move(e) {
+            const p = this.point(e);
+            this.renderer.hover = this.valid(p) ? p : null;
+            this.updatePlacementGhost(p);
             this.renderer.request();
-            return;
-        } if (this.tool === 'pencil' || this.tool === 'eraser')
-            if (this.valid(p))
-                this.paint(p); }
+            if (!this.isDown)
+                return;
+            if (this.pan) {
+                const q = this.renderer.ratio();
+                this.renderer.camera.panX += (e.clientX - this.last.x) * q;
+                this.renderer.camera.panY += (e.clientY - this.last.y) * q;
+                this.last = { x: e.clientX, y: e.clientY };
+                this.renderer.request();
+                return;
+            }
+            if (this.tool === 'pencil' && this.valid(p))
+                this.paint(p);
+        }
         up(e) { if (!this.isDown)
             return; this.isDown = false; if (this.pan) {
             this.pan = false;
@@ -1098,9 +1458,17 @@ var PZODT;
             if (this.valid(p))
                 this.rect(this.rectStart, p);
             this.rectStart = null;
+            this.updatePlacementGhost(p);
         } this.commit(); }
         wheel(e) { e.preventDefault(); const r = this.renderer.overlay.getBoundingClientRect(), q = this.renderer.ratio(), sx = (e.clientX - r.left) * q, sy = (e.clientY - r.top) * q, old = this.renderer.camera.zoom, n = Math.max(.12, Math.min(5, old * Math.exp(-e.deltaY * .0015))), wx = (sx - this.renderer.camera.panX) / old, wy = (sy - this.renderer.camera.panY) / old; this.renderer.camera.zoom = n; this.renderer.camera.panX = sx - wx * n; this.renderer.camera.panY = sy - wy * n; this.renderer.request(); }
-        key(e) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        key(e) { if (e.key === 'Escape') {
+            if (document.querySelector('dialog[open]'))
+                return;
+            e.preventDefault();
+            this.clearSelection();
+            return;
+        } const t = e.target, typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable); if (typing)
+            return; if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
             e.preventDefault();
             e.shiftKey ? this.redo() : this.undo();
             return;
@@ -1109,98 +1477,190 @@ var PZODT;
             this.redo();
             return;
         } if (e.key.toLowerCase() === 'r' && this.selectedFurniture) {
+            e.preventDefault();
             this.rotateFurniture(e.shiftKey ? -1 : 1);
+            return;
+        } if ((e.key === '+' || e.code === 'NumpadAdd') && (this.selectedAsset || this.selectedFurniture)) {
+            e.preventDefault();
+            this.setPlacementHeight(this.placementHeight + 1);
+            this.onStatus(`Placement height H${this.placementHeight}.`);
+            return;
+        } if ((e.key === '-' || e.code === 'NumpadSubtract') && (this.selectedAsset || this.selectedFurniture)) {
+            e.preventDefault();
+            this.setPlacementHeight(this.placementHeight - 1);
+            this.onStatus(`Placement height H${this.placementHeight}.`);
             return;
         } const k = { '1': 'pencil', '2': 'eraser', '3': 'rect', '4': 'picker', '5': 'pan' }; if (k[e.key])
             this.setTool(k[e.key]); }
-        layerChange(l, x, y, after) { const m = this.map(), before = l.get(x, y, m.width), key = `L:${l.id}:${x}:${y}`, old = this.changes.get(key); if (old)
+        worldPoint(x, y) { const m = this.map(), ox = Number(m.properties['pzodt.worldOriginX']), oy = Number(m.properties['pzodt.worldOriginY']); return { x: (Number.isFinite(ox) ? ox : 0) + x, y: (Number.isFinite(oy) ? oy : 0) + y }; }
+        assetAvailable(name, x, y) { const w = this.worldPoint(x, y); return !!this.catalog.assets.resolveAsset(name, w.x, w.y); }
+        updatePlacementGhost(p) {
+            const m = this.map();
+            if ((this.tool === 'furniture' || this.tool === 'pencil') && this.selectedFurniture) {
+                const e = this.catalog.entry(this.selectedFurniture, this.furnitureOrient);
+                if (!e) {
+                    this.renderer.clearPlacementGhost();
+                    return;
+                }
+                const cells = e.cells.map(([dx, dy, name]) => { const x = p.x + dx, y = p.y + dy; return { x, y, z: m.currentLevel, name, valid: x >= 0 && y >= 0 && x < m.width && y < m.height && this.assetAvailable(name, x, y), height: this.placementHeight }; });
+                this.renderer.setPlacementGhost(cells);
+                return;
+            }
+            if (this.tool === 'rect' && this.selectedAsset) {
+                const a = this.rectStart ?? p, x0 = Math.min(a.x, p.x), x1 = Math.max(a.x, p.x), y0 = Math.min(a.y, p.y), y1 = Math.max(a.y, p.y), cells = [];
+                for (let y = y0; y <= y1; y++)
+                    for (let x = x0; x <= x1; x++)
+                        cells.push({ x, y, z: m.currentLevel, name: this.selectedAsset, valid: x >= 0 && y >= 0 && x < m.width && y < m.height && this.assetAvailable(this.selectedAsset, x, y), height: this.placementHeight });
+                this.renderer.setPlacementGhost(cells);
+                return;
+            }
+            if (this.tool === 'pencil' && this.selectedAsset) {
+                this.renderer.setPlacementGhost([{ x: p.x, y: p.y, z: m.currentLevel, name: this.selectedAsset, valid: this.valid(p) && this.assetAvailable(this.selectedAsset, p.x, p.y), height: this.placementHeight }]);
+                return;
+            }
+            this.renderer.clearPlacementGhost();
+        }
+        layerChange(l, x, y, after, afterHeight = 0) { const m = this.map(), before = l.get(x, y, m.width), beforeHeight = l.placementHeight(x, y, m.width), key = `L:${l.id}:${x}:${y}`, old = this.changes.get(key), h = Math.max(0, Math.min(128, Math.round(Number(afterHeight) || 0))); if (old) {
             old.after = after;
+            old.afterHeight = h;
+        }
         else
-            this.changes.set(key, { kind: 'layer', layerId: l.id, x, y, before, after }); l.set(x, y, m.width, after); this.renderer.invalidateCell(l.level, x, y); }
+            this.changes.set(key, { kind: 'layer', layerId: l.id, x, y, before, after, beforeHeight, afterHeight: h }); l.set(x, y, m.width, after); if (after)
+            l.setPlacementHeight(x, y, m.width, h); this.renderer.invalidateCell(l.level, x, y); }
         baseChange(z, x, y, after) { const m = this.map(), before = [...m.stack(z, x, y)], key = `B:${z}:${x}:${y}`, old = this.changes.get(key); if (old)
             old.after = [...after];
         else
             this.changes.set(key, { kind: 'base', z, x, y, before, after: [...after] }); m.setStack(z, x, y, after); this.renderer.invalidateCell(z, x, y); }
-        targetLocked() { const m = this.map(); if (m.activeTarget === 'base')
-            return m.baseLocked; return m.activeLayer()?.locked ?? false; }
-        paint(p, notify = true) { const m = this.map(); if (this.targetLocked()) {
-            this.onStatus('Selected layer is locked.');
-            return;
-        } if (m.activeTarget === 'base') {
-            const s = [...m.stack(m.currentLevel, p.x, p.y)];
-            if (this.tool === 'eraser') {
-                for (let i = s.length - 1; i >= 0; i--)
-                    if (this.visible(s[i])) {
-                        s.splice(i, 1);
-                        break;
-                    }
-                this.baseChange(m.currentLevel, p.x, p.y, s);
+        paint(p, notify = true) {
+            const m = this.map(), strokeKey = `${m.currentLevel}:${p.x}:${p.y}`;
+            if (this.tool === 'pencil' && this.strokeCells.has(strokeKey))
+                return;
+            if (this.tool === 'pencil')
+                this.strokeCells.add(strokeKey);
+            if (this.selectedAsset) {
+                const already = m.layers.some(l => l.level === m.currentLevel && l.get(p.x, p.y, m.width) === this.selectedAsset) || m.stack(m.currentLevel, p.x, p.y).includes(this.selectedAsset);
+                if (!already && this.assetAvailable(this.selectedAsset, p.x, p.y)) {
+                    const cat = this.classifier(this.selectedAsset), target = m.findStackLayer(cat, m.currentLevel, [p], true, true);
+                    if (target)
+                        this.layerChange(target, p.x, p.y, this.selectedAsset, this.placementHeight);
+                }
             }
-            else if (this.selectedAsset && !s.includes(this.selectedAsset)) {
-                s.push(this.selectedAsset);
-                this.baseChange(m.currentLevel, p.x, p.y, s);
+            if (notify) {
+                this.renderer.request();
+                this.onChanged();
             }
         }
-        else {
-            const l = m.activeLayer();
-            if (!l)
-                return;
-            if (this.tool === 'eraser')
-                this.layerChange(l, p.x, p.y, null);
-            else if (this.selectedAsset) {
-                let target = l;
-                if (l.get(p.x, p.y, m.width)) {
-                    const cat = this.classifier(this.selectedAsset);
-                    target = m.findStackLayer(cat, m.currentLevel, [p], true);
-                }
-                this.layerChange(target, p.x, p.y, this.selectedAsset);
-                m.activeTarget = target.id;
-            }
-        } if (notify) {
-            this.renderer.request();
-            this.onChanged();
-        } }
-        rect(a, b) { if (!this.selectedAsset || this.targetLocked())
+        rect(a, b) { if (!this.selectedAsset)
             return; const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y); for (let y = y0; y <= y1; y++)
             for (let x = x0; x <= x1; x++)
                 this.paint({ x, y }, false); this.renderer.request(); this.onChanged(); }
-        pick(p) { const m = this.map(); for (let i = m.layers.length - 1; i >= 0; i--) {
+        candidatesAt(p) { const m = this.map(), items = []; for (let i = m.layers.length - 1; i >= 0; i--) {
             const l = m.layers[i];
-            if (!l.visible || l.level !== m.currentLevel)
+            if (l.level !== m.currentLevel)
                 continue;
             const n = l.get(p.x, p.y, m.width);
-            if (n && this.visible(n)) {
-                m.activeTarget = l.id;
-                this.selectedAsset = n;
-                this.selectedFurniture = null;
-                this.tool = 'pencil';
-                this.onSelection();
-                return;
-            }
-        } const s = m.stack(m.currentLevel, p.x, p.y); for (let i = s.length - 1; i >= 0; i--)
-            if (this.visible(s[i])) {
-                m.activeTarget = 'base';
-                this.selectedAsset = s[i];
-                this.selectedFurniture = null;
-                this.tool = 'pencil';
-                this.onSelection();
-                return;
-            } }
-        placeFurniture(p) { const d = this.selectedFurniture, e = d ? this.catalog.entry(d, this.furnitureOrient) : null; if (!d || !e)
-            return; const m = this.map(), cells = []; let missing = 0; for (const [dx, dy, n] of e.cells) {
-            const x = p.x + dx, y = p.y + dy;
-            if (x < 0 || y < 0 || x >= m.width || y >= m.height)
-                continue;
-            if (!this.catalog.assets.asset(n)) {
-                missing++;
-                continue;
-            }
-            cells.push({ x, y, name: n });
-        } if (!cells.length) {
-            this.onStatus('Furniture assets are not available.');
+            if (n && this.visible(n))
+                items.push({ name: n, targetId: l.id, sourceLabel: l.name, category: this.classifier(n), z: m.currentLevel, x: p.x, y: p.y, placementHeight: l.placementHeight(p.x, p.y, m.width) });
+        } if (m.baseVisible && m.baseOpacity > .001) {
+            const s = m.stack(m.currentLevel, p.x, p.y);
+            for (let i = s.length - 1; i >= 0; i--)
+                if (this.visible(s[i]))
+                    items.push({ name: s[i], targetId: 'base', sourceLabel: `Imported Base · stack ${i + 1}`, category: this.classifier(s[i]), z: m.currentLevel, x: p.x, y: p.y, placementHeight: 0, stackIndex: i });
+        } return items; }
+        pick(p) { const items = this.candidatesAt(p); if (!items.length) {
+            this.onStatus('Nothing visible to pick on this cell.');
             return;
-        } const target = m.findStackLayer('Furniture', m.currentLevel, cells, true); for (const c of cells)
-            this.layerChange(target, c.x, c.y, c.name); m.activeTarget = target.id; this.onStatus(`${cells.length} furniture tile(s) placed on ${target.name}${missing ? ` · ${missing} missing` : ''}.`); this.renderer.request(); this.onChanged(); }
+        } if (items.length === 1) {
+            const matches = this.catalog.matchesTile(items[0].name, false);
+            if (matches.length === 1) {
+                this.applyPickFurniture(matches[0], items[0]);
+                return;
+            }
+            if (!matches.length) {
+                this.applyPickCandidate(items[0]);
+                return;
+            }
+        } this.onPickCandidates(items, p); }
+        requestErase(p) { const items = this.candidatesAt(p); if (!items.length) {
+            this.onStatus('Nothing visible to erase on this cell.');
+            return;
+        } this.onEraseCandidates(items, p); }
+        eraseCandidates(items) {
+            if (!items.length)
+                return;
+            const m = this.map();
+            this.changes.clear();
+            this.strokeCells.clear();
+            this.strokeId++;
+            let removed = 0;
+            const baseGroups = new Map();
+            for (const item of items) {
+                if (item.targetId === 'base') {
+                    const k = `${item.z}:${item.x}:${item.y}`, a = baseGroups.get(k) ?? [];
+                    a.push(item);
+                    baseGroups.set(k, a);
+                    continue;
+                }
+                const l = m.layers.find(x => x.id === item.targetId);
+                if (!l || l.level !== item.z)
+                    continue;
+                const current = l.get(item.x, item.y, m.width);
+                if (current !== item.name)
+                    continue;
+                this.layerChange(l, item.x, item.y, null, 0);
+                removed++;
+            }
+            for (const group of baseGroups.values()) {
+                const first = group[0], before = [...m.stack(first.z, first.x, first.y)], after = [...before], indices = group.map(x => x.stackIndex).filter((x) => Number.isInteger(x)).sort((a, b) => b - a);
+                for (const i of indices)
+                    if (i >= 0 && i < after.length && group.some(x => x.stackIndex === i && x.name === after[i])) {
+                        const n = after[i];
+                        after.splice(i, 1);
+                        removed++;
+                    }
+                if (after.length !== before.length)
+                    this.baseChange(first.z, first.x, first.y, after);
+            }
+            this.commit();
+            this.renderer.request();
+            this.onChanged();
+            this.onStatus(removed ? `Erased ${removed} selected object${removed === 1 ? '' : 's'}.` : 'Nothing was erased.');
+        }
+        applyPickCandidate(c) { this.selectedAsset = c.name; this.selectedFurniture = null; this.selectedContext = c; this.tool = 'pencil'; this.placementHeight = 0; this.refreshPlacementGhost(); this.onStatus(`Picked ${c.name} from ${c.sourceLabel}. New placements start at H0.`); this.onSelection(); }
+        applyPickFurniture(match, c) { this.selectedFurniture = match.def; this.selectedAsset = null; this.selectedContext = c; this.tool = 'furniture'; this.placementHeight = 0; this.furnitureOrient = match.orient; this.refreshPlacementGhost(); const appearance = Math.max(0, match.def.entries.findIndex(e => e.orient === match.orient)) + 1; this.onStatus(`Picked furniture ${match.group.label} · #${match.def.index} (appearance ${appearance}). New placements start at H0.`); this.onSelection(); }
+        placeFurniture(p) {
+            const d = this.selectedFurniture, e = d ? this.catalog.entry(d, this.furnitureOrient) : null;
+            if (!d || !e)
+                return;
+            const m = this.map(), cells = [];
+            let missing = 0, outside = 0;
+            for (const [dx, dy, n] of e.cells) {
+                const x = p.x + dx, y = p.y + dy;
+                if (x < 0 || y < 0 || x >= m.width || y >= m.height) {
+                    outside++;
+                    continue;
+                }
+                if (!this.assetAvailable(n, x, y)) {
+                    missing++;
+                    continue;
+                }
+                cells.push({ x, y, name: n });
+            }
+            if (outside) {
+                this.onStatus('Furniture does not fit inside the current map area.');
+                return;
+            }
+            if (!cells.length) {
+                this.onStatus('Furniture assets are not available.');
+                return;
+            }
+            const target = m.findStackLayer('Furniture', m.currentLevel, cells, true, true);
+            for (const c of cells)
+                this.layerChange(target, c.x, c.y, c.name, this.placementHeight);
+            this.onStatus(`${cells.length} furniture tile(s) placed${missing ? ` · ${missing} missing` : ''}.`);
+            this.renderer.request();
+            this.onChanged();
+        }
         commit() { const c = [...this.changes.values()]; this.changes.clear(); this.history.push(c); }
         undo() { const c = this.history.undo(this.map()); if (c) {
             this.renderer.invalidateChanges(c);
@@ -1217,7 +1677,7 @@ var PZODT;
 })(PZODT || (PZODT = {}));
 var PZODT;
 (function (PZODT) {
-    const APP_VERSION = '1.0.0';
+    const APP_VERSION = '1.2.0';
     const el = (id) => document.getElementById(id);
     const storeGet = (k) => { try {
         return localStorage.getItem(k);
@@ -1229,10 +1689,6 @@ var PZODT;
         localStorage.setItem(k, v);
     }
     catch { } };
-    const storeRemove = (k) => { try {
-        localStorage.removeItem(k);
-    }
-    catch { } };
     const releaseConfig = () => { const x = window.PZODT_RELEASE_CONFIG; return x && typeof x === 'object' ? x : {}; };
     const safeHttpsUrl = (value) => { if (typeof value !== 'string' || !value.trim())
         return ''; try {
@@ -1242,14 +1698,15 @@ var PZODT;
     catch {
         return '';
     } };
-    const safeSameOriginEndpoint = (value) => typeof value === 'string' && /^\/(?!\/)[A-Za-z0-9_./?=&%-]*$/.test(value) && !value.includes('..') ? value : '';
+    const safeSupportUrl = (value) => { const href = safeHttpsUrl(value); if (!href)
+        return ''; const host = new URL(href).hostname.toLowerCase(); return host === 'buymeacoffee.com' || host.endsWith('.buymeacoffee.com') ? href : ''; };
     const save = (name, blob) => { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
     class App {
         constructor() {
             this.map = new PZODT.PZMapModel(64, 64);
             this.assets = new PZODT.AssetManager();
             this.tileDefs = new PZODT.TileDefDatabase();
-            this.catalog = new PZODT.CatalogManager(this.assets);
+            this.catalog = new PZODT.CatalogManager(this.assets, this.tileDefs);
             this.importer = new PZODT.PZWorldImportManager();
             this.history = new PZODT.History();
             this.camera = { panX: 0, panY: 0, zoom: .72 };
@@ -1260,20 +1717,8 @@ var PZODT;
             this.tileToken = 0;
             this.furnitureToken = 0;
             this.furnitureObserver = null;
-            this.tutorialIndex = 0;
-            this.tutorialActive = false;
-            this.tutorialSteps = [
-                { title: 'Welcome', text: 'This short guide walks through the normal workflow: load a Project Zomboid location, browse assets, decorate the map, and save the project.' },
-                { title: 'Load a PZ location', text: 'Start here. Continue and the location loader will open so you can see the full import workflow.', target: 'loadLocationBtn', closeLoad: true },
-                { title: 'The location loader', text: 'Everything needed for importing a base is in this window: media folder, map dataset, world coordinates, and load mode.', target: 'loadDialog', openLoad: true },
-                { title: 'Choose the media folder', text: 'Choose the ProjectZomboid\\media folder. Map data, texture packs, PNG tilesheets, and tile definitions are indexed locally in the browser.', target: 'chooseMediaBtn', openLoad: true },
-                { title: 'Enter world coordinates', text: 'Enter the World X and World Y coordinates for the building or area you want to load.', target: 'worldX', openLoad: true },
-                { title: 'Load the building', text: 'For the usual base-planning workflow, keep Building at coordinate selected and press Load Location.', target: 'loadBtn', openLoad: true },
-                { title: 'Control what you see', text: 'View Filters hide walls, roofs, furniture, and other categories without rewriting the imported object stacks.', target: 'viewFilters', closeLoad: true },
-                { title: 'Browse furniture', text: 'The Furniture tab contains categorized, searchable multi-tile objects with thumbnails. Select one, then place it on the map.', target: 'furnitureTabButton' },
-                { title: 'Edit the plan', text: 'Use Pencil, Erase, Rectangle, Picker, and Pan. Layers and Z levels are available in the inspector on the right.', target: 'toolrow' },
-                { title: 'Save the project', text: 'Use Save as .json to keep the plan and Open .json file to continue later. Feedback is available from the top bar.', target: 'saveJsonBtn' }
-            ];
+            this.heightPresets = [{ label: 'Floor', height: 0, count: 0 }];
+            this.pendingEraseCandidates = [];
             this.status = el('status');
             this.coords = el('coords');
             this.tileList = el('tileList');
@@ -1287,21 +1732,25 @@ var PZODT;
             this.preview = el('previewCanvas');
             this.selectionInfo = el('selectionInfo');
             this.orientationButtons = el('orientationButtons');
+            this.placementHeightControls = el('placementHeightControls');
             this.selectionLabel = el('selectionLabel');
-            this.layersList = el('layersList');
             this.zLevel = el('zLevel');
             this.stageBadge = el('stageBadge');
             this.graphicsQuality = el('graphicsQuality');
             this.performanceStatsToggle = el('performanceStatsToggle');
             this.performanceStatsBox = el('performanceStats');
             this.nightModeToggle = el('nightModeToggle');
-            this.renderer = new PZODT.WebGLMapRenderer(el('glCanvas'), el('overlayCanvas'), this.assets, () => this.map, this.camera, n => this.classify(n), c => this.filters.get(c) !== false);
+            this.renderer = new PZODT.WebGLMapRenderer(el('glCanvas'), el('overlayCanvas'), this.assets, () => this.map, this.camera, n => this.classify(n), c => this.filters.get(c) !== false, n => this.tileDefs.surfaceInfo(n));
             this.editor = new PZODT.EditorController(this.renderer, () => this.map, this.catalog, n => this.classify(n), n => this.objectVisible(n), this.history);
             this.editor.onStatus = s => this.setStatus(s);
             this.editor.onChanged = () => this.mapChanged();
             this.editor.onSelection = () => this.selectionChanged();
+            this.editor.onPickCandidates = (items, p) => this.showPickerChoices(items, p);
+            this.editor.onEraseCandidates = (items, p) => this.showEraseChoices(items, p);
             this.assets.onChanged = () => this.assetsChanged();
             this.bind();
+            this.updateLoadMode();
+            this.updateMediaUi('needed');
             this.renderFilterButtons();
             this.renderFurnitureCategories();
             this.refreshAll();
@@ -1316,40 +1765,44 @@ var PZODT;
             this.applyNightMode(night, false);
             setTimeout(() => this.renderer.center(), 50);
             this.configureRelease();
-            setTimeout(() => this.maybeStartTutorial(), 250);
         }
         classify(n) { let c = this.classificationCache.get(n); if (c)
             return c; c = this.tileDefs.classify(n, this.catalog.furnitureTiles); this.classificationCache.set(n, c); return c; }
         objectVisible(n) { return this.filters.get(this.classify(n)) !== false; }
         setStatus(s) { this.status.textContent = s; }
+        updateMediaUi(state, message = '') { const ready = state === 'ready', busy = state === 'indexing', datasets = el('datasetSelect').options.length && !!el('datasetSelect').value; document.body.classList.toggle('mediaNeeded', !ready); const choose = el('chooseMediaBtn'), noticeChoose = el('mediaNoticeChooseBtn'), loadWorld = el('loadLocationBtn'), load = el('loadBtn'), notice = el('mediaNoticeText'), loadStatus = el('loadStatus'); choose.disabled = busy; noticeChoose.disabled = busy; choose.textContent = ready ? 'Change Media Folder…' : busy ? 'Indexing Media…' : 'Choose Media Folder…'; loadWorld.disabled = !ready || !datasets; load.disabled = !ready || !datasets; if (message) {
+            notice.textContent = message;
+            loadStatus.textContent = message;
+        }
+        else if (state === 'needed') {
+            notice.textContent = 'Start by selecting your Project Zomboid media folder: steamapps/common/ProjectZomboid/media. Select the media folder itself, not the ProjectZomboid folder. Your game files are read locally in the browser and are never uploaded.';
+            loadStatus.textContent = 'Select the Project Zomboid media folder, usually steamapps/common/ProjectZomboid/media.';
+        }
+        else if (ready) {
+            loadStatus.textContent = datasets ? 'Media library ready. Enter coordinates and load a location.' : 'Media library ready, but no map dataset was found.';
+        } }
         bind() {
             document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => this.editor.setTool(b.dataset.tool));
             document.querySelectorAll('.tab').forEach(b => b.onclick = () => this.setTab(b.dataset.tab === 'furniture' ? 'furniture' : 'tiles'));
             el('rotateBtn').onclick = () => this.editor.rotateFurniture(1);
             el('undoBtn').onclick = () => this.editor.undo();
             el('redoBtn').onclick = () => this.editor.redo();
-            el('centerBtn').onclick = () => this.renderer.center();
             el('newMapBtn').onclick = () => this.newMap();
-            el('loadLocationBtn').onclick = () => el('loadDialog').showModal();
+            el('chooseMediaBtn').onclick = () => el('mediaInput').click();
+            el('mediaNoticeChooseBtn').onclick = () => el('mediaInput').click();
+            el('loadLocationBtn').onclick = () => this.openLoadDialog();
             el('saveJsonBtn').onclick = () => save('pz-online-decoration.json', new Blob([JSON.stringify({ map: this.map.toJSON(), filters: Object.fromEntries(this.filters) })], { type: 'application/json' }));
             el('openJsonBtn').onclick = () => el('jsonInput').click();
             el('settingsBtn').onclick = () => el('settingsDialog').showModal();
             el('settingsCloseBtn').onclick = el('settingsDoneBtn').onclick = () => el('settingsDialog').close();
             this.graphicsQuality.onchange = () => { const q = this.graphicsQuality.value; storeSet('pzodt.graphicsQuality', q); this.renderer.setQuality(q); setTimeout(() => this.renderer.center(), 0); this.setStatus(`Graphics: ${q}.`); };
             this.performanceStatsToggle.onchange = () => { storeSet('pzodt.performanceStats', this.performanceStatsToggle.checked ? '1' : '0'); this.setPerformanceStats(this.performanceStatsToggle.checked); };
-            el('startTutorialBtn').onclick = () => { el('settingsDialog').close(); this.startTutorial(true); };
             el('creditsBtn').onclick = () => { el('settingsDialog').close(); el('creditsDialog').showModal(); };
             el('creditsCloseBtn').onclick = el('creditsDoneBtn').onclick = () => el('creditsDialog').close();
-            el('feedbackBtn').onclick = () => this.openFeedback();
+            el('feedbackBtn').onclick = () => this.openFeedbackDialog();
             this.nightModeToggle.onchange = () => this.applyNightMode(this.nightModeToggle.checked, true);
             el('feedbackCloseBtn').onclick = () => el('feedbackDialog').close();
-            el('feedbackCopyBtn').onclick = () => this.copyFeedback();
-            el('feedbackSendBtn').onclick = () => this.sendFeedback();
             el('supportBtn').onclick = () => this.openSupport();
-            el('tutorialSkipBtn').onclick = () => this.finishTutorial();
-            el('tutorialBackBtn').onclick = () => this.moveTutorial(-1);
-            el('tutorialNextBtn').onclick = () => this.moveTutorial(1);
-            addEventListener('resize', () => this.positionTutorial());
             document.querySelectorAll('dialog form').forEach(f => f.addEventListener('submit', e => e.preventDefault()));
             el('collapseLeftBtn').onclick = () => this.collapse('left', true);
             el('openLeftPanelBtn').onclick = () => this.collapse('left', false);
@@ -1360,19 +1813,87 @@ var PZODT;
             this.furnitureSearch.oninput = () => this.renderFurniture();
             this.furnitureCategory.onchange = () => this.renderFurniture();
             this.availableOnly.onchange = () => this.renderFurniture();
-            this.zLevel.onchange = () => { this.map.currentLevel = +this.zLevel.value; this.stageBadge.textContent = `Z ${this.map.currentLevel} · perspective`; this.renderLayers(); this.renderer.request(); };
-            el('addLevelBtn').onclick = () => { this.map.currentLevel = this.map.maxLevel() + 1; this.renderLevels(); this.renderer.request(); };
-            el('addLayerBtn').onclick = () => { const n = (prompt('Layer name', 'Decoration') || '').trim().slice(0, 128); if (!n)
-                return; this.map.addLayer(n, this.map.currentLevel, 'Custom'); this.renderLayers(); };
-            el('chooseMediaBtn').onclick = () => el('mediaInput').click();
+            this.zLevel.onchange = () => this.setZLevel(+this.zLevel.value);
+            el('zDownBtn').onclick = () => this.stepZ(-1);
+            el('zUpBtn').onclick = () => this.stepZ(1);
+            el('addLevelBtn').onclick = () => this.setZLevel(this.map.maxLevel() + 1);
             el('loadCancelBtn').onclick = () => el('loadDialog').close();
             el('loadMode').onchange = () => this.updateLoadMode();
+            el('datasetSelect').onchange = () => this.updateMediaUi(this.mediaReadySignature ? 'ready' : 'needed');
             el('loadBtn').onclick = () => this.loadLocation();
-            el('indexMediaBtn').onclick = () => this.indexMediaOnly();
+            el('versionHistoryBtn').onclick = () => el('versionHistoryDialog').showModal();
+            el('versionHistoryCloseBtn').onclick = () => el('versionHistoryDialog').close();
+            el('pickerCloseBtn').onclick = el('pickerCancelBtn').onclick = () => el('pickerDialog').close();
+            el('eraseCloseBtn').onclick = el('eraseCancelBtn').onclick = () => el('eraseDialog').close();
+            el('eraseSelectedBtn').onclick = () => this.confirmEraseSelection();
             el('mediaInput').onchange = e => this.mediaSelected(e);
             el('jsonInput').onchange = e => this.jsonSelected(e);
             this.renderer.overlay.addEventListener('pointermove', e => { const r = this.renderer.overlay.getBoundingClientRect(), p = this.renderer.screenToTile(e.clientX - r.left, e.clientY - r.top, this.map.currentLevel), ox = Number(this.map.properties['pzodt.worldOriginX']), oy = Number(this.map.properties['pzodt.worldOriginY']); this.coords.textContent = Number.isFinite(ox) && Number.isFinite(oy) ? `local ${p.x},${p.y} · world ${ox + p.x},${oy + p.y},${this.map.currentLevel}` : `x ${p.x} · y ${p.y} · Z ${this.map.currentLevel}`; });
         }
+        openLoadDialog() { if (!this.mediaReadySignature) {
+            this.updateMediaUi('needed', 'Please choose the Project Zomboid Media folder before loading a world location.');
+            return;
+        } const d = el('loadDialog'); this.updateLoadMode(); this.updateMediaUi('ready'); if (!d.open)
+            d.showModal(); }
+        candidateWorld(item) { const ox = Number(this.map.properties['pzodt.worldOriginX']), oy = Number(this.map.properties['pzodt.worldOriginY']); return { x: (Number.isFinite(ox) ? ox : 0) + item.x, y: (Number.isFinite(oy) ? oy : 0) + item.y }; }
+        drawCandidatePreview(c, item) { const w = this.candidateWorld(item); return this.assets.drawPreview(c, item.name, w.x, w.y); }
+        showPickerChoices(items, p) { const box = el('pickerChoices'); box.replaceChildren(); el('pickerInfo').textContent = `${items.length} objects at ${p.x}, ${p.y}, Z ${this.map.currentLevel}.`; const seen = new Set(); for (const item of items) {
+            const matches = this.catalog.matchesTile(item.name, false);
+            for (const match of matches) {
+                const key = `${match.groupIndex}:${match.furnitureIndex}:${match.orient}:${item.targetId}`;
+                if (seen.has(key))
+                    continue;
+                seen.add(key);
+                const group = document.createElement('div');
+                group.className = 'pickerGroup';
+                const parent = document.createElement('button');
+                parent.type = 'button';
+                parent.className = 'pickerChoice pickerFurnitureChoice';
+                const pc = document.createElement('canvas');
+                pc.width = 68;
+                pc.height = 64;
+                const pt = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small');
+                title.textContent = `${match.group.label} · #${match.def.index}`;
+                meta.textContent = `Furniture object · appearance ${Math.max(0, match.def.entries.findIndex(e => e.orient === match.orient)) + 1} · ${this.catalog.entry(match.def, match.orient)?.cells.length ?? 0} tile(s)`;
+                pt.append(title, meta);
+                parent.append(pc, pt);
+                parent.onclick = () => { this.selectedFurnitureHit = this.furnitureHitFromMatch(match); this.editor.applyPickFurniture(match, item); el('pickerDialog').close(); };
+                group.appendChild(parent);
+                this.drawFurniture(pc, match.def, match.orient).catch(() => { });
+                box.appendChild(group);
+            }
+            if (matches.length)
+                continue;
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'pickerChoice';
+            const cv = document.createElement('canvas');
+            cv.width = 68;
+            cv.height = 64;
+            const text = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small');
+            title.textContent = item.name;
+            meta.textContent = `${item.sourceLabel} · ${item.category}`;
+            text.append(title, meta);
+            b.append(cv, text);
+            b.onclick = () => { this.editor.applyPickCandidate(item); el('pickerDialog').close(); };
+            box.appendChild(b);
+            this.drawCandidatePreview(cv, item).catch(() => { });
+        } const d = el('pickerDialog'); if (!d.open)
+            d.showModal(); }
+        showEraseChoices(items, p) { this.pendingEraseCandidates = items; const box = el('eraseChoices'); box.replaceChildren(); el('eraseInfo').textContent = `Choose one or more objects to erase at ${p.x}, ${p.y}, Z ${this.map.currentLevel}.`; const confirm = el('eraseSelectedBtn'); confirm.disabled = true; items.forEach((item, i) => { const row = document.createElement('label'); row.className = 'eraseChoice'; const check = document.createElement('input'); check.type = 'checkbox'; check.value = String(i); check.onchange = () => { confirm.disabled = !box.querySelector('input[type=checkbox]:checked'); }; const cv = document.createElement('canvas'); cv.width = 68; cv.height = 64; const text = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small'); const match = this.catalog.matchesTile(item.name, false)[0]; title.textContent = match ? this.catalog.displayName(match.def, match.group) : item.name; meta.textContent = match ? `${item.name} · ${item.sourceLabel} · ${item.category}` : `${item.sourceLabel} · ${item.category}`; text.append(title, meta); row.append(check, cv, text); box.appendChild(row); this.drawCandidatePreview(cv, item).catch(() => { }); }); const d = el('eraseDialog'); if (!d.open)
+            d.showModal(); }
+        confirmEraseSelection() { const box = el('eraseChoices'), selected = [...box.querySelectorAll('input[type=checkbox]:checked')].map(x => this.pendingEraseCandidates[+x.value]).filter((x) => !!x); if (!selected.length)
+            return; this.editor.eraseCandidates(selected); this.pendingEraseCandidates = []; el('eraseDialog').close(); }
+        furnitureHitFromMatch(match) { const seen = new Set(); let total = 0, available = 0; for (const e of match.def.entries)
+            for (const cell of e.cells) {
+                const name = cell[2];
+                if (seen.has(name))
+                    continue;
+                seen.add(name);
+                total++;
+                if (this.assets.asset(name))
+                    available++;
+            } return { group: match.group, def: match.def, groupIndex: match.groupIndex, furnitureIndex: match.furnitureIndex, available, total }; }
         collapse(side, yes) { const l = document.querySelector('.layout'); l.classList.toggle(`${side}-collapsed`, yes); el(side === 'left' ? 'openLeftPanelBtn' : 'openRightPanelBtn').classList.toggle('hidden', !yes); setTimeout(() => { this.renderer.resize(); this.renderer.request(); }, 0); }
         setTab(t) { document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === t)); el('tilesTab').classList.toggle('active', t === 'tiles'); el('furnitureTab').classList.toggle('active', t === 'furniture'); t === 'tiles' ? this.renderTiles() : this.renderFurniture(); }
         newMap() { if ((this.map.layers.some(l => l.cells.size) || [...this.map.baseStacks.values()].some(m => m.size)) && !confirm('Start a new map? Unsaved edits will be lost.'))
@@ -1380,44 +1901,59 @@ var PZODT;
         async mediaSelected(e) { const inp = e.target; if (!inp.files?.length)
             return; if (inp.files.length > 100000) {
             this.setStatus('Media folder contains too many files to index safely.');
+            this.updateMediaUi('error', 'The selected folder contains too many files to index safely.');
             inp.value = '';
             return;
-        } const list = this.importer.scan(inp.files); const select = el('datasetSelect'); select.replaceChildren(); for (const d of list) {
+        } const oldSignature = this.mediaReadySignature, list = this.importer.scan(inp.files), select = el('datasetSelect'); if (this.importer.selectedBytes() > 16 * 1024 * 1024 * 1024) {
+            this.updateMediaUi('error', 'The selected media folder is too large to index safely in a browser session.');
+            this.setStatus('Media folder is too large to index safely.');
+            inp.value = '';
+            return;
+        } select.replaceChildren(); for (const d of list) {
             const o = document.createElement('option');
             o.value = d.id;
             o.textContent = `${d.label} · ${d.headers} headers / ${d.packs} lotpacks`;
             select.appendChild(o);
-        } el('loadBtn').disabled = !list.length; el('indexMediaBtn').disabled = !list.length; el('mediaInfo').textContent = list.length ? `${list.length} map dataset(s) found. ${this.importer.assetFiles().length} texture source file(s), ${this.importer.tileDefFiles().length} .tiles definition file(s).` : 'No map dataset found in this media folder.'; if (this.mediaReadySignature && this.mediaReadySignature !== this.importer.mediaSignature) {
+        } if (!list.length) {
+            const o = document.createElement('option');
+            o.value = '';
+            o.textContent = 'No map dataset found';
+            select.appendChild(o);
+        } if (oldSignature && oldSignature !== this.importer.mediaSignature) {
             this.assets.clear();
             this.tileDefs.clear();
             this.classificationCache.clear();
             this.mediaReadySignature = '';
-        } inp.value = ''; }
+        } const found = `${this.importer.assetFiles().length} texture source file(s) · ${this.importer.tileDefFiles().length} .tiles definition file(s)`; this.updateMediaUi('indexing', `Media folder selected. Indexing ${found}…`); inp.value = ''; try {
+            let lastProgress = 0;
+            const progress = (s) => { const now = performance.now(), important = /ready|error|already indexed/i.test(s); if (!important && now - lastProgress < 60)
+                return; lastProgress = now; el('mediaNoticeText').textContent = s; el('loadStatus').textContent = s; this.setStatus(s); };
+            await this.ensureMediaReady(progress);
+            this.renderTilesets();
+            this.renderTiles();
+            this.renderFurnitureCategories();
+            this.renderFurniture();
+            this.selectionChanged();
+            const msg = `Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${this.tileDefs.props.size.toLocaleString()} tile definitions${list.length ? ` · ${list.length} map dataset(s)` : ' · no map dataset found'}.`;
+            this.updateMediaUi('ready');
+            this.setStatus(msg);
+        }
+        catch (err) {
+            const msg = `Media error: ${String(err.message || err)}`;
+            console.error(err);
+            this.updateMediaUi('error', msg);
+            this.setStatus(msg);
+        } }
         updateLoadMode() { const m = el('loadMode').value; el('marginRow').classList.toggle('hidden', m !== 'building'); el('areaRow').classList.toggle('hidden', m !== 'area'); }
         async ensureMediaReady(progress) { if (this.mediaReadySignature === this.importer.mediaSignature && this.mediaReadySignature) {
             progress('Media library already indexed — reusing cached tiles, .pack textures and .tiles properties.');
             return;
-        } progress('Indexing local media assets…'); const a = await this.assets.loadMediaFiles(this.importer.assetFiles(), progress); const props = await this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress); this.classificationCache.clear(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
-        async indexMediaOnly() { const st = el('loadStatus'), btn = el('indexMediaBtn'); if (!el('datasetSelect').value) {
-            st.textContent = 'Select the Project Zomboid media folder first.';
+        } progress('Indexing local media assets…'); const defs = this.tileDefs.loadFiles(this.importer.tileDefFiles(), progress), expected = defs.then(() => (name) => this.tileDefs.tilesetCount(name)), assets = this.assets.loadMediaFiles(this.importer.assetFiles(), progress, expected), [a, props] = await Promise.all([assets, defs]); this.classificationCache.clear(); this.refreshHeightPresets(); this.renderer.invalidateAllGeometry(); this.mediaReadySignature = this.importer.mediaSignature; progress(`Media ready: ${this.assets.assets.size.toLocaleString()} sprites · ${props.toLocaleString()} property-bearing tile definitions${a.pngSkipped ? ` · ${a.pngSkipped.toLocaleString()} duplicate PNG sheet(s) skipped` : ''}${a.skipped ? ` · ${a.skipped} cached files skipped` : ''}.`); }
+        async loadLocation() { const ds = el('datasetSelect').value, x = +el('worldX').value, y = +el('worldY').value, mode = el('loadMode').value, margin = +el('marginInput').value, aw = +el('areaW').value, ah = +el('areaH').value, st = el('loadStatus'), btn = el('loadBtn'); if (!this.mediaReadySignature) {
+            st.textContent = 'Choose and finish indexing the media folder first.';
             return;
-        } btn.disabled = true; try {
-            const progress = (s) => { st.textContent = s; this.setStatus(s); };
-            await this.ensureMediaReady(progress);
-            this.renderTilesets();
-            this.renderTiles();
-            this.renderFurniture();
-            this.selectionChanged();
-            st.textContent = 'Media library ready. Current map was not changed.';
-        }
-        catch (err) {
-            st.textContent = `Media error: ${String(err.message || err)}`;
-        }
-        finally {
-            btn.disabled = false;
-        } }
-        async loadLocation() { const ds = el('datasetSelect').value, x = +el('worldX').value, y = +el('worldY').value, mode = el('loadMode').value, margin = +el('marginInput').value, aw = +el('areaW').value, ah = +el('areaH').value, st = el('loadStatus'), btn = el('loadBtn'); if (!ds || !Number.isFinite(x) || !Number.isFinite(y)) {
-            st.textContent = 'Select media and enter valid World X / Y.';
+        } if (!ds || !Number.isFinite(x) || !Number.isFinite(y)) {
+            st.textContent = 'Select a map dataset and enter valid World X / Y.';
             return;
         } btn.disabled = true; try {
             const progress = (s) => { st.textContent = s; this.setStatus(s); };
@@ -1446,8 +1982,8 @@ var PZODT;
         } }
         async jsonSelected(e) { const inp = e.target, f = inp.files?.[0]; if (!f)
             return; try {
-            if (f.size > 128 * 1024 * 1024)
-                throw new Error('JSON project is larger than the 128 MiB safety limit.');
+            if (f.size > 64 * 1024 * 1024)
+                throw new Error('JSON project is larger than the 64 MiB safety limit.');
             const o = JSON.parse(await f.text()), m = o?.map ?? o;
             this.validateProjectData(m);
             this.map = PZODT.PZMapModel.fromJSON(m);
@@ -1471,74 +2007,30 @@ var PZODT;
             b.onclick = () => { const v = this.filters.get(c); this.filters.set(c, !v); b.classList.toggle('off', v); this.renderer.request(); };
             box.appendChild(b);
         } }
-        refreshAll() { this.renderLevels(); this.renderLayers(); this.renderTilesets(); this.renderTiles(); this.renderFurnitureCategories(); this.renderFurniture(); this.selectionChanged(); this.renderFilterState(); this.renderer.request(); }
-        mapChanged() { this.renderLevels(); this.renderLayers(); this.renderer.request(); }
+        refreshAll() { this.renderLevels(); this.renderTilesets(); this.renderTiles(); this.renderFurnitureCategories(); this.renderFurniture(); this.selectionChanged(); this.renderFilterState(); this.renderer.request(); }
+        mapChanged() { this.renderLevels(); this.renderer.request(); }
         assetsChanged() { this.classificationCache.clear(); this.renderer.assetsChanged(); this.renderTilesets(); this.renderTiles(); this.renderFurniture(); this.selectionChanged(); this.renderer.request(); }
         renderFilterState() { const box = el('viewFilters'); [...box.querySelectorAll('.viewFilter')].forEach(b => b.classList.toggle('off', this.filters.get(b.textContent) === false)); }
+        setZLevel(z) { this.map.currentLevel = z; this.renderLevels(); this.editor.refreshPlacementGhost(); this.renderer.request(); }
+        stepZ(delta) { const levels = this.map.levels().sort((a, b) => a - b), i = levels.indexOf(this.map.currentLevel), j = Math.max(0, Math.min(levels.length - 1, (i < 0 ? 0 : i) + delta)); if (levels[j] !== undefined)
+            this.setZLevel(levels[j]); }
+        updateZButtons() { const levels = this.map.levels().sort((a, b) => a - b), i = levels.indexOf(this.map.currentLevel); el('zDownBtn').disabled = i <= 0; el('zUpBtn').disabled = i < 0 || i >= levels.length - 1; }
         renderLevels() { const ls = this.map.levels(); if (!ls.includes(this.map.currentLevel))
             ls.push(this.map.currentLevel); ls.sort((a, b) => a - b); this.zLevel.replaceChildren(); for (const z of ls) {
             const o = document.createElement('option');
             o.value = String(z);
             o.textContent = `Z ${z}`;
             this.zLevel.appendChild(o);
-        } this.zLevel.value = String(this.map.currentLevel); this.stageBadge.textContent = `Z ${this.map.currentLevel} · perspective`; }
-        renderLayers() {
-            this.layersList.replaceChildren();
-            const base = document.createElement('div');
-            base.className = 'layer' + (this.map.activeTarget === 'base' ? ' active' : '');
-            const eye = this.icon(this.map.baseVisible ? '●' : '○', 'Visibility', () => { this.map.baseVisible = !this.map.baseVisible; this.renderLayers(); this.renderer.request(); });
-            const lock = this.icon(this.map.baseLocked ? '🔒' : '🔓', 'Lock / unlock', () => { this.map.baseLocked = !this.map.baseLocked; this.renderLayers(); });
-            const name = document.createElement('div');
-            name.className = 'lname';
-            name.textContent = 'Imported Base';
-            name.onclick = () => { this.map.activeTarget = 'base'; this.renderLayers(); };
-            const op = document.createElement('input');
-            op.type = 'range';
-            op.min = '0';
-            op.max = '1';
-            op.step = '.05';
-            op.value = String(this.map.baseOpacity);
-            op.oninput = () => { this.map.baseOpacity = +op.value; this.renderer.request(); };
-            base.append(eye, lock, name, op, document.createElement('span'), document.createElement('span'), document.createElement('span'));
-            this.layersList.appendChild(base);
-            const arr = this.map.layers.map((l, i) => ({ l, i })).filter(x => x.l.level === this.map.currentLevel).sort((a, b) => b.i - a.i);
-            for (const { l } of arr) {
-                const row = document.createElement('div');
-                row.className = 'layer' + (this.map.activeTarget === l.id ? ' active' : '');
-                const e = this.icon(l.visible ? '●' : '○', 'Visibility', () => { l.visible = !l.visible; this.renderLayers(); this.renderer.request(); }), k = this.icon(l.locked ? '🔒' : '🔓', 'Lock / unlock', () => { l.locked = !l.locked; this.renderLayers(); }), n = document.createElement('div');
-                n.className = 'lname';
-                n.textContent = l.name;
-                n.title = l.category;
-                n.onclick = () => { this.map.activeTarget = l.id; this.renderLayers(); };
-                const o = document.createElement('input');
-                o.type = 'range';
-                o.min = '0';
-                o.max = '1';
-                o.step = '.05';
-                o.value = String(l.opacity);
-                o.oninput = () => { l.opacity = +o.value; this.renderer.request(); };
-                const up = this.icon('↑', 'Move up', () => { this.map.moveLayer(l.id, 1); this.renderer.invalidateAllGeometry(); this.renderLayers(); this.renderer.request(); }), dn = this.icon('↓', 'Move down', () => { this.map.moveLayer(l.id, -1); this.renderer.invalidateAllGeometry(); this.renderLayers(); this.renderer.request(); }), del = this.icon('×', 'Delete', () => { if (confirm(`Delete ${l.name}?`)) {
-                    this.map.deleteLayer(l.id);
-                    this.renderer.invalidateAllGeometry();
-                    this.renderLayers();
-                    this.renderer.request();
-                } });
-                row.append(e, k, n, o, up, dn, del);
-                this.layersList.appendChild(row);
-            }
-        }
-        icon(t, title, fn) { const b = document.createElement('button'); b.className = 'iconbtn'; b.textContent = t; b.title = title; b.onclick = fn; return b; }
+        } this.zLevel.value = String(this.map.currentLevel); const z = this.map.currentLevel; this.stageBadge.textContent = z === 0 ? 'Z 0 · ground editing plane' : z > 0 ? `Z ${z} · elevated editing plane` : `Z ${z} · lower editing plane`; this.updateZButtons(); }
         renderTilesets() { const old = this.tilesetSelect.value; this.tilesetSelect.replaceChildren(); const all = document.createElement('option'); all.value = ''; all.textContent = 'All tilesets'; this.tilesetSelect.appendChild(all); for (const n of this.assets.tilesetNames()) {
             const o = document.createElement('option');
             o.value = n;
             o.textContent = n;
             this.tilesetSelect.appendChild(o);
         } if ([...this.tilesetSelect.options].some(o => o.value === old))
-            this.tilesetSelect.value = old; this.assetSummary.textContent = this.assets.assets.size ? `${this.assets.assets.size.toLocaleString()} sprites · ${this.tileDefs.props.size.toLocaleString()} tile definitions` : 'Load a PZ location to index the media library.'; }
-        renderTiles() { const token = ++this.tileToken; this.tileList.replaceChildren(); let a = this.tilesetSelect.value ? this.assets.assetsForTileset(this.tilesetSelect.value) : this.assets.search(this.tileSearch.value, 500); if (this.tilesetSelect.value && this.tileSearch.value.trim()) {
-            const q = this.tileSearch.value.toLowerCase();
-            a = a.filter(x => x.name.toLowerCase().includes(q));
-        } const f = document.createDocumentFragment(); for (const x of a.slice(0, 500)) {
+            this.tilesetSelect.value = old; this.assetSummary.textContent = this.assets.assets.size ? `${this.assets.assets.size.toLocaleString()} sprites · ${this.tileDefs.props.size.toLocaleString()} tile definitions` : 'Choose the Project Zomboid media folder to index the media library.'; }
+        renderTiles() { const token = ++this.tileToken; this.tileList.replaceChildren(); const q = this.tileSearch.value; let a = this.tilesetSelect.value ? this.assets.assetsForTileset(this.tilesetSelect.value) : this.assets.search(q, 500, x => this.tileDefs.searchText(x.name)); if (this.tilesetSelect.value && q.trim())
+            a = a.filter(x => PZODT.searchMatches(`${x.name} ${this.tileDefs.searchText(x.name)}`, q)); const f = document.createDocumentFragment(); for (const x of a.slice(0, 500)) {
             const d = document.createElement('div');
             d.className = 'tilecard' + (this.editor.selectedAsset === x.name ? ' selected' : '');
             const c = document.createElement('canvas');
@@ -1546,7 +2038,9 @@ var PZODT;
             c.height = 82;
             const n = document.createElement('div');
             n.className = 'name';
-            n.textContent = x.name;
+            const friendly = this.tileDefs.displayName(x.name);
+            n.textContent = friendly !== x.name ? `${friendly} · ${x.name}` : x.name;
+            n.title = this.tileDefs.searchText(x.name);
             d.append(c, n);
             d.onclick = () => { this.editor.selectAsset(x.name); this.renderTiles(); };
             f.appendChild(d);
@@ -1575,10 +2069,11 @@ var PZODT;
             c.height = 72;
             const t = document.createElement('div');
             t.className = 'furnituretext';
-            const title = document.createElement('b');
-            title.textContent = `${h.group.label} · #${h.def.index}`;
+            const title = document.createElement('b'), friendly = this.catalog.displayName(h.def, h.group);
+            title.textContent = friendly;
+            title.title = `${h.group.label} · #${h.def.index}`;
             const meta = document.createElement('small');
-            meta.textContent = `${h.def.entries.length} orientations · ${h.available}/${h.total} tiles`;
+            meta.textContent = `${h.group.label} · #${h.def.index} · ${h.def.entries.length} alternative appearance${h.def.entries.length === 1 ? '' : 's'} · ${h.available}/${h.total} tiles`;
             t.append(title, meta);
             d.append(c, t);
             d.onclick = () => { this.selectedFurnitureHit = h; this.editor.selectFurniture(h.def); this.renderFurniture(); };
@@ -1594,20 +2089,47 @@ var PZODT;
             } }, { root: this.furnitureList, rootMargin: '120px' }); for (const q of previews)
             this.furnitureObserver.observe(q.c); }
         selectionChanged() { document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === this.editor.tool)); this.renderSelection(); }
-        async renderSelection() { const ctx = this.preview.getContext('2d'); ctx.clearRect(0, 0, this.preview.width, this.preview.height); this.orientationButtons.replaceChildren(); if (this.editor.selectedAsset) {
+        refreshHeightPresets() { const values = this.tileDefs.placementHeightValues(5); this.heightPresets = [{ label: 'H0', height: 0, count: 0 }, ...values.map(v => ({ label: `H${v.height}`, height: v.height, count: v.count }))]; }
+        renderPlacementHeights() { this.placementHeightControls.replaceChildren(); if (!this.editor.selectedAsset && !this.editor.selectedFurniture)
+            return; const title = document.createElement('div'); title.className = 'placementHeightTitle'; title.textContent = 'Placement height'; const hint = document.createElement('div'); hint.className = 'placementHeightHint'; hint.textContent = "Adjust the object's placement height here. Use + / − on the keyboard for fine adjustment."; this.placementHeightControls.append(title, hint); const buttons = document.createElement('div'); buttons.className = 'placementHeightButtons'; for (const p of this.heightPresets) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = `H${p.height}`;
+            b.title = p.count ? `Common height found in ${p.count} surface definitions from the loaded media` : 'Floor height';
+            b.classList.toggle('active', this.editor.placementHeight === p.height);
+            b.onclick = () => this.editor.setPlacementHeight(p.height);
+            buttons.appendChild(b);
+        } this.placementHeightControls.appendChild(buttons); const custom = document.createElement('div'); custom.className = 'placementHeightCustom'; const minus = document.createElement('button'); minus.type = 'button'; minus.textContent = '−'; minus.title = 'Decrease placement height (-)'; minus.onclick = () => this.editor.setPlacementHeight(this.editor.placementHeight - 1); const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.max = '128'; input.step = '1'; input.value = String(this.editor.placementHeight); input.setAttribute('aria-label', 'Custom placement height'); const apply = () => this.editor.setPlacementHeight(+input.value); input.onchange = apply; input.onkeydown = e => { if (e.key === 'Enter') {
+            e.preventDefault();
+            apply();
+        } }; const plus = document.createElement('button'); plus.type = 'button'; plus.textContent = '+'; plus.title = 'Increase placement height (+)'; plus.onclick = () => this.editor.setPlacementHeight(this.editor.placementHeight + 1); custom.append(minus, input, plus); this.placementHeightControls.appendChild(custom); }
+        async renderSelection() { const ctx = this.preview.getContext('2d'); ctx.clearRect(0, 0, this.preview.width, this.preview.height); this.orientationButtons.replaceChildren(); this.renderPlacementHeights(); if (this.editor.selectedAsset) {
             this.selectionLabel.textContent = this.editor.selectedAsset;
-            const a = this.assets.asset(this.editor.selectedAsset), props = this.tileDefs.properties(this.editor.selectedAsset), cat = this.classify(this.editor.selectedAsset);
-            this.selectionInfo.textContent = `${cat}\n${this.editor.selectedAsset}${Object.keys(props).length ? `\nProperties: ${Object.keys(props).slice(0, 8).join(', ')}` : ''}`;
-            if (a)
-                await this.assets.drawPreview(this.preview, a.name);
+            const cat = this.classify(this.editor.selectedAsset), ctx = this.editor.selectedContext;
+            this.selectionInfo.textContent = `${cat}\n${this.editor.selectedAsset}\nHeight: H${this.editor.placementHeight}`;
+            if (ctx) {
+                const w = this.candidateWorld(ctx);
+                await this.assets.drawPreview(this.preview, this.editor.selectedAsset, w.x, w.y);
+            }
+            else
+                await this.assets.drawPreview(this.preview, this.editor.selectedAsset);
             return;
         } const d = this.editor.selectedFurniture; if (d) {
-            const h = this.selectedFurnitureHit;
-            this.selectionLabel.textContent = `${h?.group.label || 'Furniture'} · ${this.editor.furnitureOrient}`;
-            this.selectionInfo.textContent = `Furniture\n${h?.group.label || ''} · #${d.index}\n${d.layer}`;
-            for (const o of this.catalog.orientations(d)) {
-                const b = document.createElement('button');
-                b.textContent = o;
+            let h = this.selectedFurnitureHit;
+            if (!h || h.def !== d) {
+                h = this.catalog.search('', '', 5000).find(x => x.def === d) ?? null;
+                this.selectedFurnitureHit = h;
+            }
+            const orientations = this.catalog.orientations(d), appearanceIndex = Math.max(0, orientations.indexOf(this.editor.furnitureOrient)), friendly = this.catalog.displayName(d, h?.group ?? null);
+            this.selectionLabel.textContent = `${friendly} · Appearance ${appearanceIndex + 1}`;
+            this.selectionInfo.textContent = `${friendly}${h ? `\n${h.group.label} · #${d.index}` : `\n#${d.index}`}\nHeight: H${this.editor.placementHeight}`;
+            const appearanceLabel = document.createElement('span');
+            appearanceLabel.className = 'orientationLabel';
+            appearanceLabel.textContent = 'Alternative appearance';
+            this.orientationButtons.appendChild(appearanceLabel);
+            for (let i = 0; i < orientations.length; i++) {
+                const o = orientations[i], b = document.createElement('button');
+                b.textContent = String(i + 1);
                 b.classList.toggle('active', o === this.editor.furnitureOrient);
                 b.onclick = () => { this.editor.furnitureOrient = o; this.selectionChanged(); };
                 this.orientationButtons.appendChild(b);
@@ -1629,117 +2151,53 @@ var PZODT;
             const a = p.a;
             ctx.drawImage(p.b, a.sx, a.sy, a.sw, a.sh, ox + p.l * fit, oy + p.t * fit, a.sw * p.s * fit, a.sh * p.s * fit);
         } }
-        configureRelease() { const cfg = releaseConfig(), support = safeHttpsUrl(cfg.supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
+        configureRelease() { const support = safeSupportUrl(releaseConfig().supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
         applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (persist)
             storeSet('pzodt.nightMode', enabled ? '1' : '0'); }
-        maybeStartTutorial() { if (storeGet('pzodt.tutorialDismissed.1.0') !== '1')
-            this.startTutorial(false); }
-        startTutorial(force = false) { if (this.tutorialActive)
-            return; if (force)
-            storeRemove('pzodt.tutorialDismissed.1.0'); this.tutorialActive = true; this.tutorialIndex = 0; el('tutorialRemember').checked = true; document.querySelectorAll('header,.toolrow,.layout,footer').forEach(x => x.inert = true); const overlay = el('tutorialOverlay'); overlay.inert = false; overlay.classList.remove('hidden'); this.showTutorialStep(); setTimeout(() => el('tutorialNextBtn').focus(), 0); }
-        moveTutorial(delta) { if (!this.tutorialActive)
-            return; const next = this.tutorialIndex + delta; if (next < 0)
-            return; if (next >= this.tutorialSteps.length) {
-            this.finishTutorial();
-            return;
-        } this.tutorialIndex = next; this.showTutorialStep(); }
-        finishTutorial() { if (!this.tutorialActive)
-            return; this.tutorialActive = false; if (el('tutorialRemember').checked)
-            storeSet('pzodt.tutorialDismissed.1.0', '1');
-        else
-            storeRemove('pzodt.tutorialDismissed.1.0'); const overlay = el('tutorialOverlay'); overlay.classList.add('hidden'); overlay.classList.remove('noTarget', 'cardTop'); document.querySelectorAll('header,.toolrow,.layout,footer').forEach(x => x.inert = false); const d = el('loadDialog'); d.classList.remove('tutorialVisibleDialog'); if (d.open)
-            d.close(); el('tutorialSpotlight').classList.remove('active'); }
-        showTutorialStep() { const step = this.tutorialSteps[this.tutorialIndex], load = el('loadDialog'); if (step.closeLoad && load.open) {
-            load.classList.remove('tutorialVisibleDialog');
-            load.close();
-        } if (step.openLoad) {
-            load.classList.add('tutorialVisibleDialog');
-            if (!load.open)
-                load.show();
-        } if (step.target === 'viewFilters')
-            this.collapse('right', false); if (step.target === 'furnitureTabButton')
-            this.collapse('left', false); el('tutorialTitle').textContent = step.title; el('tutorialText').textContent = step.text; el('tutorialProgress').textContent = `${this.tutorialIndex + 1} / ${this.tutorialSteps.length}`; el('tutorialBackBtn').disabled = this.tutorialIndex === 0; el('tutorialNextBtn').textContent = this.tutorialIndex === this.tutorialSteps.length - 1 ? 'Finish' : 'Continue'; requestAnimationFrame(() => this.positionTutorial()); }
-        positionTutorial() { if (!this.tutorialActive)
-            return; const step = this.tutorialSteps[this.tutorialIndex], spot = el('tutorialSpotlight'), overlay = el('tutorialOverlay'); overlay.classList.toggle('noTarget', !step.target); overlay.classList.remove('cardTop'); if (!step.target) {
-            spot.classList.remove('active');
-            return;
-        } const target = document.getElementById(step.target); if (!target || target.getClientRects().length === 0) {
-            spot.classList.remove('active');
-            overlay.classList.add('noTarget');
-            return;
-        } const r = target.getBoundingClientRect(), pad = 10; spot.classList.add('active'); spot.style.left = `${Math.max(4, r.left - pad)}px`; spot.style.top = `${Math.max(4, r.top - pad)}px`; spot.style.width = `${Math.max(24, Math.min(innerWidth - 8, r.width + pad * 2))}px`; spot.style.height = `${Math.max(24, Math.min(innerHeight - 8, r.height + pad * 2))}px`; overlay.classList.toggle('cardTop', r.top + r.height / 2 > innerHeight * .58); }
-        configureFeedbackText() { const type = el('feedbackType').value, msg = el('feedbackMessage').value.trim().slice(0, 6000), contact = el('feedbackContact').value.trim().slice(0, 200), technical = el('feedbackTechnical').checked; const lines = [`PZ Online Decoration Tool ${APP_VERSION}`, `Type: ${type}`, '', msg]; if (contact)
-            lines.push('', `Contact: ${contact}`); if (technical)
-            lines.push('', 'Technical information:', `Browser: ${navigator.userAgent.slice(0, 500)}`, `Graphics: ${this.graphicsQuality.value}`); return lines.join('\n'); }
-        openFeedback() { el('feedbackStatus').textContent = 'Your feedback stays in this browser until you submit or copy it.'; el('feedbackDialog').showModal(); }
-        async copyText(text) { if (navigator.clipboard && isSecureContext) {
-            await navigator.clipboard.writeText(text);
-            return;
-        } const ta = document.createElement('textarea'); ta.value = text; ta.readOnly = true; ta.className = 'clipboardFallback'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); if (!ok)
-            throw new Error('Clipboard copy was blocked by the browser.'); }
-        async copyFeedback() { const st = el('feedbackStatus'), text = this.configureFeedbackText(); if (!el('feedbackMessage').value.trim()) {
-            st.textContent = 'Write a message first.';
-            return;
-        } try {
-            await this.copyText(text);
-            st.textContent = 'Feedback copied to the clipboard.';
-        }
-        catch (err) {
-            st.textContent = String(err.message || err);
-        } }
-        openExternal(url) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.referrerPolicy = 'no-referrer'; document.body.appendChild(a); a.click(); a.remove(); }
-        async sendFeedback() {
-            const st = el('feedbackStatus'), message = el('feedbackMessage').value.trim();
-            if (!message) {
-                st.textContent = 'Write a message first.';
-                return;
-            }
-            const cfg = releaseConfig(), endpoint = safeSameOriginEndpoint(cfg.feedbackEndpoint), fallback = safeHttpsUrl(cfg.feedbackUrl), payload = { version: APP_VERSION, type: el('feedbackType').value, message: message.slice(0, 6000), contact: el('feedbackContact').value.trim().slice(0, 200), technical: el('feedbackTechnical').checked ? { browser: navigator.userAgent.slice(0, 500), graphics: this.graphicsQuality.value } : undefined };
-            if (endpoint) {
-                st.textContent = 'Sending…';
-                try {
-                    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 8000), res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'omit', referrerPolicy: 'no-referrer', signal: ctrl.signal });
-                    clearTimeout(timer);
-                    if (!res.ok)
-                        throw new Error(`Feedback server returned ${res.status}.`);
-                    st.textContent = 'Feedback sent. Thank you.';
-                    el('feedbackMessage').value = '';
-                    return;
-                }
-                catch (err) {
-                    st.textContent = `Could not send directly: ${String(err.message || err)}`;
-                }
-            }
+        openFeedbackDialog() { const frame = el('feedbackFrame'); if (!frame.getAttribute('src')) {
+            const raw = frame.dataset.src ?? '';
             try {
-                await this.copyText(this.configureFeedbackText());
-                if (fallback) {
-                    this.openExternal(fallback);
-                    st.textContent = 'Feedback copied; the feedback page was opened in a new tab. Paste the copied text there.';
-                }
-                else
-                    st.textContent = 'Feedback copied. No feedback destination is configured in this build.';
+                const u = new URL(raw, location.href);
+                if (u.protocol === 'https:' && u.hostname === 'tally.so')
+                    frame.src = u.href;
             }
-            catch (err) {
-                st.textContent = String(err.message || err);
-            }
-        }
-        openSupport() { const url = safeHttpsUrl(releaseConfig().supportUrl); if (!url) {
+            catch { }
+        } el('feedbackDialog').showModal(); }
+        openExternal(url) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.referrerPolicy = 'no-referrer'; document.body.appendChild(a); a.click(); a.remove(); }
+        openSupport() { const url = safeSupportUrl(releaseConfig().supportUrl); if (!url) {
             this.setStatus('Support link is not configured.');
             return;
         } this.openExternal(url); }
         validateProjectData(m) {
-            if (!m || typeof m !== 'object' || m.format !== 'PZOnlineDecorationTool')
+            if (!m || typeof m !== 'object' || Array.isArray(m) || m.format !== 'PZOnlineDecorationTool')
                 throw new Error('Not a PZ Online Decoration Tool JSON file.');
-            const w = Number(m.width), h = Number(m.height);
+            const w = Number(m.width), h = Number(m.height), tileWidth = Number(m.tileWidth ?? 64), tileHeight = Number(m.tileHeight ?? 32), levelY = Number(m.cellsPerLevelY ?? 3), currentLevel = Number(m.currentLevel ?? 0);
             if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w > 600 || h > 600)
                 throw new Error('Invalid map dimensions.');
+            if (!Number.isFinite(tileWidth) || tileWidth < 16 || tileWidth > 512 || !Number.isFinite(tileHeight) || tileHeight < 8 || tileHeight > 256 || !Number.isFinite(levelY) || levelY < 0 || levelY > 64)
+                throw new Error('Invalid map geometry.');
+            if (!Number.isInteger(currentLevel) || currentLevel < -64 || currentLevel > 64)
+                throw new Error('Invalid current Z level.');
+            if (m.properties !== undefined) {
+                if (!m.properties || typeof m.properties !== 'object' || Array.isArray(m.properties))
+                    throw new Error('Invalid project properties.');
+                const entries = Object.entries(m.properties);
+                if (entries.length > 64)
+                    throw new Error('Project contains too many properties.');
+                for (const [k, v] of entries) {
+                    if (k.length > 128 || ['__proto__', 'prototype', 'constructor'].includes(k) || typeof v !== 'string' || v.length > 2048)
+                        throw new Error('Invalid project property.');
+                }
+            }
             if (m.layers !== undefined && !Array.isArray(m.layers))
                 throw new Error('Invalid layer data.');
             if (Array.isArray(m.layers) && m.layers.length > 256)
                 throw new Error('Project contains too many layers.');
-            let spriteCount = 0;
             if (m.baseStacks !== undefined && !Array.isArray(m.baseStacks))
                 throw new Error('Invalid base stack data.');
+            if (Array.isArray(m.baseStacks) && m.baseStacks.length > 129)
+                throw new Error('Project contains too many Z levels.');
+            let spriteCount = 0;
             for (const lev of m.baseStacks || []) {
                 if (!Array.isArray(lev) || lev.length !== 2 || !Number.isInteger(+lev[0]) || +lev[0] < -64 || +lev[0] > 64 || !Array.isArray(lev[1]))
                     throw new Error('Invalid base stack level.');
@@ -1749,20 +2207,34 @@ var PZODT;
                     if (!Array.isArray(cell) || cell.length !== 2 || !Number.isInteger(+cell[0]) || +cell[0] < 0 || +cell[0] >= w * h || !Array.isArray(cell[1]) || cell[1].length > 128)
                         throw new Error('Invalid base stack cell.');
                     for (const n of cell[1]) {
-                        if (typeof n !== 'string' || n.length > 512)
+                        if (typeof n !== 'string' || n.length < 1 || n.length > 512)
                             throw new Error('Invalid sprite name.');
-                        spriteCount++;
-                        if (spriteCount > 8000000)
+                        if (++spriteCount > 4000000)
                             throw new Error('Project contains too many sprites.');
                     }
                 }
             }
+            const ids = new Set();
             for (const layer of m.layers || []) {
-                if (!layer || typeof layer !== 'object' || typeof layer.name !== 'string' || layer.name.length > 128 || !Number.isInteger(+(layer.level ?? 0)) || +(layer.level ?? 0) < -64 || +(layer.level ?? 0) > 64 || !Array.isArray(layer.cells) || layer.cells.length > w * h)
+                if (!layer || typeof layer !== 'object' || Array.isArray(layer) || typeof layer.name !== 'string' || layer.name.length < 1 || layer.name.length > 128 || !Number.isInteger(+(layer.level ?? 0)) || +(layer.level ?? 0) < -64 || +(layer.level ?? 0) > 64 || !Array.isArray(layer.cells) || layer.cells.length > w * h)
                     throw new Error('Invalid layer.');
+                if (layer.id !== undefined && (typeof layer.id !== 'string' || layer.id.length < 1 || layer.id.length > 128 || ids.has(layer.id)))
+                    throw new Error('Invalid layer id.');
+                if (typeof layer.id === 'string')
+                    ids.add(layer.id);
                 for (const cell of layer.cells) {
-                    if (!Array.isArray(cell) || cell.length !== 2 || !Number.isInteger(+cell[0]) || +cell[0] < 0 || +cell[0] >= w * h || typeof cell[1] !== 'string' || cell[1].length > 512)
+                    if (!Array.isArray(cell) || cell.length !== 2 || !Number.isInteger(+cell[0]) || +cell[0] < 0 || +cell[0] >= w * h || typeof cell[1] !== 'string' || cell[1].length < 1 || cell[1].length > 512)
                         throw new Error('Invalid layer cell.');
+                    if (++spriteCount > 4000000)
+                        throw new Error('Project contains too many sprites.');
+                }
+                if (layer.placementHeights !== undefined) {
+                    if (!Array.isArray(layer.placementHeights) || layer.placementHeights.length > w * h)
+                        throw new Error('Invalid placement heights.');
+                    for (const p of layer.placementHeights) {
+                        if (!Array.isArray(p) || p.length < 2 || !Number.isInteger(+p[0]) || +p[0] < 0 || +p[0] >= w * h || !Number.isFinite(+p[1]) || +p[1] < 0 || +p[1] > 512)
+                            throw new Error('Invalid placement height.');
+                    }
                 }
             }
         }
