@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Project Zomboid Base Planner &amp; Decoration Tool">
   <meta name="twitter:description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
-  <link rel="stylesheet" href="styles.css?v=20261014-4">
+  <link rel="stylesheet" href="styles.css?v=20261014-5">
 </head>
 <body class="mediaNeeded">
 <div data-nosnippet>
@@ -50,6 +50,7 @@
   <button data-tool="rect">3 Rectangle</button>
   <button data-tool="picker">4 Picker</button>
   <button data-tool="pan">5 Pan</button>
+  <button data-tool="debug">6 Debug</button>
   <span class="sep"></span>
   <button id="rotateBtn">R Rotate object</button>
   <span id="selectionLabel">No tile selected</span>
@@ -86,14 +87,10 @@
     <h3>Selection</h3>
     <canvas id="previewCanvas" width="260" height="180"></canvas>
     <div id="selectionInfo" class="selectionInfo">Nothing selected.</div>
-    <details id="pickedTileDebug" class="pickedTileDebug hidden">
-      <summary>Picked Tile Debug</summary>
-      <div class="hint">Shown for objects selected with Picker. Includes the View Filter rule, raw .tiles properties, source/layer context, asset metadata, Building Tiles categories, and Furniture Catalog matches.</div>
-      <pre id="pickedTileDebugContent"></pre>
-    </details>
     <div id="orientationButtons" class="orientations"></div>
     <div id="placementHeightControls" class="placementHeights"></div>
     <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
+    <label class="check dynamicWallControl"><input id="dynamicWallToggle" type="checkbox"> Dynamic wall filter <span>· Pencil only</span></label>
     <h3>View filters</h3>
     <div id="viewFilters" class="viewFilters"></div>
   </aside>
@@ -266,6 +263,17 @@
   <div class="dialogActions"><button id="pickerCancelBtn" type="button">Cancel</button></div>
 </dialog>
 
+
+<dialog id="debugPickerDialog" class="dialog pickerDialog">
+  <div class="dialogTitle"><div><b>Debug object</b><small>Choose the object on this cell whose raw tile data you want to inspect.</small></div><button id="debugPickerCloseBtn" type="button">×</button></div>
+  <div class="dialogBody"><div id="debugPickerInfo" class="hint"></div><div id="debugChoices" class="pickerChoices"></div></div>
+  <div class="dialogActions"><button id="debugPickerCancelBtn" type="button">Cancel</button></div>
+</dialog>
+<dialog id="debugInfoDialog" class="dialog debugInfoDialog">
+  <div class="dialogTitle"><div><b>Tile Debug</b><small>Raw classification, source, asset, property and Furniture Catalog data.</small></div><button id="debugInfoCloseBtn" type="button">×</button></div>
+  <div class="dialogBody"><pre id="debugInfoContent"></pre></div>
+  <div class="dialogActions"><button id="copyDebugBtn" type="button">Copy</button><button id="debugInfoDoneBtn" type="button" class="primary">Done</button></div>
+</dialog>
 <dialog id="eraseDialog" class="dialog eraseDialog">
   <div class="dialogTitle">
     <div><b>Erase objects</b><small>Select exactly which objects on this cell should be removed.</small></div>
@@ -307,6 +315,6 @@
 <input id="mediaInput" type="file" webkitdirectory multiple hidden>
 <input id="jsonInput" type="file" accept=".json,application/json" hidden>
 <script src="config/release-config.js"></script>
-<script src="dist/app.js?v=20261014-4"></script>
+<script src="dist/app.js?v=20261014-5"></script>
 </body>
 </html>
