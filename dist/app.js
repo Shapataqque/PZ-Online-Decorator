@@ -496,10 +496,15 @@ var PZODT;
             this.props = new Map();
             this.tilesetCounts = new Map();
             this.loadedFileKeys = new Set();
+            this.buildingCategoryCache = new Map();
         }
         key(name) { const p = PZODT.parseTileName(name); return `${p.tilesetName.toLowerCase()}:${p.tileIndex}`; }
         properties(name) { return this.props.get(this.key(name)) ?? {}; }
-        clear() { this.props.clear(); this.tilesetCounts.clear(); this.loadedFileKeys.clear(); }
+        buildingCategories(name) { const p = PZODT.parseTileName(name), cacheKey = `${p.tilesetName.toLowerCase()}:${p.tileIndex}`, cached = this.buildingCategoryCache.get(cacheKey); if (cached)
+            return [...cached]; const variants = [name, name.toLowerCase(), `${p.tilesetName}_${p.tileIndex}`, `${p.tilesetName}_${String(p.tileIndex).padStart(3, '0')}`, `${p.tilesetName.toLowerCase()}_${p.tileIndex}`, `${p.tilesetName.toLowerCase()}_${String(p.tileIndex).padStart(3, '0')}`], out = []; for (const [category, set] of Object.entries(PZODT.BUILDING_TILE_CATEGORIES))
+            if (variants.some(v => set.has(v)))
+                out.push(category); this.buildingCategoryCache.set(cacheKey, out); return [...out]; }
+        clear() { this.props.clear(); this.tilesetCounts.clear(); this.loadedFileKeys.clear(); this.buildingCategoryCache.clear(); }
         fileKey(f) { const p = (f.webkitRelativePath || f.name).replace(/\\/g, '/'); return `${p}|${f.size}|${f.lastModified}`; }
         async loadFiles(files, progress) { const list = files.filter(f => /\.tiles$/i.test(f.name) && !this.loadedFileKeys.has(this.fileKey(f))), q = [...list]; let total = 0, done = 0; const workers = Array.from({ length: Math.min(4, q.length) }, async () => { while (q.length) {
             const f = q.shift();
@@ -579,8 +584,8 @@ var PZODT;
                 clusters.push({ height, count, sum: height * count });
         } return clusters.sort((a, b) => b.count - a.count).slice(0, Math.max(1, limit)).sort((a, b) => a.height - b.height).map(({ height, count }) => ({ height, count })); }
         classifyDetailed(name, furniture, catalogOverride = null) {
-            const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), keySet = new Set(keys), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => '_' + Number(d));
-            const hasKey = (...q) => q.some(x => keySet.has(x.toLowerCase())), hit = (category, source, rule) => ({ category, source, rule });
+            const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), keySet = new Set(keys), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => '_' + Number(d)), building = new Set(this.buildingCategories(name));
+            const hasKey = (...q) => q.some(x => keySet.has(x.toLowerCase())), hasBuilding = (...q) => q.some(x => building.has(x)), hit = (category, source, rule) => ({ category, source, rule });
             if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
                 return hit('Furniture', 'override', canonical);
             if (catalogOverride)
@@ -603,22 +608,16 @@ var PZODT;
                 return hit('Floor', 'structural-family', 'floor');
             if (/(^|_)(doors?|windows?|curtains?|shutters?)[a-z0-9]*(_|$)/.test(n))
                 return hit('Doors & Windows', 'structural-family', 'door/window');
-            if (/(^|_)walls?[a-z0-9]*(_|$)/.test(n))
-                return hit('Wall', 'structural-family', 'wall');
-            if (PZODT.BUILDING_TILE_CATEGORIES['Floors']?.has(name))
+            if (/(^|_)walls?[a-z0-9]*(_|$)/.test(n) || n.includes('wall'))
+                return hit('Wall', 'structural-family', 'wall name');
+            if (hasBuilding('Floors'))
                 return hit('Floor', 'building-category', 'Floors');
-            if (PZODT.BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name))
-                return hit('Wall', 'building-category', 'Exterior Walls');
-            if (PZODT.BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))
-                return hit('Wall', 'building-category', 'Interior Walls');
-            if (PZODT.BUILDING_TILE_CATEGORIES['Doors']?.has(name))
-                return hit('Doors & Windows', 'building-category', 'Doors');
-            if (PZODT.BUILDING_TILE_CATEGORIES['Windows']?.has(name))
-                return hit('Doors & Windows', 'building-category', 'Windows');
-            if (PZODT.BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name))
-                return hit('Roof', 'building-category', 'Roof Caps');
-            if (PZODT.BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))
-                return hit('Roof', 'building-category', 'Roof Slopes');
+            if (hasBuilding('Exterior Walls', 'Interior Walls', 'Trim - Exterior Walls', 'Trim - Interior Walls'))
+                return hit('Wall', 'building-category', [...building].filter(x => x.includes('Walls')).join(' + '));
+            if (hasBuilding('Doors', 'Door Frames', 'Windows', 'Curtains', 'Shutters'))
+                return hit('Doors & Windows', 'building-category', [...building].filter(x => ['Doors', 'Door Frames', 'Windows', 'Curtains', 'Shutters'].includes(x)).join(' + '));
+            if (hasBuilding('Roof Caps', 'Roof Slopes', 'Roof Tops'))
+                return hit('Roof', 'building-category', [...building].filter(x => x.startsWith('Roof')).join(' + '));
             if (n.includes('appliances') || /(^|_)fixtures_(counters?|fireplaces?|bathroom|escalators?)(_|$)/.test(n) || n.includes('furniture'))
                 return hit('Furniture', 'mixed-object', 'furniture family');
             if (hasKey('roof', 'westrooft', 'westroofb', 'westroofm', 'roofgroup', 'roofwallstart'))
@@ -2249,7 +2248,12 @@ var PZODT;
                 }
             } }, { root: this.furnitureList, rootMargin: '120px' }); for (const q of previews)
             this.furnitureObserver.observe(q.c); }
-        selectionChanged() { document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === this.editor.tool)); this.renderSelection(); }
+        selectionChanged() { document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === this.editor.tool)); this.renderPickedTileDebug(); this.renderSelection(); }
+        renderPickedTileDebug() { const panel = el('pickedTileDebug'), pre = el('pickedTileDebugContent'), c = this.editor.selectedContext; if (!c) {
+            panel.classList.add('hidden');
+            pre.textContent = '';
+            return;
+        } const name = c.name, parsed = PZODT.parseTileName(name), world = this.candidateWorld(c), classification = this.tileDefs.classifyDetailed(name, this.catalog.furnitureTiles, this.catalog.viewCategoryOverride(name)), catalogOverride = this.catalog.viewCategoryOverride(name), matches = this.catalog.matchesTile(name, false), asset = this.assets.resolveAsset(name, world.x, world.y) ?? this.assets.asset(name), payload = { tile: { name, displayName: this.tileDefs.displayName(name), tilesetName: parsed.tilesetName, tileIndex: parsed.tileIndex }, pickedFrom: { sourceLabel: c.sourceLabel, targetId: c.targetId, local: { x: c.x, y: c.y, z: c.z }, world: { x: world.x, y: world.y, z: c.z }, stackIndex: c.stackIndex ?? null, sourcePlacementHeight: c.placementHeight ?? 0, newPlacementHeight: this.editor.placementHeight }, viewFilter: { category: classification.category, ruleSource: classification.source, rule: classification.rule, catalogOverride, buildingTileCategories: this.tileDefs.buildingCategories(name) }, surface: this.tileDefs.surfaceInfo(name), asset: asset ? { ...asset } : null, properties: this.tileDefs.properties(name), furnitureMatches: matches.map(m => ({ group: m.group.label, groupIndex: m.groupIndex, furnitureIndex: m.furnitureIndex, definitionIndex: m.def.index, layer: m.def.layer, orientation: m.orient, selectedEntryCells: this.catalog.entry(m.def, m.orient)?.cells ?? [], allEntries: m.def.entries.map(e => ({ orientation: e.orient, cells: e.cells })) })) }; pre.textContent = JSON.stringify(payload, null, 2); panel.classList.remove('hidden'); }
         refreshHeightPresets() { const values = this.tileDefs.placementHeightValues(5); this.heightPresets = [{ label: 'H0', height: 0, count: 0 }, ...values.map(v => ({ label: `H${v.height}`, height: v.height, count: v.count }))]; }
         renderPlacementHeights() { this.placementHeightControls.replaceChildren(); if (!this.editor.selectedAsset && !this.editor.selectedFurniture)
             return; const title = document.createElement('div'); title.className = 'placementHeightTitle'; title.textContent = 'Placement height'; const hint = document.createElement('div'); hint.className = 'placementHeightHint'; hint.textContent = "Adjust the object's placement height here. Use + / − on the keyboard for fine adjustment."; this.placementHeightControls.append(title, hint); const buttons = document.createElement('div'); buttons.className = 'placementHeightButtons'; for (const p of this.heightPresets) {

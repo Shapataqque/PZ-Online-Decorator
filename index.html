@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Project Zomboid Base Planner &amp; Decoration Tool">
   <meta name="twitter:description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
-  <link rel="stylesheet" href="styles.css?v=20261014-2">
+  <link rel="stylesheet" href="styles.css?v=20261014-3">
 </head>
 <body class="mediaNeeded">
 <div data-nosnippet>
@@ -86,6 +86,11 @@
     <h3>Selection</h3>
     <canvas id="previewCanvas" width="260" height="180"></canvas>
     <div id="selectionInfo" class="selectionInfo">Nothing selected.</div>
+    <details id="pickedTileDebug" class="pickedTileDebug hidden">
+      <summary>Picked Tile Debug</summary>
+      <div class="hint">Shown for objects selected with Picker. Includes the View Filter rule, raw .tiles properties, source/layer context, asset metadata, Building Tiles categories, and Furniture Catalog matches.</div>
+      <pre id="pickedTileDebugContent"></pre>
+    </details>
     <div id="orientationButtons" class="orientations"></div>
     <div id="placementHeightControls" class="placementHeights"></div>
     <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
@@ -302,6 +307,6 @@
 <input id="mediaInput" type="file" webkitdirectory multiple hidden>
 <input id="jsonInput" type="file" accept=".json,application/json" hidden>
 <script src="config/release-config.js"></script>
-<script src="dist/app.js?v=20261014-2"></script>
+<script src="dist/app.js?v=20261014-3"></script>
 </body>
 </html>
