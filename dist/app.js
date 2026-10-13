@@ -578,39 +578,68 @@ var PZODT;
             else
                 clusters.push({ height, count, sum: height * count });
         } return clusters.sort((a, b) => b.count - a.count).slice(0, Math.max(1, limit)).sort((a, b) => a.height - b.height).map(({ height, count }) => ({ height, count })); }
-        classify(name, furniture) {
+        classifyDetailed(name, furniture) {
             const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => `_${Number(d)}`);
-            const has = (...q) => q.some(x => keys.includes(x.toLowerCase()) || all.includes(x.toLowerCase()));
+            const has = (...q) => q.some(x => keys.includes(x.toLowerCase()) || all.includes(x.toLowerCase())), hit = (category, source, rule) => ({ category, source, rule });
             if (/(^|_)roofs?(_|$)/.test(n))
-                return 'Roof';
+                return hit('Roof', 'name', 'roof family');
             if (n.includes('vegetation_indoor'))
-                return 'Furniture';
+                return hit('Furniture', 'name', 'vegetation_indoor');
             if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
-                return 'Furniture';
+                return hit('Furniture', 'override', canonical);
             if (/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))
-                return 'Fences & Railings';
-            if (has('solidfloor') || /(^|_)(floor|floors|flooring)(_|$)/.test(n) || PZODT.BUILDING_TILE_CATEGORIES['Floors']?.has(name))
-                return 'Floor';
-            if (has('walln', 'wallw', 'wallnw', 'wallse', 'wall', 'treataswallorder') || n.includes('wall') || PZODT.BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name) || PZODT.BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))
-                return 'Wall';
-            if (has('windown', 'windoww', 'doorwalln', 'doorwallw', 'doorn', 'doorw', 'window', 'door') || /(^|_)(door|doors|window|windows|curtain|curtains|shutter|shutters)(_|$)/.test(n) || PZODT.BUILDING_TILE_CATEGORIES['Doors']?.has(name) || PZODT.BUILDING_TILE_CATEGORIES['Windows']?.has(name))
-                return 'Doors & Windows';
-            if (n.includes('appliances') || n.includes('furniture') || furniture.has(n) || furniture.has(canonical))
-                return 'Furniture';
-            if (has('walloverlay', 'flooroverlay', 'overlay', 'attachedn', 'attacheds', 'attachede', 'attachedw', 'ontable') || /(overlay|graffiti|poster|sign_)/.test(n))
-                return 'Decor / Overlay';
-            if (has('container', 'surface', 'table', 'tablen', 'tables', 'tablee', 'tablew', 'countertop', 'isstackable') || /(^|_)(cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n))
-                return 'Furniture';
-            if (has('roof') || n.includes('roof') || PZODT.BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name) || PZODT.BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))
-                return 'Roof';
+                return hit('Fences & Railings', 'name', 'fence/railing family');
+            if (has('solidfloor'))
+                return hit('Floor', 'metadata', 'solidfloor');
+            if (/(^|_)(floor|floors|flooring)(_|$)/.test(n))
+                return hit('Floor', 'name', 'floor family');
+            if (PZODT.BUILDING_TILE_CATEGORIES['Floors']?.has(name))
+                return hit('Floor', 'building-category', 'Floors');
+            if (has('walln', 'wallw', 'wallnw', 'wallse', 'wall', 'treataswallorder'))
+                return hit('Wall', 'metadata', 'wall property');
+            if (n.includes('wall'))
+                return hit('Wall', 'name', 'wall');
+            if (PZODT.BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name))
+                return hit('Wall', 'building-category', 'Exterior Walls');
+            if (PZODT.BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))
+                return hit('Wall', 'building-category', 'Interior Walls');
+            if (has('windown', 'windoww', 'doorwalln', 'doorwallw', 'doorn', 'doorw', 'window', 'door'))
+                return hit('Doors & Windows', 'metadata', 'door/window property');
+            if (/(^|_)(door|doors|window|windows|curtain|curtains|shutter|shutters)(_|$)/.test(n))
+                return hit('Doors & Windows', 'name', 'door/window family');
+            if (PZODT.BUILDING_TILE_CATEGORIES['Doors']?.has(name))
+                return hit('Doors & Windows', 'building-category', 'Doors');
+            if (PZODT.BUILDING_TILE_CATEGORIES['Windows']?.has(name))
+                return hit('Doors & Windows', 'building-category', 'Windows');
+            if (n.includes('appliances') || n.includes('furniture'))
+                return hit('Furniture', 'name', 'appliance/furniture family');
+            if (furniture.has(n) || furniture.has(canonical))
+                return hit('Furniture', 'furniture-catalog', 'catalog match');
+            if (has('walloverlay', 'flooroverlay', 'overlay', 'attachedn', 'attacheds', 'attachede', 'attachedw', 'ontable'))
+                return hit('Decor / Overlay', 'metadata', 'overlay/attached property');
+            if (/(overlay|graffiti|poster|sign_)/.test(n))
+                return hit('Decor / Overlay', 'name', 'overlay/decor family');
+            if (has('container', 'surface', 'table', 'tablen', 'tables', 'tablee', 'tablew', 'countertop', 'isstackable'))
+                return hit('Furniture', 'metadata', 'furniture/surface property');
+            if (/(^|_)(cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n))
+                return hit('Furniture', 'name', 'furniture family');
+            if (has('roof'))
+                return hit('Roof', 'metadata', 'roof');
+            if (n.includes('roof'))
+                return hit('Roof', 'name', 'roof');
+            if (PZODT.BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name))
+                return hit('Roof', 'building-category', 'Roof Caps');
+            if (PZODT.BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))
+                return hit('Roof', 'building-category', 'Roof Slopes');
             if (/(^|_)(blends_street|street|road|roads|asphalt|pavement|sidewalk|parking|curb|curbs)(_|$)/.test(n) || n.includes('blends_street'))
-                return 'Roads & Ground';
+                return hit('Roads & Ground', 'name', 'road/ground family');
             if (/(^|_)(vegetation|tree|trees|bush|bushes|grass|plants?|natural|forest)(_|$)/.test(n) || n.includes('blends_natural'))
-                return 'Vegetation';
+                return hit('Vegetation', 'name', 'vegetation family');
             if (/(^|_)(outdoor|exterior|clutter|street_decoration|streetdecor|trash|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n) || n.includes('outdoor_clutter') || n.includes('exterior_'))
-                return 'Exterior';
-            return 'Other';
+                return hit('Exterior', 'name', 'exterior family');
+            return hit('Other', 'fallback', 'unmatched');
         }
+        classify(name, furniture) { return this.classifyDetailed(name, furniture).category; }
     }
     PZODT.TileDefDatabase = TileDefDatabase;
 })(PZODT || (PZODT = {}));
@@ -1770,7 +1799,7 @@ var PZODT;
             return c; c = this.tileDefs.classify(n, this.catalog.furnitureTiles); this.classificationCache.set(n, c); return c; }
         objectVisible(n) { return this.filters.get(this.classify(n)) !== false; }
         setStatus(s) { this.status.textContent = s; }
-        updateMediaUi(state, message = '') { const ready = state === 'ready', busy = state === 'indexing', datasets = el('datasetSelect').options.length && !!el('datasetSelect').value; document.body.classList.toggle('mediaNeeded', !ready); const choose = el('chooseMediaBtn'), noticeChoose = el('mediaNoticeChooseBtn'), loadWorld = el('loadLocationBtn'), load = el('loadBtn'), notice = el('mediaNoticeText'), loadStatus = el('loadStatus'); choose.disabled = busy; noticeChoose.disabled = busy; choose.textContent = ready ? 'Change Media Folder…' : busy ? 'Indexing Media…' : 'Choose Media Folder…'; loadWorld.disabled = !ready || !datasets; load.disabled = !ready || !datasets; if (message) {
+        updateMediaUi(state, message = '') { const ready = state === 'ready', busy = state === 'indexing', datasets = el('datasetSelect').options.length && !!el('datasetSelect').value; document.body.classList.toggle('mediaNeeded', !ready); const choose = el('chooseMediaBtn'), noticeChoose = el('mediaNoticeChooseBtn'), loadWorld = el('loadLocationBtn'), load = el('loadBtn'), audit = el('exportFilterAuditBtn'), notice = el('mediaNoticeText'), loadStatus = el('loadStatus'); choose.disabled = busy; noticeChoose.disabled = busy; choose.textContent = ready ? 'Change Media Folder…' : busy ? 'Indexing Media…' : 'Choose Media Folder…'; loadWorld.disabled = !ready || !datasets; load.disabled = !ready || !datasets; audit.disabled = !ready; if (message) {
             notice.textContent = message;
             loadStatus.textContent = message;
         }
@@ -1795,6 +1824,7 @@ var PZODT;
             el('openJsonBtn').onclick = () => el('jsonInput').click();
             el('settingsBtn').onclick = () => el('settingsDialog').showModal();
             el('settingsCloseBtn').onclick = el('settingsDoneBtn').onclick = () => el('settingsDialog').close();
+            el('exportFilterAuditBtn').onclick = () => this.exportViewFilterAudit();
             this.graphicsQuality.onchange = () => { const q = this.graphicsQuality.value; storeSet('pzodt.graphicsQuality', q); this.renderer.setQuality(q); setTimeout(() => this.renderer.center(), 0); this.setStatus(`Graphics: ${q}.`); };
             this.performanceStatsToggle.onchange = () => { storeSet('pzodt.performanceStats', this.performanceStatsToggle.checked ? '1' : '0'); this.setPerformanceStats(this.performanceStatsToggle.checked); };
             el('creditsBtn').onclick = () => { el('settingsDialog').close(); el('creditsDialog').showModal(); };
@@ -2000,6 +2030,44 @@ var PZODT;
         catch (err) {
             this.setStatus(`JSON error: ${String(err.message || err)}`);
         } inp.value = ''; }
+        exportViewFilterAudit() {
+            if (!this.mediaReadySignature) {
+                this.setStatus('Choose and finish indexing the media folder before exporting the audit.');
+                return;
+            }
+            const names = new Set();
+            for (const name of this.assets.assets.keys())
+                names.add(name);
+            for (const [tileset, count] of this.tileDefs.tilesetCounts)
+                for (let i = 0; i < count; i++)
+                    names.add(`${tileset}_${i}`);
+            const rows = [...names].map(name => {
+                const parsed = PZODT.parseTileName(name), properties = this.tileDefs.properties(name), classification = this.tileDefs.classifyDetailed(name, this.catalog.furnitureTiles), matches = this.catalog.matchesTile(name, false);
+                const furnitureMatches = [...new Map(matches.map(m => [`${m.group.label}|${m.def.index}|${m.orient}`, { group: m.group.label, index: m.def.index, orientation: m.orient }])).values()];
+                return { tileName: name, tilesetName: parsed.tilesetName, tileIndex: parsed.tileIndex, assetLoaded: !!this.assets.asset(name), properties, furnitureCatalogMatch: furnitureMatches.length > 0, furnitureMatches, currentViewCategory: classification.category, currentRuleSource: classification.source, currentRule: classification.rule };
+            }).sort((a, b) => a.tilesetName.localeCompare(b.tilesetName) || a.tileIndex - b.tileIndex || a.tileName.localeCompare(b.tileName));
+            const summaries = new Map();
+            for (const row of rows) {
+                let s = summaries.get(row.tilesetName);
+                if (!s) {
+                    s = { tilesetName: row.tilesetName, tileCount: 0, assetCount: 0, propertyBearingCount: 0, furnitureMatchCount: 0, categories: {}, rules: {} };
+                    summaries.set(row.tilesetName, s);
+                }
+                s.tileCount++;
+                if (row.assetLoaded)
+                    s.assetCount++;
+                if (Object.keys(row.properties).length)
+                    s.propertyBearingCount++;
+                if (row.furnitureCatalogMatch)
+                    s.furnitureMatchCount++;
+                s.categories[row.currentViewCategory] = (s.categories[row.currentViewCategory] ?? 0) + 1;
+                const rk = `${row.currentRuleSource}:${row.currentRule}`;
+                s.rules[rk] = (s.rules[rk] ?? 0) + 1;
+            }
+            const payload = { format: 'PZODTViewFilterAudit', version: 1, generatedAt: new Date().toISOString(), appVersion: APP_VERSION, privacy: 'Contains tile names and parsed metadata only. No game images or local file paths.', counts: { tiles: rows.length, tilesets: summaries.size, loadedAssets: this.assets.assets.size, propertyBearingDefinitions: this.tileDefs.props.size, furnitureCatalogTileKeys: this.catalog.furnitureTiles.size }, tilesets: [...summaries.values()].sort((a, b) => a.tilesetName.localeCompare(b.tilesetName)), tiles: rows };
+            save('pz-view-filter-audit.json', new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+            this.setStatus(`View Filter audit exported: ${rows.length.toLocaleString()} tiles across ${summaries.size.toLocaleString()} tilesets.`);
+        }
         renderFilterButtons() { const box = el('viewFilters'); box.replaceChildren(); for (const c of PZODT.VIEW_CATEGORIES) {
             const b = document.createElement('button');
             b.className = 'viewFilter';
