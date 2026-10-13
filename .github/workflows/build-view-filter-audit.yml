@@ -1,0 +1,39 @@
+name: Build view filter audit
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "src/**"
+      - "index.html"
+      - ".github/workflows/build-view-filter-audit.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+      - name: Compile TypeScript
+        run: npx -y -p typescript@5.8.3 tsc -p tsconfig.json
+      - name: Validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check dist/app.js
+          grep -q "Export Audit JSON" index.html
+          grep -q "PZODTViewFilterAudit" dist/app.js
+          grep -q "classifyDetailed" dist/app.js
+      - name: Commit compiled build
+        shell: bash
+        run: |
+          rm -f .github/workflows/build-view-filter-audit.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Build view filter audit"
+          git push origin HEAD:dev
