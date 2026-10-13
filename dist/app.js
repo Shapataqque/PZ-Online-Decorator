@@ -775,9 +775,15 @@ var PZODT;
             this.hcache = new Map();
             this.pcache = new Map();
         }
-        scan(files) { const arr = Array.from(files).filter(f => /\.(png|pack|tiles|lotheader|lotpack)$/i.test(f.name)); this.allFiles = arr; this.datasets.clear(); this.hcache.clear(); this.pcache.clear(); let sigParts = []; for (const f of arr) {
+        scan(files) { const arr = Array.from(files).filter(f => /\.(png|pack|tiles|lotheader|lotpack)$/i.test(f.name) || /^worldmap\.xml$/i.test(f.name)); this.allFiles = arr; this.datasets.clear(); this.hcache.clear(); this.pcache.clear(); let sigParts = []; for (const f of arr) {
             const p = path(f), bn = base(p);
             sigParts.push(`${p}:${f.size}:${f.lastModified}`);
+            if (/^worldmap\.xml$/i.test(bn)) {
+                const d = dir(p), ds = this.datasets.get(d) ?? { id: d, path: d, headers: new Map(), packs: new Map() };
+                ds.worldMap = f;
+                this.datasets.set(d, ds);
+                continue;
+            }
             let m = bn.match(/^(-?\d+)_(-?\d+)\.lotheader$/i);
             if (m) {
                 const d = dir(p), ds = this.datasets.get(d) ?? { id: d, path: d, headers: new Map(), packs: new Map() };
@@ -799,6 +805,7 @@ var PZODT;
         selectedBytes() { return this.allFiles.reduce((n, f) => n + f.size, 0); }
         assetFiles() { return this.allFiles.filter(f => /\.(png|pack)$/i.test(f.name)); }
         tileDefFiles() { return this.allFiles.filter(f => /\.tiles$/i.test(f.name)); }
+        worldMapFile(datasetId) { return this.datasets.get(datasetId)?.worldMap ?? null; }
         async header(ds, f, cx, cy) { if (f.size < 4 || f.size > 64 * 1024 * 1024)
             throw new Error('Map header size is outside supported limits'); const ck = `${ds.id}|H|${cx},${cy}`; let q = this.hcache.get(ck); if (q)
             return q; q = (async () => { const r = new R(await f.arrayBuffer()); let version = 0, magic = r.ascii(4); if (magic === 'LOTH') {
@@ -1013,6 +1020,46 @@ var PZODT;
     }
     PZODT.PZWorldImportManager = PZWorldImportManager;
 })(PZODT || (PZODT = {}));
+var PZODT;
+(function (PZODT) {
+    const VECTOR_CELL_SIZE = 300, WORLD_MAP_BUCKET_SIZE = 1200;
+    const wmAttr = (tag, name) => { const m = tag.match(new RegExp(`\\b${name}="([^"]*)"`)); return m?.[1] ?? ''; };
+    const wmBounds = (points) => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const p of points) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); } return { x0, y0, x1, y1 }; };
+    const wmIntersects = (a, b) => a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0;
+    class WorldMapOverview {
+        constructor() { this.features = []; this.bounds = { x0: 0, y0: 0, x1: 1, y1: 1 }; this.buckets = new Map(); }
+        static async fromFile(file) { if (file.size < 16) throw new Error('worldmap.xml is empty.'); if (file.size > 96 * 1024 * 1024) throw new Error('worldmap.xml is larger than the 96 MiB safety limit.'); return WorldMapOverview.parse(await file.text()); }
+        static parse(text) {
+            const map = new WorldMapOverview(), tagRe = /<\/?(?:cell|feature|coordinates|point|property)\b[^>]*>/gi; let cx = 0, cy = 0, kind = null, rings = [], cur = []; let m;
+            const finishRing = () => { if (cur.length) { rings.push(cur); cur = []; } };
+            const finishFeature = () => { finishRing(); if (kind) for (const points of rings) { if (points.length < (kind === 'road' || kind === 'railway' ? 2 : 3)) continue; map.features.push({ kind, points, bounds: wmBounds(points) }); } rings = []; cur = []; kind = null; };
+            while ((m = tagRe.exec(text))) { const tag = m[0], closing = /^<\//.test(tag), name = (tag.match(/^<\/?([a-z]+)/i)?.[1] ?? '').toLowerCase(); if (name === 'cell' && !closing) { cx = Number(wmAttr(tag, 'x')) || 0; cy = Number(wmAttr(tag, 'y')) || 0; } else if (name === 'feature') { if (closing) finishFeature(); else { rings = []; cur = []; kind = null; } } else if (name === 'coordinates') { if (closing) finishRing(); else cur = []; } else if (name === 'point' && !closing) { const x = Number(wmAttr(tag, 'x')), y = Number(wmAttr(tag, 'y')); if (Number.isFinite(x) && Number.isFinite(y)) cur.push({ x: cx * VECTOR_CELL_SIZE + x, y: cy * VECTOR_CELL_SIZE + y }); } else if (name === 'property' && !closing) { const n = wmAttr(tag, 'name'), v = wmAttr(tag, 'value'); if (n === 'building') kind = 'building'; else if (n === 'highway') kind = 'road'; else if (n === 'water') kind = 'water'; else if (n === 'railway') kind = 'railway'; else if (n === 'natural' && v.toLowerCase() === 'water') kind = 'water'; } }
+            if (rings.length || cur.length) finishFeature(); if (!map.features.length) throw new Error('No supported roads, water, railways or buildings were found in worldmap.xml.');
+            let b = null; for (let i = 0; i < map.features.length; i++) { const f = map.features[i]; b = b ? { x0: Math.min(b.x0, f.bounds.x0), y0: Math.min(b.y0, f.bounds.y0), x1: Math.max(b.x1, f.bounds.x1), y1: Math.max(b.y1, f.bounds.y1) } : { ...f.bounds }; const bx0 = Math.floor(f.bounds.x0 / WORLD_MAP_BUCKET_SIZE), by0 = Math.floor(f.bounds.y0 / WORLD_MAP_BUCKET_SIZE), bx1 = Math.floor(f.bounds.x1 / WORLD_MAP_BUCKET_SIZE), by1 = Math.floor(f.bounds.y1 / WORLD_MAP_BUCKET_SIZE); for (let bx = bx0; bx <= bx1; bx++) for (let by = by0; by <= by1; by++) { const k = `${bx},${by}`, a = map.buckets.get(k) ?? []; a.push(i); map.buckets.set(k, a); } }
+            map.bounds = b ?? map.bounds; return map;
+        }
+        visible(b) { const seen = new Set(), out = []; for (let bx = Math.floor(b.x0 / WORLD_MAP_BUCKET_SIZE); bx <= Math.floor(b.x1 / WORLD_MAP_BUCKET_SIZE); bx++) for (let by = Math.floor(b.y0 / WORLD_MAP_BUCKET_SIZE); by <= Math.floor(b.y1 / WORLD_MAP_BUCKET_SIZE); by++) for (const i of this.buckets.get(`${bx},${by}`) ?? []) { if (seen.has(i)) continue; seen.add(i); const f = this.features[i]; if (wmIntersects(f.bounds, b)) out.push(f); } return out; }
+    }
+    PZODT.WorldMapOverview = WorldMapOverview;
+    class WorldMapCanvasPicker {
+        constructor(canvas) { this.canvas = canvas; this.data = null; this.selectedX = 0; this.selectedY = 0; this.mode = 'area'; this.areaWidth = 48; this.areaHeight = 48; this.onHover = null; this.onSelect = null; this.centerX = 0; this.centerY = 0; this.scale = .05; this.fitScale = .05; this.raf = 0; this.dragging = false; this.moved = false; this.downX = 0; this.downY = 0; this.lastX = 0; this.lastY = 0; canvas.addEventListener('pointerdown', e => this.pointerDown(e)); canvas.addEventListener('pointermove', e => this.pointerMove(e)); canvas.addEventListener('pointerup', e => this.pointerUp(e)); canvas.addEventListener('pointercancel', e => this.pointerUp(e)); canvas.addEventListener('wheel', e => this.wheel(e), { passive: false }); }
+        setData(data, x, y) { this.data = data; this.resize(); const b = data.bounds, w = Math.max(1, b.x1 - b.x0), h = Math.max(1, b.y1 - b.y0), cw = Math.max(1, this.canvas.clientWidth), ch = Math.max(1, this.canvas.clientHeight); this.fitScale = Math.max(.005, Math.min(cw / w, ch / h) * .92); this.centerX = Number.isFinite(x) ? x : (b.x0 + b.x1) / 2; this.centerY = Number.isFinite(y) ? y : (b.y0 + b.y1) / 2; this.scale = Math.max(this.fitScale, Math.min(.16, this.fitScale * 4)); this.setSelection(x, y); this.request(); }
+        setSelection(x, y) { if (Number.isFinite(x)) this.selectedX = Math.round(x); if (Number.isFinite(y)) this.selectedY = Math.round(y); this.request(); }
+        setPreview(mode, w, h) { this.mode = mode; this.areaWidth = Math.max(1, Math.min(300, Math.round(w) || 48)); this.areaHeight = Math.max(1, Math.min(300, Math.round(h) || 48)); this.request(); }
+        resize() { const dpr = Math.min(2, devicePixelRatio || 1), w = Math.max(1, Math.round(this.canvas.clientWidth * dpr)), h = Math.max(1, Math.round(this.canvas.clientHeight * dpr)); if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; } this.request(); }
+        cssSize() { return { w: Math.max(1, this.canvas.clientWidth), h: Math.max(1, this.canvas.clientHeight), dpr: this.canvas.width / Math.max(1, this.canvas.clientWidth) }; }
+        screenToWorld(sx, sy) { const { w, h } = this.cssSize(); return { x: this.centerX + (sx - w / 2) / this.scale, y: this.centerY + (sy - h / 2) / this.scale }; }
+        request() { if (this.raf) return; this.raf = requestAnimationFrame(() => { this.raf = 0; this.draw(); }); }
+        pointerDown(e) { if (e.button !== 0 && e.button !== 1) return; this.dragging = true; this.moved = false; this.downX = this.lastX = e.clientX; this.downY = this.lastY = e.clientY; this.canvas.setPointerCapture(e.pointerId); }
+        pointerMove(e) { const r = this.canvas.getBoundingClientRect(), p = this.screenToWorld(e.clientX - r.left, e.clientY - r.top); this.onHover?.(Math.round(p.x), Math.round(p.y)); if (!this.dragging) return; const dx = e.clientX - this.lastX, dy = e.clientY - this.lastY; if (Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > 4) this.moved = true; this.centerX -= dx / this.scale; this.centerY -= dy / this.scale; this.lastX = e.clientX; this.lastY = e.clientY; this.request(); }
+        pointerUp(e) { if (!this.dragging) return; this.dragging = false; try { this.canvas.releasePointerCapture(e.pointerId); } catch {} if (!this.moved && e.button === 0) { const r = this.canvas.getBoundingClientRect(), p = this.screenToWorld(e.clientX - r.left, e.clientY - r.top); this.selectedX = Math.round(p.x); this.selectedY = Math.round(p.y); this.onSelect?.(this.selectedX, this.selectedY); this.request(); } }
+        wheel(e) { if (!this.data) return; e.preventDefault(); const r = this.canvas.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, before = this.screenToWorld(sx, sy), min = Math.max(.003, this.fitScale * .55), max = 4; this.scale = Math.max(min, Math.min(max, this.scale * (e.deltaY < 0 ? 1.18 : 1 / 1.18))); const after = this.screenToWorld(sx, sy); this.centerX += before.x - after.x; this.centerY += before.y - after.y; this.request(); }
+        drawFeature(ctx, f) { const p = f.points; if (!p.length) return; ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y); for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y); if (f.kind === 'building' || f.kind === 'water' || f.kind === 'road') ctx.closePath(); if (f.kind === 'water') { ctx.fillStyle = '#315d78'; ctx.fill(); } else if (f.kind === 'road') { ctx.fillStyle = '#555d62'; ctx.fill(); if (this.scale > .08) { ctx.strokeStyle = '#737c82'; ctx.lineWidth = .7 / this.scale; ctx.stroke(); } } else if (f.kind === 'building') { ctx.fillStyle = '#8a8175'; ctx.fill(); if (this.scale > .06) { ctx.strokeStyle = '#b0a598'; ctx.lineWidth = .6 / this.scale; ctx.stroke(); } } else { ctx.strokeStyle = '#9c8f6b'; ctx.lineWidth = Math.max(1.2 / this.scale, 1); ctx.stroke(); } }
+        draw() { const ctx = this.canvas.getContext('2d'); if (!ctx) return; const { w, h, dpr } = this.cssSize(), light = document.body.classList.contains('lightMode'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = light ? '#e8ece8' : '#11171a'; ctx.fillRect(0, 0, w, h); if (!this.data) { ctx.fillStyle = light ? '#50606a' : '#9aa9b3'; ctx.font = '13px system-ui'; ctx.textAlign = 'center'; ctx.fillText('No local world map loaded.', w / 2, h / 2); return; } ctx.save(); ctx.translate(w / 2, h / 2); ctx.scale(this.scale, this.scale); ctx.translate(-this.centerX, -this.centerY); const pad = 30 / this.scale, v = { x0: this.centerX - w / (2 * this.scale) - pad, y0: this.centerY - h / (2 * this.scale) - pad, x1: this.centerX + w / (2 * this.scale) + pad, y1: this.centerY + h / (2 * this.scale) + pad }, visible = this.data.visible(v); for (const kind of ['water', 'road', 'building', 'railway']) for (const f of visible) if (f.kind === kind) this.drawFeature(ctx, f); if (this.mode === 'area') { const x0 = this.selectedX - Math.floor(this.areaWidth / 2), y0 = this.selectedY - Math.floor(this.areaHeight / 2); ctx.fillStyle = 'rgba(62,160,214,.12)'; ctx.strokeStyle = '#49a9df'; ctx.lineWidth = 2 / this.scale; ctx.fillRect(x0, y0, this.areaWidth, this.areaHeight); ctx.strokeRect(x0, y0, this.areaWidth, this.areaHeight); } const cross = 9 / this.scale; ctx.strokeStyle = '#f0b64b'; ctx.lineWidth = 2 / this.scale; ctx.beginPath(); ctx.moveTo(this.selectedX - cross, this.selectedY); ctx.lineTo(this.selectedX + cross, this.selectedY); ctx.moveTo(this.selectedX, this.selectedY - cross); ctx.lineTo(this.selectedX, this.selectedY + cross); ctx.stroke(); ctx.beginPath(); ctx.arc(this.selectedX, this.selectedY, 3.5 / this.scale, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+    }
+    PZODT.WorldMapCanvasPicker = WorldMapCanvasPicker;
+})(PZODT || (PZODT = {}));
+
 var PZODT;
 (function (PZODT) {
     const SPATIAL_CHUNK_SIZE = 16;
@@ -1773,6 +1820,8 @@ var PZODT;
             this.furnitureObserver = null;
             this.heightPresets = [{ label: 'Floor', height: 0, count: 0 }];
             this.pendingEraseCandidates = [];
+            this.worldMapPicker = new PZODT.WorldMapCanvasPicker(el('worldMapCanvas'));
+            this.worldMapCache = new Map();
             this.status = el('status');
             this.coords = el('coords');
             this.tileList = el('tileList');
@@ -1803,6 +1852,8 @@ var PZODT;
             this.editor.onEraseCandidates = (items, p) => this.showEraseChoices(items, p);
             this.assets.onChanged = () => this.assetsChanged();
             this.bind();
+            this.worldMapPicker.onHover = (x, y) => el('worldMapHover').textContent = `Hover ${x}, ${y}`;
+            this.worldMapPicker.onSelect = (x, y) => this.updateWorldMapSelection(x, y);
             this.updateLoadMode();
             this.updateMediaUi('needed');
             this.renderFilterButtons();
@@ -1836,7 +1887,7 @@ var PZODT;
         }
         else if (ready) {
             loadStatus.textContent = datasets ? 'Media library ready. Enter coordinates and load a location.' : 'Media library ready, but no map dataset was found.';
-        } }
+        } this.updateWorldMapChoiceUi(); }
         bind() {
             document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => this.editor.setTool(b.dataset.tool));
             document.querySelectorAll('.tab').forEach(b => b.onclick = () => this.setTab(b.dataset.tab === 'furniture' ? 'furniture' : 'tiles'));
@@ -1880,6 +1931,10 @@ var PZODT;
             el('loadCancelBtn').onclick = () => el('loadDialog').close();
             el('loadMode').onchange = () => this.updateLoadMode();
             el('datasetSelect').onchange = () => this.updateMediaUi(this.mediaReadySignature ? 'ready' : 'needed');
+            el('areaW').oninput = el('areaH').oninput = () => this.syncWorldMapPreview();
+            el('chooseFromMapBtn').onclick = () => this.openWorldMapPicker();
+            el('worldMapCloseBtn').onclick = el('worldMapCancelBtn').onclick = () => el('worldMapDialog').close();
+            el('worldMapUseBtn').onclick = () => this.useWorldMapLocation();
             el('loadBtn').onclick = () => this.loadLocation();
             el('versionHistoryBtn').onclick = () => el('versionHistoryDialog').showModal();
             el('versionHistoryCloseBtn').onclick = () => el('versionHistoryDialog').close();
@@ -1888,6 +1943,8 @@ var PZODT;
             el('eraseSelectedBtn').onclick = () => this.confirmEraseSelection();
             el('mediaInput').onchange = e => this.mediaSelected(e);
             el('jsonInput').onchange = e => this.jsonSelected(e);
+            addEventListener('resize', () => { if (el('worldMapDialog').open)
+                this.worldMapPicker.resize(); });
             this.renderer.overlay.addEventListener('pointermove', e => { const r = this.renderer.overlay.getBoundingClientRect(), p = this.renderer.screenToTile(e.clientX - r.left, e.clientY - r.top, this.map.currentLevel), ox = Number(this.map.properties['pzodt.worldOriginX']), oy = Number(this.map.properties['pzodt.worldOriginY']); this.coords.textContent = Number.isFinite(ox) && Number.isFinite(oy) ? `local ${p.x},${p.y} · world ${ox + p.x},${oy + p.y},${this.map.currentLevel}` : `x ${p.x} · y ${p.y} · Z ${this.map.currentLevel}`; });
         }
         openLoadDialog() { if (!this.mediaReadySignature) {
@@ -1979,7 +2036,8 @@ var PZODT;
             o.value = '';
             o.textContent = 'No map dataset found';
             select.appendChild(o);
-        } if (oldSignature && oldSignature !== this.importer.mediaSignature) {
+        } if (oldSignature !== this.importer.mediaSignature)
+            this.worldMapCache.clear(); if (oldSignature && oldSignature !== this.importer.mediaSignature) {
             this.assets.clear();
             this.tileDefs.clear();
             this.classificationCache.clear();
@@ -2004,7 +2062,12 @@ var PZODT;
             this.updateMediaUi('error', msg);
             this.setStatus(msg);
         } }
-        updateLoadMode() { const m = el('loadMode').value; el('marginRow').classList.toggle('hidden', m !== 'building'); el('areaRow').classList.toggle('hidden', m !== 'area'); }
+        updateLoadMode() { const m = el('loadMode').value; el('marginRow').classList.toggle('hidden', m !== 'building'); el('areaRow').classList.toggle('hidden', m !== 'area'); this.syncWorldMapPreview(); }
+        updateWorldMapChoiceUi() { const ds = el('datasetSelect').value, file = ds ? this.importer.worldMapFile(ds) : null, ready = !!this.mediaReadySignature && !!ds, btn = el('chooseFromMapBtn'), hint = el('mapChoiceHint'); btn.disabled = !ready || !file; btn.textContent = 'Choose from Map…'; hint.textContent = !ready ? 'Choose and index the media folder first.' : file ? 'Uses the selected dataset’s local worldmap.xml; nothing is uploaded.' : 'No worldmap.xml was found for this map dataset.'; }
+        syncWorldMapPreview() { this.worldMapPicker.setPreview(el('loadMode').value, +el('areaW').value, +el('areaH').value); }
+        updateWorldMapSelection(x, y) { el('worldMapSelection').textContent = `Selected ${x}, ${y}`; }
+        async openWorldMapPicker() { const ds = el('datasetSelect').value, file = ds ? this.importer.worldMapFile(ds) : null, btn = el('chooseFromMapBtn'), hint = el('mapChoiceHint'); if (!file) { this.updateWorldMapChoiceUi(); return; } btn.disabled = true; btn.textContent = 'Loading Map…'; hint.textContent = 'Parsing local worldmap.xml…'; try { let pending = this.worldMapCache.get(ds); if (!pending) { pending = PZODT.WorldMapOverview.fromFile(file); this.worldMapCache.set(ds, pending); } const data = await pending, rawX = +el('worldX').value, rawY = +el('worldY').value, x = Number.isFinite(rawX) ? Math.round(rawX) : Math.round((data.bounds.x0 + data.bounds.x1) / 2), y = Number.isFinite(rawY) ? Math.round(rawY) : Math.round((data.bounds.y0 + data.bounds.y1) / 2), d = el('worldMapDialog'); el('worldMapStatus').textContent = `${data.features.length.toLocaleString()} local vector features · drag to pan · mouse wheel to zoom · click to choose a location.`; el('worldMapHover').textContent = 'Hover —'; this.updateWorldMapSelection(x, y); if (!d.open) d.showModal(); requestAnimationFrame(() => { this.worldMapPicker.setData(data, x, y); this.syncWorldMapPreview(); this.worldMapPicker.resize(); }); } catch (err) { this.worldMapCache.delete(ds); const msg = `Map preview error: ${String(err.message || err)}`; hint.textContent = msg; this.setStatus(msg); } finally { this.updateWorldMapChoiceUi(); } }
+        useWorldMapLocation() { el('worldX').value = String(this.worldMapPicker.selectedX); el('worldY').value = String(this.worldMapPicker.selectedY); el('loadStatus').textContent = `Selected World ${this.worldMapPicker.selectedX}, ${this.worldMapPicker.selectedY} from the local map.`; el('worldMapDialog').close(); }
         async ensureMediaReady(progress) { if (this.mediaReadySignature === this.importer.mediaSignature && this.mediaReadySignature) {
             progress('Media library already indexed — reusing cached tiles, .pack textures and .tiles properties.');
             return;
@@ -2254,7 +2317,8 @@ var PZODT;
             d.showModal(); }
         closeTutorial() { storeSet('pzodt.tutorialSeen', '1'); el('tutorialDialog').close(); }
         configureRelease() { const support = safeSupportUrl(releaseConfig().supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
-        applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (persist)
+        applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (el('worldMapDialog').open)
+            this.worldMapPicker.draw(); if (persist)
             storeSet('pzodt.nightMode', enabled ? '1' : '0'); }
         openFeedbackDialog() { const frame = el('feedbackFrame'); if (!frame.getAttribute('src')) {
             const raw = frame.dataset.src ?? '';

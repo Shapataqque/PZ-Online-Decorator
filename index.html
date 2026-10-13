@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Project Zomboid Base Planner &amp; Decoration Tool">
   <meta name="twitter:description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
-  <link rel="stylesheet" href="styles.css?v=20261014-1">
+  <link rel="stylesheet" href="styles.css?v=20261014-2">
 </head>
 <body class="mediaNeeded">
 <div data-nosnippet>
@@ -190,7 +190,7 @@
     </section>
     <section class="tutorialPanel" data-tutorial-panel="basic">
       <ol class="tutorialSteps">
-        <li><b>Load a world location</b><span>After indexing finishes, click <strong>Load World Location</strong>, enter the World X / Y coordinates, choose the load mode, and load the location.</span></li>
+        <li><b>Load a world location</b><span>After indexing finishes, click <strong>Load World Location</strong>, enter World X / Y or use <strong>Choose from Map</strong>, choose the load mode, and load the location.</span></li>
         <li><b>Edit the base</b><span>Choose objects from Furniture or Tiles. Use Pencil to place, Erase to remove, Picker to select existing objects, and <strong>R</strong> to rotate furniture.</span></li>
         <li><b>Save / reopen as JSON</b><span>Use <strong>Save as .json</strong> to keep your project and <strong>Open .json file</strong> to continue later. The Project Zomboid media folder still needs to be selected when game assets are required.</span></li>
       </ol>
@@ -221,6 +221,7 @@
       <section><h4>1. Location</h4>
         <label>Map dataset<select id="datasetSelect"><option value="">Choose media folder first</option></select></label>
         <div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div>
+        <div class="mapChoiceRow"><button id="chooseFromMapBtn" type="button" disabled>Choose from Map…</button><span id="mapChoiceHint" class="hint">Choose and index the media folder first.</span></div>
       </section>
       <section><h4>2. Load</h4>
         <label>Mode<select id="loadMode"><option value="area" selected>Area around coordinate</option><option value="building">Building at coordinate</option><option value="cell">Entire map cell</option></select></label>
@@ -231,6 +232,21 @@
     </div>
     <div class="dialogActions"><button id="loadBtn" type="button" class="primary" disabled>Load Location</button></div>
   </form>
+</dialog>
+
+<dialog id="worldMapDialog" class="dialog worldMapDialog">
+  <div class="dialogTitle">
+    <div><b>Choose Location from Map</b><small>Local Project Zomboid worldmap.xml overview</small></div>
+    <button id="worldMapCloseBtn" type="button">×</button>
+  </div>
+  <div class="dialogBody worldMapBody">
+    <div class="worldMapHelp">Drag to pan · Mouse wheel to zoom · Click to choose World X / Y.</div>
+    <div class="worldMapViewport"><canvas id="worldMapCanvas" width="900" height="560" aria-label="Project Zomboid world map location picker"></canvas></div>
+    <div class="worldMapMeta"><span id="worldMapHover">Hover —</span><span id="worldMapSelection">Selected —</span></div>
+    <div class="worldMapLegend"><span><i class="wmWater"></i>Water</span><span><i class="wmRoad"></i>Roads</span><span><i class="wmBuilding"></i>Buildings</span><span><i class="wmRail"></i>Railways</span></div>
+    <div id="worldMapStatus" class="hint">The map is rendered from the selected local game files and is never uploaded.</div>
+  </div>
+  <div class="dialogActions"><button id="worldMapCancelBtn" type="button">Cancel</button><button id="worldMapUseBtn" class="primary" type="button">Use Location</button></div>
 </dialog>
 
 <dialog id="pickerDialog" class="dialog pickerDialog">
@@ -286,6 +302,6 @@
 <input id="mediaInput" type="file" webkitdirectory multiple hidden>
 <input id="jsonInput" type="file" accept=".json,application/json" hidden>
 <script src="config/release-config.js"></script>
-<script src="dist/app.js?v=20261014-1"></script>
+<script src="dist/app.js?v=20261014-2"></script>
 </body>
 </html>
