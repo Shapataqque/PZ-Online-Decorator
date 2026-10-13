@@ -19,37 +19,41 @@ namespace PZODT {
     surfaceInfo(name:string):TileSurfaceInfo{const p=this.properties(name),entries=Object.entries(p).map(([k,v])=>[k.toLowerCase(),String(v).trim().toLowerCase()] as [string,string]),value=(k:string)=>entries.find(([x])=>x===k)?.[1],number=(k:string)=>{const n=Number.parseInt(value(k)??'0',10);return Number.isFinite(n)?Math.max(0,Math.min(512,n)):0;},flag=(k:string)=>{const e=entries.find(([x])=>x===k);if(!e)return false;return !['false','0','no','off'].includes(e[1]);};
       return{surface:number('surface'),itemHeight:number('itemheight'),isSurfaceOffset:flag('issurfaceoffset')||flag('ontable')||flag('attachedsurface'),isTable:flag('istable'),isTableTop:flag('istabletop')};}
     placementHeightValues(limit=5):Array<{height:number;count:number}>{const hist=new Map<number,number>(),add=(h:number,w:number)=>{if(!Number.isFinite(h)||h<=0||h>128)return;const n=Math.round(h);hist.set(n,(hist.get(n)??0)+w);};for(const [key,p] of this.props){const entries=Object.entries(p).map(([k,v])=>[k.toLowerCase(),String(v).trim().toLowerCase()] as [string,string]),value=(k:string)=>entries.find(([x])=>x===k)?.[1],num=(k:string)=>{const n=Number.parseInt(value(k)??'0',10);return Number.isFinite(n)?n:0;},flag=(k:string)=>{const e=entries.find(([x])=>x===k);return !!e&&!['false','0','no','off'].includes(e[1]);},tableLike=flag('istable')||flag('istabletop')||/(table|counter|desk|workbench|cabinet|dresser|vanity|shelf)/.test(key),surface=num('surface'),item=num('itemheight');if(tableLike){add(surface,5);add(item,2);}else if(surface>0)add(surface,1);}const raw=[...hist].sort((a,b)=>a[0]-b[0]),clusters:Array<{height:number;count:number;sum:number}> = [];for(const [height,count] of raw){const last=clusters[clusters.length-1];if(last&&height-last.height<=2){last.sum+=height*count;last.count+=count;last.height=Math.round(last.sum/last.count);}else clusters.push({height,count,sum:height*count});}return clusters.sort((a,b)=>b.count-a.count).slice(0,Math.max(1,limit)).sort((a,b)=>a.height-b.height).map(({height,count})=>({height,count}));}
-    classifyDetailed(name:string,furniture:Set<string>):{category:ViewCategory;source:string;rule:string}{const p=this.properties(name),keys=Object.keys(p).map(x=>x.toLowerCase()),vals=Object.values(p).map(x=>String(x).toLowerCase()),all=keys.concat(vals).join(' '),n=name.toLowerCase(),canonical=n.replace(/_0*(\d+)$/,(_,d)=>`_${Number(d)}`);
-      const has=(...q:string[])=>q.some(x=>keys.includes(x.toLowerCase())||all.includes(x.toLowerCase())),hit=(category:ViewCategory,source:string,rule:string)=>({category,source,rule});
-      if(/(^|_)roofs?(_|$)/.test(n))return hit('Roof','name','roof family');
-      if(n.includes('vegetation_indoor'))return hit('Furniture','name','vegetation_indoor');
+    classifyDetailed(name:string,furniture:Set<string>,catalogOverride:{category:ViewCategory;rule:string}|null=null):{category:ViewCategory;source:string;rule:string}{const p=this.properties(name),keys=Object.keys(p).map(x=>x.toLowerCase()),keySet=new Set(keys),n=name.toLowerCase(),canonical=n.replace(/_0*(\d+)$/,(_,d)=>'_'+Number(d));
+      const hasKey=(...q:string[])=>q.some(x=>keySet.has(x.toLowerCase())),hit=(category:ViewCategory,source:string,rule:string)=>({category,source,rule});
       if(canonical==='vegetation_indoor_01_11'||canonical==='location_community_school_01_33'||canonical==='fixtures_counters_01_151'||canonical==='animated_clock_01_1')return hit('Furniture','override',canonical);
-      if(/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))return hit('Fences & Railings','name','fence/railing family');
-      if(has('solidfloor'))return hit('Floor','metadata','solidfloor');
-      if(/(^|_)(floor|floors|flooring)(_|$)/.test(n))return hit('Floor','name','floor family');
+      if(catalogOverride)return hit(catalogOverride.category,'catalog-group',catalogOverride.rule);
+      if(n.includes('vegetation_indoor'))return hit('Furniture','object-family','vegetation_indoor');
+      if(/(^|_)rugs?(_|$)/.test(n)||n.includes('floors_rugs'))return hit('Furniture','object-family','rugs');
+      if(/(^|_)boulders?(_|$)/.test(n))return hit('Vegetation','object-family','boulders');
+      if(n.includes('graffiti')||n.includes('wallcrack')||n.includes('streetcrack')||n.includes('messages_wall')||/(^|_)walls?_[a-z0-9_]*(decoration|detailing|grime|trash)/.test(n)||/(^|_)overlay_/.test(n)||n.startsWith('grimeoverlay')||n.startsWith('d_trash_')||/(^|_)trash_walls?_/.test(n)||/(^|_)trash_0*1(?:_|$)/.test(n)||n.includes('trash&junk'))return hit('Decor / Overlay','object-family','decor/overlay family');
+      if(n.includes('street_decoration')||n.includes('street_roadsigns'))return hit('Exterior','object-family','street fixture family');
+      if(/(^|_)roof[a-z0-9]*(_|$)/.test(n))return hit('Roof','structural-family','roof');
+      if(/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))return hit('Fences & Railings','structural-family','fence/railing');
+      if(/(^|_)floor[a-z0-9]*(_|$)/.test(n))return hit('Floor','structural-family','floor');
+      if(/(^|_)(doors?|windows?|curtains?|shutters?)[a-z0-9]*(_|$)/.test(n))return hit('Doors & Windows','structural-family','door/window');
+      if(/(^|_)walls?[a-z0-9]*(_|$)/.test(n))return hit('Wall','structural-family','wall');
       if(BUILDING_TILE_CATEGORIES['Floors']?.has(name))return hit('Floor','building-category','Floors');
-      if(has('walln','wallw','wallnw','wallse','wall','treataswallorder'))return hit('Wall','metadata','wall property');
-      if(n.includes('wall'))return hit('Wall','name','wall');
       if(BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name))return hit('Wall','building-category','Exterior Walls');
       if(BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))return hit('Wall','building-category','Interior Walls');
-      if(has('windown','windoww','doorwalln','doorwallw','doorn','doorw','window','door'))return hit('Doors & Windows','metadata','door/window property');
-      if(/(^|_)(door|doors|window|windows|curtain|curtains|shutter|shutters)(_|$)/.test(n))return hit('Doors & Windows','name','door/window family');
       if(BUILDING_TILE_CATEGORIES['Doors']?.has(name))return hit('Doors & Windows','building-category','Doors');
       if(BUILDING_TILE_CATEGORIES['Windows']?.has(name))return hit('Doors & Windows','building-category','Windows');
-      if(n.includes('appliances')||n.includes('furniture'))return hit('Furniture','name','appliance/furniture family');
-      if(furniture.has(n)||furniture.has(canonical))return hit('Furniture','furniture-catalog','catalog match');
-      if(has('walloverlay','flooroverlay','overlay','attachedn','attacheds','attachede','attachedw','ontable'))return hit('Decor / Overlay','metadata','overlay/attached property');
-      if(/(overlay|graffiti|poster|sign_)/.test(n))return hit('Decor / Overlay','name','overlay/decor family');
-      if(has('container','surface','table','tablen','tables','tablee','tablew','countertop','isstackable'))return hit('Furniture','metadata','furniture/surface property');
-      if(/(^|_)(cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n))return hit('Furniture','name','furniture family');
-      if(has('roof'))return hit('Roof','metadata','roof');
-      if(n.includes('roof'))return hit('Roof','name','roof');
       if(BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name))return hit('Roof','building-category','Roof Caps');
       if(BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))return hit('Roof','building-category','Roof Slopes');
+      if(n.includes('appliances')||/(^|_)fixtures_(counters?|fireplaces?|bathroom|escalators?)(_|$)/.test(n)||n.includes('furniture'))return hit('Furniture','mixed-object','furniture family');
+      if(hasKey('roof','westrooft','westroofb','westroofm','roofgroup','roofwallstart'))return hit('Roof','metadata-key','roof');
+      if(hasKey('solidfloor'))return hit('Floor','metadata-key','solidfloor');
+      if(hasKey('walln','wallw','wallnw','wallse','wall','treataswallorder'))return hit('Wall','metadata-key','wall');
+      if(hasKey('windown','windoww','doorwalln','doorwallw','doorn','doorw','window','door'))return hit('Doors & Windows','metadata-key','door/window');
+      if(hasKey('walloverlay','flooroverlay','tileoverlay','overlay','attachedn','attacheds','attachede','attachedw','attachedfloor','ontable'))return hit('Decor / Overlay','metadata-key','overlay/attached');
+      if(hasKey('container','containercapacity','surface','table','tablen','tables','tablee','tablew','countertop','isstackable','istable','istabletop','issurfaceoffset'))return hit('Furniture','metadata-key','furniture/surface');
+      if(furniture.has(n)||furniture.has(canonical))return hit('Furniture','furniture-catalog','catalog fallback');
+      if(/(^|_)(cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n))return hit('Furniture','name','furniture family');
+      if(/(overlay|graffiti|poster|painting|sign_)/.test(n))return hit('Decor / Overlay','name','overlay/decor family');
       if(/(^|_)(blends_street|street|road|roads|asphalt|pavement|sidewalk|parking|curb|curbs)(_|$)/.test(n)||n.includes('blends_street'))return hit('Roads & Ground','name','road/ground family');
       if(/(^|_)(vegetation|tree|trees|bush|bushes|grass|plants?|natural|forest)(_|$)/.test(n)||n.includes('blends_natural'))return hit('Vegetation','name','vegetation family');
-      if(/(^|_)(outdoor|exterior|clutter|street_decoration|streetdecor|trash|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n)||n.includes('outdoor_clutter')||n.includes('exterior_'))return hit('Exterior','name','exterior family');
+      if(/(^|_)(outdoor|exterior|clutter|streetdecor|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n)||n.includes('outdoor_clutter')||n.includes('exterior_'))return hit('Exterior','name','exterior family');
       return hit('Other','fallback','unmatched');}
-    classify(name:string,furniture:Set<string>):ViewCategory{return this.classifyDetailed(name,furniture).category;}
+    classify(name:string,furniture:Set<string>,catalogOverride:{category:ViewCategory;rule:string}|null=null):ViewCategory{return this.classifyDetailed(name,furniture,catalogOverride).category;}
   }
 }

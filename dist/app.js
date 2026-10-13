@@ -578,68 +578,76 @@ var PZODT;
             else
                 clusters.push({ height, count, sum: height * count });
         } return clusters.sort((a, b) => b.count - a.count).slice(0, Math.max(1, limit)).sort((a, b) => a.height - b.height).map(({ height, count }) => ({ height, count })); }
-        classifyDetailed(name, furniture) {
-            const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), vals = Object.values(p).map(x => String(x).toLowerCase()), all = keys.concat(vals).join(' '), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => `_${Number(d)}`);
-            const has = (...q) => q.some(x => keys.includes(x.toLowerCase()) || all.includes(x.toLowerCase())), hit = (category, source, rule) => ({ category, source, rule });
-            if (/(^|_)roofs?(_|$)/.test(n))
-                return hit('Roof', 'name', 'roof family');
-            if (n.includes('vegetation_indoor'))
-                return hit('Furniture', 'name', 'vegetation_indoor');
+        classifyDetailed(name, furniture, catalogOverride = null) {
+            const p = this.properties(name), keys = Object.keys(p).map(x => x.toLowerCase()), keySet = new Set(keys), n = name.toLowerCase(), canonical = n.replace(/_0*(\d+)$/, (_, d) => '_' + Number(d));
+            const hasKey = (...q) => q.some(x => keySet.has(x.toLowerCase())), hit = (category, source, rule) => ({ category, source, rule });
             if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
                 return hit('Furniture', 'override', canonical);
+            if (catalogOverride)
+                return hit(catalogOverride.category, 'catalog-group', catalogOverride.rule);
+            if (n.includes('vegetation_indoor'))
+                return hit('Furniture', 'object-family', 'vegetation_indoor');
+            if (/(^|_)rugs?(_|$)/.test(n) || n.includes('floors_rugs'))
+                return hit('Furniture', 'object-family', 'rugs');
+            if (/(^|_)boulders?(_|$)/.test(n))
+                return hit('Vegetation', 'object-family', 'boulders');
+            if (n.includes('graffiti') || n.includes('wallcrack') || n.includes('streetcrack') || n.includes('messages_wall') || /(^|_)walls?_[a-z0-9_]*(decoration|detailing|grime|trash)/.test(n) || /(^|_)overlay_/.test(n) || n.startsWith('grimeoverlay') || n.startsWith('d_trash_') || /(^|_)trash_walls?_/.test(n) || /(^|_)trash_0*1(?:_|$)/.test(n) || n.includes('trash&junk'))
+                return hit('Decor / Overlay', 'object-family', 'decor/overlay family');
+            if (n.includes('street_decoration') || n.includes('street_roadsigns'))
+                return hit('Exterior', 'object-family', 'street fixture family');
+            if (/(^|_)roof[a-z0-9]*(_|$)/.test(n))
+                return hit('Roof', 'structural-family', 'roof');
             if (/(^|_)(fencing|fences?|railings?|barrier|guardrail)(_|$)/.test(n))
-                return hit('Fences & Railings', 'name', 'fence/railing family');
-            if (has('solidfloor'))
-                return hit('Floor', 'metadata', 'solidfloor');
-            if (/(^|_)(floor|floors|flooring)(_|$)/.test(n))
-                return hit('Floor', 'name', 'floor family');
+                return hit('Fences & Railings', 'structural-family', 'fence/railing');
+            if (/(^|_)floor[a-z0-9]*(_|$)/.test(n))
+                return hit('Floor', 'structural-family', 'floor');
+            if (/(^|_)(doors?|windows?|curtains?|shutters?)[a-z0-9]*(_|$)/.test(n))
+                return hit('Doors & Windows', 'structural-family', 'door/window');
+            if (/(^|_)walls?[a-z0-9]*(_|$)/.test(n))
+                return hit('Wall', 'structural-family', 'wall');
             if (PZODT.BUILDING_TILE_CATEGORIES['Floors']?.has(name))
                 return hit('Floor', 'building-category', 'Floors');
-            if (has('walln', 'wallw', 'wallnw', 'wallse', 'wall', 'treataswallorder'))
-                return hit('Wall', 'metadata', 'wall property');
-            if (n.includes('wall'))
-                return hit('Wall', 'name', 'wall');
             if (PZODT.BUILDING_TILE_CATEGORIES['Exterior Walls']?.has(name))
                 return hit('Wall', 'building-category', 'Exterior Walls');
             if (PZODT.BUILDING_TILE_CATEGORIES['Interior Walls']?.has(name))
                 return hit('Wall', 'building-category', 'Interior Walls');
-            if (has('windown', 'windoww', 'doorwalln', 'doorwallw', 'doorn', 'doorw', 'window', 'door'))
-                return hit('Doors & Windows', 'metadata', 'door/window property');
-            if (/(^|_)(door|doors|window|windows|curtain|curtains|shutter|shutters)(_|$)/.test(n))
-                return hit('Doors & Windows', 'name', 'door/window family');
             if (PZODT.BUILDING_TILE_CATEGORIES['Doors']?.has(name))
                 return hit('Doors & Windows', 'building-category', 'Doors');
             if (PZODT.BUILDING_TILE_CATEGORIES['Windows']?.has(name))
                 return hit('Doors & Windows', 'building-category', 'Windows');
-            if (n.includes('appliances') || n.includes('furniture'))
-                return hit('Furniture', 'name', 'appliance/furniture family');
-            if (furniture.has(n) || furniture.has(canonical))
-                return hit('Furniture', 'furniture-catalog', 'catalog match');
-            if (has('walloverlay', 'flooroverlay', 'overlay', 'attachedn', 'attacheds', 'attachede', 'attachedw', 'ontable'))
-                return hit('Decor / Overlay', 'metadata', 'overlay/attached property');
-            if (/(overlay|graffiti|poster|sign_)/.test(n))
-                return hit('Decor / Overlay', 'name', 'overlay/decor family');
-            if (has('container', 'surface', 'table', 'tablen', 'tables', 'tablee', 'tablew', 'countertop', 'isstackable'))
-                return hit('Furniture', 'metadata', 'furniture/surface property');
-            if (/(^|_)(cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n))
-                return hit('Furniture', 'name', 'furniture family');
-            if (has('roof'))
-                return hit('Roof', 'metadata', 'roof');
-            if (n.includes('roof'))
-                return hit('Roof', 'name', 'roof');
             if (PZODT.BUILDING_TILE_CATEGORIES['Roof Caps']?.has(name))
                 return hit('Roof', 'building-category', 'Roof Caps');
             if (PZODT.BUILDING_TILE_CATEGORIES['Roof Slopes']?.has(name))
                 return hit('Roof', 'building-category', 'Roof Slopes');
+            if (n.includes('appliances') || /(^|_)fixtures_(counters?|fireplaces?|bathroom|escalators?)(_|$)/.test(n) || n.includes('furniture'))
+                return hit('Furniture', 'mixed-object', 'furniture family');
+            if (hasKey('roof', 'westrooft', 'westroofb', 'westroofm', 'roofgroup', 'roofwallstart'))
+                return hit('Roof', 'metadata-key', 'roof');
+            if (hasKey('solidfloor'))
+                return hit('Floor', 'metadata-key', 'solidfloor');
+            if (hasKey('walln', 'wallw', 'wallnw', 'wallse', 'wall', 'treataswallorder'))
+                return hit('Wall', 'metadata-key', 'wall');
+            if (hasKey('windown', 'windoww', 'doorwalln', 'doorwallw', 'doorn', 'doorw', 'window', 'door'))
+                return hit('Doors & Windows', 'metadata-key', 'door/window');
+            if (hasKey('walloverlay', 'flooroverlay', 'tileoverlay', 'overlay', 'attachedn', 'attacheds', 'attachede', 'attachedw', 'attachedfloor', 'ontable'))
+                return hit('Decor / Overlay', 'metadata-key', 'overlay/attached');
+            if (hasKey('container', 'containercapacity', 'surface', 'table', 'tablen', 'tables', 'tablee', 'tablew', 'countertop', 'isstackable', 'istable', 'istabletop', 'issurfaceoffset'))
+                return hit('Furniture', 'metadata-key', 'furniture/surface');
+            if (furniture.has(n) || furniture.has(canonical))
+                return hit('Furniture', 'furniture-catalog', 'catalog fallback');
+            if (/(^|_)(cooking|cookware|fixtures|chairs?|tables?|beds?|shelves?|counters?|seating|lighting|lamps?|radio|television|computers?|fridge|freezer|stove|oven|microwave|sink|toilet|bath|cabinets?)(_|$)/.test(n))
+                return hit('Furniture', 'name', 'furniture family');
+            if (/(overlay|graffiti|poster|painting|sign_)/.test(n))
+                return hit('Decor / Overlay', 'name', 'overlay/decor family');
             if (/(^|_)(blends_street|street|road|roads|asphalt|pavement|sidewalk|parking|curb|curbs)(_|$)/.test(n) || n.includes('blends_street'))
                 return hit('Roads & Ground', 'name', 'road/ground family');
             if (/(^|_)(vegetation|tree|trees|bush|bushes|grass|plants?|natural|forest)(_|$)/.test(n) || n.includes('blends_natural'))
                 return hit('Vegetation', 'name', 'vegetation family');
-            if (/(^|_)(outdoor|exterior|clutter|street_decoration|streetdecor|trash|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n) || n.includes('outdoor_clutter') || n.includes('exterior_'))
+            if (/(^|_)(outdoor|exterior|clutter|streetdecor|garbage|dumpster|mailbox|hydrant|bollard)(_|$)/.test(n) || n.includes('outdoor_clutter') || n.includes('exterior_'))
                 return hit('Exterior', 'name', 'exterior family');
             return hit('Other', 'fallback', 'unmatched');
         }
-        classify(name, furniture) { return this.classifyDetailed(name, furniture).category; }
+        classify(name, furniture, catalogOverride = null) { return this.classifyDetailed(name, furniture, catalogOverride).category; }
     }
     PZODT.TileDefDatabase = TileDefDatabase;
 })(PZODT || (PZODT = {}));
@@ -710,6 +718,23 @@ var PZODT;
         } return out; }
         entry(d, o) { return d.entries.find(e => e.orient === o) ?? d.entries[0] ?? null; }
         orientations(d) { return d.entries.map(e => e.orient); }
+        viewCategoryOverride(name) {
+            const labels = [...new Set(this.matchesTile(name, false).map(x => x.group.label))], find = (test) => labels.find(test);
+            let rule;
+            rule = find(label => { const x = label.toLowerCase(); return x.startsWith('floors - rugs') || x === 'vegetation - gardening - planters' || x === 'vegetation - plants' || x.startsWith('fixtures - counters') || x === 'fixtures - fireplaces' || x === 'fixtures - bathroom' || x === 'fixtures - elevators & escalators' || x === 'location - farm - accessories' || x === 'crafting - farming'; });
+            if (rule)
+                return { category: 'Furniture', rule };
+            rule = find(label => { const x = label.toLowerCase(); return x.startsWith('walls - decoration') || x.startsWith('walls - detailing') || x === 'walls - graffiti' || x === 'walls - messages' || x === 'walls - grime' || x === 'walls - trash' || x === 'floors - grime' || x === 'floors - trash' || x === 'location - community - school - boards' || x === 'location - entertainment - gallery - paintings' || x === 'signs - advertising - wall'; });
+            if (rule)
+                return { category: 'Decor / Overlay', rule };
+            rule = find(label => label === 'Street - Decoration' || label === 'Street - Road Signs');
+            if (rule)
+                return { category: 'Exterior', rule };
+            rule = find(label => label === 'Vegetation - Farm' || label === 'Vegetation - Farming');
+            if (rule)
+                return { category: 'Vegetation', rule };
+            return null;
+        }
         matchesTile(name, multiOnly = true) { const p = PZODT.parseTileName(name), k = `${p.tilesetName.toLowerCase()}:${p.tileIndex}`, a = this.tileMatches.get(name) ?? this.tileMatchesByKey.get(k) ?? []; return multiOnly ? a.filter(x => (this.entry(x.def, x.orient)?.cells.length ?? 0) > 1) : [...a]; }
     }
     PZODT.CatalogManager = CatalogManager;
@@ -1796,7 +1821,7 @@ var PZODT;
             this.configureRelease();
         }
         classify(n) { let c = this.classificationCache.get(n); if (c)
-            return c; c = this.tileDefs.classify(n, this.catalog.furnitureTiles); this.classificationCache.set(n, c); return c; }
+            return c; c = this.tileDefs.classify(n, this.catalog.furnitureTiles, this.catalog.viewCategoryOverride(n)); this.classificationCache.set(n, c); return c; }
         objectVisible(n) { return this.filters.get(this.classify(n)) !== false; }
         setStatus(s) { this.status.textContent = s; }
         updateMediaUi(state, message = '') { const ready = state === 'ready', busy = state === 'indexing', datasets = el('datasetSelect').options.length && !!el('datasetSelect').value; document.body.classList.toggle('mediaNeeded', !ready); const choose = el('chooseMediaBtn'), noticeChoose = el('mediaNoticeChooseBtn'), loadWorld = el('loadLocationBtn'), load = el('loadBtn'), audit = el('exportFilterAuditBtn'), notice = el('mediaNoticeText'), loadStatus = el('loadStatus'); choose.disabled = busy; noticeChoose.disabled = busy; choose.textContent = ready ? 'Change Media Folder…' : busy ? 'Indexing Media…' : 'Choose Media Folder…'; loadWorld.disabled = !ready || !datasets; load.disabled = !ready || !datasets; audit.disabled = !ready; if (message) {
@@ -2042,7 +2067,7 @@ var PZODT;
                 for (let i = 0; i < count; i++)
                     names.add(`${tileset}_${i}`);
             const rows = [...names].map(name => {
-                const parsed = PZODT.parseTileName(name), properties = this.tileDefs.properties(name), classification = this.tileDefs.classifyDetailed(name, this.catalog.furnitureTiles), matches = this.catalog.matchesTile(name, false);
+                const parsed = PZODT.parseTileName(name), properties = this.tileDefs.properties(name), classification = this.tileDefs.classifyDetailed(name, this.catalog.furnitureTiles, this.catalog.viewCategoryOverride(name)), matches = this.catalog.matchesTile(name, false);
                 const furnitureMatches = [...new Map(matches.map(m => [`${m.group.label}|${m.def.index}|${m.orient}`, { group: m.group.label, index: m.def.index, orientation: m.orient }])).values()];
                 return { tileName: name, tilesetName: parsed.tilesetName, tileIndex: parsed.tileIndex, assetLoaded: !!this.assets.asset(name), properties, furnitureCatalogMatch: furnitureMatches.length > 0, furnitureMatches, currentViewCategory: classification.category, currentRuleSource: classification.source, currentRule: classification.rule };
             }).sort((a, b) => a.tilesetName.localeCompare(b.tilesetName) || a.tileIndex - b.tileIndex || a.tileName.localeCompare(b.tileName));
