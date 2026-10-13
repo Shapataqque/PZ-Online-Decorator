@@ -588,15 +588,13 @@ var PZODT;
             const hasKey = (...q) => q.some(x => keySet.has(x.toLowerCase())), hasBuilding = (...q) => q.some(x => building.has(x)), hit = (category, source, rule) => ({ category, source, rule });
             if (canonical === 'vegetation_indoor_01_11' || canonical === 'location_community_school_01_33' || canonical === 'fixtures_counters_01_151' || canonical === 'animated_clock_01_1')
                 return hit('Furniture', 'override', canonical);
-            if (catalogOverride)
-                return hit(catalogOverride.category, 'catalog-group', catalogOverride.rule);
             if (n.includes('vegetation_indoor'))
                 return hit('Furniture', 'object-family', 'vegetation_indoor');
             if (/(^|_)rugs?(_|$)/.test(n) || n.includes('floors_rugs'))
                 return hit('Furniture', 'object-family', 'rugs');
             if (/(^|_)boulders?(_|$)/.test(n))
                 return hit('Vegetation', 'object-family', 'boulders');
-            if (n.includes('graffiti') || n.includes('wallcrack') || n.includes('streetcrack') || n.includes('messages_wall') || /(^|_)walls?_[a-z0-9_]*(decoration|detailing|grime|trash)/.test(n) || /(^|_)overlay_/.test(n) || n.startsWith('grimeoverlay') || n.startsWith('d_trash_') || /(^|_)trash_walls?_/.test(n) || /(^|_)trash_0*1(?:_|$)/.test(n) || n.includes('trash&junk'))
+            if (n.includes('graffiti') || n.includes('wallcrack') || n.includes('streetcrack') || n.includes('messages_wall') || /(^|_)walls?_[a-z0-9_]*(decoration|grime|trash)/.test(n) || /(^|_)overlay_/.test(n) || n.startsWith('grimeoverlay') || n.startsWith('d_trash_') || /(^|_)trash_walls?_/.test(n) || /(^|_)trash_0*1(?:_|$)/.test(n) || n.includes('trash&junk'))
                 return hit('Decor / Overlay', 'object-family', 'decor/overlay family');
             if (n.includes('street_decoration') || n.includes('street_roadsigns'))
                 return hit('Exterior', 'object-family', 'street fixture family');
@@ -609,7 +607,7 @@ var PZODT;
             if (/(^|_)(doors?|windows?|curtains?|shutters?)[a-z0-9]*(_|$)/.test(n))
                 return hit('Doors & Windows', 'structural-family', 'door/window');
             if (/(^|_)walls?[a-z0-9]*(_|$)/.test(n) || n.includes('wall'))
-                return hit('Wall', 'structural-family', 'wall name');
+                return hit('Wall', 'structural-family', n.includes('detailing') ? 'wall detailing' : 'wall name');
             if (hasBuilding('Floors'))
                 return hit('Floor', 'building-category', 'Floors');
             if (hasBuilding('Exterior Walls', 'Interior Walls', 'Trim - Exterior Walls', 'Trim - Interior Walls'))
@@ -618,8 +616,6 @@ var PZODT;
                 return hit('Doors & Windows', 'building-category', [...building].filter(x => ['Doors', 'Door Frames', 'Windows', 'Curtains', 'Shutters'].includes(x)).join(' + '));
             if (hasBuilding('Roof Caps', 'Roof Slopes', 'Roof Tops'))
                 return hit('Roof', 'building-category', [...building].filter(x => x.startsWith('Roof')).join(' + '));
-            if (n.includes('appliances') || /(^|_)fixtures_(counters?|fireplaces?|bathroom|escalators?)(_|$)/.test(n) || n.includes('furniture'))
-                return hit('Furniture', 'mixed-object', 'furniture family');
             if (hasKey('roof', 'westrooft', 'westroofb', 'westroofm', 'roofgroup', 'roofwallstart'))
                 return hit('Roof', 'metadata-key', 'roof');
             if (hasKey('solidfloor'))
@@ -628,6 +624,10 @@ var PZODT;
                 return hit('Wall', 'metadata-key', 'wall');
             if (hasKey('windown', 'windoww', 'doorwalln', 'doorwallw', 'doorn', 'doorw', 'window', 'door'))
                 return hit('Doors & Windows', 'metadata-key', 'door/window');
+            if (catalogOverride)
+                return hit(catalogOverride.category, 'catalog-group', catalogOverride.rule);
+            if (n.includes('appliances') || /(^|_)fixtures_(counters?|fireplaces?|bathroom|escalators?)(_|$)/.test(n) || n.includes('furniture'))
+                return hit('Furniture', 'mixed-object', 'furniture family');
             if (hasKey('walloverlay', 'flooroverlay', 'tileoverlay', 'overlay', 'attachedn', 'attacheds', 'attachede', 'attachedw', 'attachedfloor', 'ontable'))
                 return hit('Decor / Overlay', 'metadata-key', 'overlay/attached');
             if (hasKey('container', 'containercapacity', 'surface', 'table', 'tablen', 'tables', 'tablee', 'tablew', 'countertop', 'isstackable', 'istable', 'istabletop', 'issurfaceoffset'))
@@ -717,13 +717,14 @@ var PZODT;
         } return out; }
         entry(d, o) { return d.entries.find(e => e.orient === o) ?? d.entries[0] ?? null; }
         orientations(d) { return d.entries.map(e => e.orient); }
-        viewCategoryOverride(name) {
-            const labels = [...new Set(this.matchesTile(name, false).map(x => x.group.label))], find = (test) => labels.find(test);
-            let rule;
+        viewCategoryOverride(name) { const labels = [...new Set(this.matchesTile(name, false).map(x => x.group.label))], find = (test) => labels.find(test); let rule;
+            rule = find(label => label.toLowerCase().startsWith('walls - detailing'));
+            if (rule)
+                return { category: 'Wall', rule };
             rule = find(label => { const x = label.toLowerCase(); return x.startsWith('floors - rugs') || x === 'vegetation - gardening - planters' || x === 'vegetation - plants' || x.startsWith('fixtures - counters') || x === 'fixtures - fireplaces' || x === 'fixtures - bathroom' || x === 'fixtures - elevators & escalators' || x === 'location - farm - accessories' || x === 'crafting - farming'; });
             if (rule)
                 return { category: 'Furniture', rule };
-            rule = find(label => { const x = label.toLowerCase(); return x.startsWith('walls - decoration') || x.startsWith('walls - detailing') || x === 'walls - graffiti' || x === 'walls - messages' || x === 'walls - grime' || x === 'walls - trash' || x === 'floors - grime' || x === 'floors - trash' || x === 'location - community - school - boards' || x === 'location - entertainment - gallery - paintings' || x === 'signs - advertising - wall'; });
+            rule = find(label => { const x = label.toLowerCase(); return x.startsWith('walls - decoration') || x === 'walls - graffiti' || x === 'walls - messages' || x === 'walls - grime' || x === 'walls - trash' || x === 'floors - grime' || x === 'floors - trash' || x === 'location - community - school - boards' || x === 'location - entertainment - gallery - paintings' || x === 'signs - advertising - wall'; });
             if (rule)
                 return { category: 'Decor / Overlay', rule };
             rule = find(label => label === 'Street - Decoration' || label === 'Street - Road Signs');

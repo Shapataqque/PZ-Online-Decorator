@@ -13,8 +13,9 @@ namespace PZODT {
     entry(d:FurnitureDef,o:string):FurnitureEntry|null{return d.entries.find(e=>e.orient===o)??d.entries[0]??null;}
     orientations(d:FurnitureDef):string[]{return d.entries.map(e=>e.orient);}
     viewCategoryOverride(name:string):{category:ViewCategory;rule:string}|null{const labels=[...new Set(this.matchesTile(name,false).map(x=>x.group.label))],find=(test:(label:string)=>boolean)=>labels.find(test);let rule:string|undefined;
+      rule=find(label=>label.toLowerCase().startsWith('walls - detailing'));if(rule)return{category:'Wall',rule};
       rule=find(label=>{const x=label.toLowerCase();return x.startsWith('floors - rugs')||x==='vegetation - gardening - planters'||x==='vegetation - plants'||x.startsWith('fixtures - counters')||x==='fixtures - fireplaces'||x==='fixtures - bathroom'||x==='fixtures - elevators & escalators'||x==='location - farm - accessories'||x==='crafting - farming';});if(rule)return{category:'Furniture',rule};
-      rule=find(label=>{const x=label.toLowerCase();return x.startsWith('walls - decoration')||x.startsWith('walls - detailing')||x==='walls - graffiti'||x==='walls - messages'||x==='walls - grime'||x==='walls - trash'||x==='floors - grime'||x==='floors - trash'||x==='location - community - school - boards'||x==='location - entertainment - gallery - paintings'||x==='signs - advertising - wall';});if(rule)return{category:'Decor / Overlay',rule};
+      rule=find(label=>{const x=label.toLowerCase();return x.startsWith('walls - decoration')||x==='walls - graffiti'||x==='walls - messages'||x==='walls - grime'||x==='walls - trash'||x==='floors - grime'||x==='floors - trash'||x==='location - community - school - boards'||x==='location - entertainment - gallery - paintings'||x==='signs - advertising - wall';});if(rule)return{category:'Decor / Overlay',rule};
       rule=find(label=>label==='Street - Decoration'||label==='Street - Road Signs');if(rule)return{category:'Exterior',rule};
       rule=find(label=>label==='Vegetation - Farm'||label==='Vegetation - Farming');if(rule)return{category:'Vegetation',rule};
       return null;}
