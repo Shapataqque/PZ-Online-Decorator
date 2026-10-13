@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Project Zomboid Base Planner &amp; Decoration Tool">
   <meta name="twitter:description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261014-1">
 </head>
 <body class="mediaNeeded">
 <div data-nosnippet>
@@ -152,10 +152,51 @@
         <div class="hint">Export tile names, .tiles properties, furniture-catalog matches, and the current View Filter classification. No game images or local file paths are included.</div>
         <div class="row"><button id="exportFilterAuditBtn" type="button" disabled>Export Audit JSON</button></div>
       </section>
+      <section><h4>Getting Started</h4>
+        <div class="hint">Windows and macOS setup instructions, media-folder selection, and the basic editing workflow.</div>
+        <div class="row"><button id="tutorialBtn" type="button">Getting Started</button></div>
+      </section>
       <section><h4>Credits</h4><div class="row"><button id="creditsBtn" type="button">Credits</button></div></section>
     </div>
     <div class="dialogActions"><button id="settingsDoneBtn" class="primary" type="button">Done</button></div>
   </form>
+</dialog>
+
+<dialog id="tutorialDialog" class="dialog tutorialDialog">
+  <div class="dialogTitle">
+    <div><b>Getting Started</b><small>Choose your platform, select the correct Project Zomboid media folder, then load and edit a location.</small></div>
+    <button id="tutorialCloseBtn" type="button">×</button>
+  </div>
+  <div class="tutorialTabs" role="tablist" aria-label="Getting Started sections">
+    <button type="button" class="tutorialTab active" data-tutorial-tab="windows" role="tab" aria-selected="true">Windows</button>
+    <button type="button" class="tutorialTab" data-tutorial-tab="macos" role="tab" aria-selected="false">macOS / OS X</button>
+    <button type="button" class="tutorialTab" data-tutorial-tab="basic" role="tab" aria-selected="false">Basic Usage</button>
+  </div>
+  <div class="dialogBody tutorialBody">
+    <section class="tutorialPanel active" data-tutorial-panel="windows">
+      <ol class="tutorialSteps">
+        <li><b>Find your Project Zomboid installation</b><span>In Steam, open <strong>Library → Project Zomboid → Manage → Browse local files</strong>.</span></li>
+        <li><b>Select the correct <code>media</code> folder</b><span>The usual path is <code>C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\media</code>. In the browser folder picker, <strong>single-click the media folder, then click Upload</strong>. Double-clicking opens the folder instead of selecting it.</span></li>
+        <li><b>Wait for media indexing</b><span>PZ Decorator scans the selected game files locally in your browser. Your game files are not uploaded.</span></li>
+      </ol>
+    </section>
+    <section class="tutorialPanel" data-tutorial-panel="macos">
+      <ol class="tutorialSteps">
+        <li><b>Find your Project Zomboid installation</b><span>In Steam, open <strong>Library → Project Zomboid → Manage → Browse local files</strong>.</span></li>
+        <li><b>Select the correct <code>media</code> folder</b><span>Do not select <code>Project Zomboid.app</code>. In Finder, right-click it and choose <strong>Show Package Contents</strong>, then open <code>Contents → Java → media</code>. The folder to select is <code>Project Zomboid.app/Contents/Java/media</code>.</span></li>
+        <li><b>If the browser cannot enter the app bundle</b><span>In the folder picker, press <strong>⌘⇧G</strong> and go directly to <code>…/Project Zomboid.app/Contents/Java/media</code>, then select the <code>media</code> folder.</span></li>
+        <li><b>Wait for media indexing</b><span>PZ Decorator scans the selected game files locally in your browser. Your game files are not uploaded.</span></li>
+      </ol>
+    </section>
+    <section class="tutorialPanel" data-tutorial-panel="basic">
+      <ol class="tutorialSteps">
+        <li><b>Load a world location</b><span>After indexing finishes, click <strong>Load World Location</strong>, enter the World X / Y coordinates, choose the load mode, and load the location.</span></li>
+        <li><b>Edit the base</b><span>Choose objects from Furniture or Tiles. Use Pencil to place, Erase to remove, Picker to select existing objects, and <strong>R</strong> to rotate furniture.</span></li>
+        <li><b>Save / reopen as JSON</b><span>Use <strong>Save as .json</strong> to keep your project and <strong>Open .json file</strong> to continue later. The Project Zomboid media folder still needs to be selected when game assets are required.</span></li>
+      </ol>
+    </section>
+  </div>
+  <div class="dialogActions"><button id="tutorialDoneBtn" class="primary" type="button">Done</button></div>
 </dialog>
 
 <dialog id="creditsDialog" class="dialog creditsDialog">
@@ -245,6 +286,6 @@
 <input id="mediaInput" type="file" webkitdirectory multiple hidden>
 <input id="jsonInput" type="file" accept=".json,application/json" hidden>
 <script src="config/release-config.js"></script>
-<script src="dist/app.js?v=20261011-2"></script>
+<script src="dist/app.js?v=20261014-1"></script>
 </body>
 </html>

@@ -1819,6 +1819,8 @@ var PZODT;
             this.applyNightMode(night, false);
             setTimeout(() => this.renderer.center(), 50);
             this.configureRelease();
+            if (storeGet('pzodt.tutorialSeen') !== '1')
+                setTimeout(() => this.openTutorial(), 0);
         }
         classify(n) { let c = this.classificationCache.get(n); if (c)
             return c; c = this.tileDefs.classify(n, this.catalog.furnitureTiles, this.catalog.viewCategoryOverride(n)); this.classificationCache.set(n, c); return c; }
@@ -1852,6 +1854,9 @@ var PZODT;
             el('exportFilterAuditBtn').onclick = () => this.exportViewFilterAudit();
             this.graphicsQuality.onchange = () => { const q = this.graphicsQuality.value; storeSet('pzodt.graphicsQuality', q); this.renderer.setQuality(q); setTimeout(() => this.renderer.center(), 0); this.setStatus(`Graphics: ${q}.`); };
             this.performanceStatsToggle.onchange = () => { storeSet('pzodt.performanceStats', this.performanceStatsToggle.checked ? '1' : '0'); this.setPerformanceStats(this.performanceStatsToggle.checked); };
+            el('tutorialBtn').onclick = () => { el('settingsDialog').close(); this.openTutorial(); };
+            el('tutorialCloseBtn').onclick = el('tutorialDoneBtn').onclick = () => this.closeTutorial();
+            document.querySelectorAll('[data-tutorial-tab]').forEach(b => b.onclick = () => this.setTutorialTab((b.dataset.tutorialTab || 'windows')));
             el('creditsBtn').onclick = () => { el('settingsDialog').close(); el('creditsDialog').showModal(); };
             el('creditsCloseBtn').onclick = el('creditsDoneBtn').onclick = () => el('creditsDialog').close();
             el('feedbackBtn').onclick = () => this.openFeedbackDialog();
@@ -2244,6 +2249,10 @@ var PZODT;
             const a = p.a;
             ctx.drawImage(p.b, a.sx, a.sy, a.sw, a.sh, ox + p.l * fit, oy + p.t * fit, a.sw * p.s * fit, a.sh * p.s * fit);
         } }
+        setTutorialTab(tab) { document.querySelectorAll('[data-tutorial-tab]').forEach(b => { const active = b.dataset.tutorialTab === tab; b.classList.toggle('active', active); b.setAttribute('aria-selected', active ? 'true' : 'false'); }); document.querySelectorAll('[data-tutorial-panel]').forEach(p => p.classList.toggle('active', p.dataset.tutorialPanel === tab)); }
+        openTutorial() { this.setTutorialTab('windows'); const d = el('tutorialDialog'); if (!d.open)
+            d.showModal(); }
+        closeTutorial() { storeSet('pzodt.tutorialSeen', '1'); el('tutorialDialog').close(); }
         configureRelease() { const support = safeSupportUrl(releaseConfig().supportUrl); el('supportBtn').classList.toggle('hidden', !support); }
         applyNightMode(enabled, persist = true) { this.nightModeToggle.checked = enabled; document.body.classList.toggle('lightMode', !enabled); this.renderer.setNightMode(enabled); if (persist)
             storeSet('pzodt.nightMode', enabled ? '1' : '0'); }
