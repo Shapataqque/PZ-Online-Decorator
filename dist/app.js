@@ -1247,7 +1247,7 @@ var PZODT;
                     const k = m.key(x, y), stack = base?.get(k);
                     if (stack)
                         for (let i = 0; i < stack.length; i++) {
-                            const n = stack[i], category = this.classify(n); if (category === 'Wall' && this.dynamicWallCells.has(`${z}:${x}:${y}`)) continue; const a = this.assets.resolveAsset(n, originX + x, originY + y);
+                            const n = stack[i], category = this.classify(n); if ((category === 'Wall' || category === 'Doors & Windows') && this.dynamicWallCells.has(`${z}:${x}:${y}`)) continue; const a = this.assets.resolveAsset(n, originX + x, originY + y);
                             if (!a)
                                 continue;
                             cmds.push({ a, x, y, order: this.order(z, x, y, i), diag: x + y, ownerId: 'base', category, lift: 0, height: 0 });
@@ -1261,7 +1261,7 @@ var PZODT;
                     for (let x = x0; x < x1; x++) {
                         const n = l.get(x, y, m.width);
                         if (!n) continue;
-                        const category = this.classify(n); if (category === 'Wall' && this.dynamicWallCells.has(`${z}:${x}:${y}`)) continue;
+                        const category = this.classify(n); if ((category === 'Wall' || category === 'Doors & Windows') && this.dynamicWallCells.has(`${z}:${x}:${y}`)) continue;
                         const a = this.assets.resolveAsset(n, originX + x, originY + y);
                         if (!a)
                             continue;
@@ -1899,7 +1899,7 @@ var PZODT;
             return c; c = this.tileDefs.classify(n, this.catalog.furnitureTiles, this.catalog.viewCategoryOverride(n)); this.classificationCache.set(n, c); return c; }
         objectVisible(n) { return this.filters.get(this.classify(n)) !== false; }
         setStatus(s) { this.status.textContent = s; }
-        updateMediaUi(state, message = '') { const ready = state === 'ready', busy = state === 'indexing', datasets = el('datasetSelect').options.length && !!el('datasetSelect').value; document.body.classList.toggle('mediaNeeded', !ready); const choose = el('chooseMediaBtn'), noticeChoose = el('mediaNoticeChooseBtn'), loadWorld = el('loadLocationBtn'), load = el('loadBtn'), audit = el('exportFilterAuditBtn'), notice = el('mediaNoticeText'), loadStatus = el('loadStatus'); choose.disabled = busy; noticeChoose.disabled = busy; choose.textContent = ready ? 'Change Media Folder…' : busy ? 'Indexing Media…' : 'Choose Media Folder…'; loadWorld.disabled = !ready || !datasets; load.disabled = !ready || !datasets; audit.disabled = !ready; if (message) {
+        updateMediaUi(state, message = '') { const ready = state === 'ready', busy = state === 'indexing', datasets = el('datasetSelect').options.length && !!el('datasetSelect').value; document.body.classList.toggle('mediaNeeded', !ready); const choose = el('chooseMediaBtn'), noticeChoose = el('mediaNoticeChooseBtn'), loadWorld = el('loadLocationBtn'), load = el('loadBtn'), audit = el('exportFilterAuditBtn'), notice = el('mediaNoticeText'), loadStatus = el('loadStatus'); choose.disabled = busy; noticeChoose.disabled = busy; choose.textContent = ready ? 'Change Media Folder…' : busy ? 'Indexing Media…' : 'Choose Media Folder…'; loadWorld.disabled = !ready || !datasets; loadWorld.classList.toggle('primary', ready && !!datasets); choose.classList.toggle('primary', !ready); load.disabled = !ready || !datasets; audit.disabled = !ready; if (message) {
             notice.textContent = message;
             loadStatus.textContent = message;
         }
@@ -1930,6 +1930,7 @@ var PZODT;
             el('tutorialBtn').onclick = () => { el('settingsDialog').close(); this.openTutorial(); };
             el('tutorialCloseBtn').onclick = el('tutorialDoneBtn').onclick = () => this.closeTutorial();
             document.querySelectorAll('[data-tutorial-tab]').forEach(b => b.onclick = () => this.setTutorialTab((b.dataset.tutorialTab || 'windows')));
+            for (const id of ['tutorialChooseWindowsBtn', 'tutorialChooseMacBtn']) el(id).onclick = () => { this.closeTutorial(); el('mediaInput').click(); };
             el('creditsBtn').onclick = () => { el('settingsDialog').close(); el('creditsDialog').showModal(); };
             el('creditsCloseBtn').onclick = el('creditsDoneBtn').onclick = () => el('creditsDialog').close();
             el('feedbackBtn').onclick = () => this.openFeedbackDialog();
@@ -2027,9 +2028,9 @@ var PZODT;
         showDebugChoices(items, p) { const box = el('debugChoices'); box.replaceChildren(); el('debugPickerInfo').textContent = `Choose an object to inspect at ${p.x}, ${p.y}, Z ${this.map.currentLevel}. Filtered objects are included.`; for (const item of items) { const b = document.createElement('button'); b.type = 'button'; b.className = 'pickerChoice'; const cv = document.createElement('canvas'); cv.width = 68; cv.height = 64; const text = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small'), match = this.catalog.matchesTile(item.name, false)[0]; title.textContent = match ? this.catalog.displayName(match.def, match.group) : this.tileDefs.displayName(item.name); meta.textContent = `${item.name} · ${item.sourceLabel} · ${item.category}`; text.append(title, meta); b.append(cv, text); b.onclick = () => { el('debugPickerDialog').close(); this.showDebugInfo(item); }; box.appendChild(b); this.drawCandidatePreview(cv, item).catch(() => { }); } const d = el('debugPickerDialog'); if (!d.open) d.showModal(); }
         showDebugInfo(item) { this.lastDebugText = JSON.stringify(this.debugPayload(item), null, 2); el('debugInfoContent').textContent = this.lastDebugText; const d = el('debugInfoDialog'); if (!d.open) d.showModal(); }
         async copyDebugInfo() { if (!this.lastDebugText) return; try { await navigator.clipboard.writeText(this.lastDebugText); this.setStatus('Tile debug copied to clipboard.'); } catch { const ta = document.createElement('textarea'); ta.value = this.lastDebugText; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); this.setStatus('Tile debug copied to clipboard.'); } }
-        cellHasWall(x, y, z) { const m = this.map; if (x < 0 || y < 0 || x >= m.width || y >= m.height) return false; for (let i = m.layers.length - 1; i >= 0; i--) { const l = m.layers[i]; if (l.level !== z) continue; const n = l.get(x, y, m.width); if (n && this.classify(n) === 'Wall') return true; } return m.stack(z, x, y).some(n => this.classify(n) === 'Wall'); }
-        frontWallCells(p) { const out = new Set(), m = this.map, z = m.currentLevel; if (!p || p.x < 0 || p.y < 0 || p.x >= m.width || p.y >= m.height)
-            return out; const has = (x, y) => this.cellHasWall(x, y, z), rooms = m.roomRegions.filter(r => r.level === z && r.rects.some(q => p.x >= q.x && p.x < q.x + q.w && p.y >= q.y && p.y < q.y + q.h)).sort((a, b) => a.rects.reduce((n, q) => n + q.w * q.h, 0) - b.rects.reduce((n, q) => n + q.w * q.h, 0)), room = rooms[0]; if (room) {
+        cellHasRoomOccluder(x, y, z) { const m = this.map; if (x < 0 || y < 0 || x >= m.width || y >= m.height) return false; const occludes = (n) => { const c = this.classify(n); return c === 'Wall' || c === 'Doors & Windows'; }; for (let i = m.layers.length - 1; i >= 0; i--) { const l = m.layers[i]; if (l.level !== z) continue; const n = l.get(x, y, m.width); if (n && occludes(n)) return true; } return m.stack(z, x, y).some(occludes); }
+        frontRoomOccluderCells(p) { const out = new Set(), m = this.map, z = m.currentLevel; if (!p || p.x < 0 || p.y < 0 || p.x >= m.width || p.y >= m.height)
+            return out; const has = (x, y) => this.cellHasRoomOccluder(x, y, z), rooms = m.roomRegions.filter(r => r.level === z && r.rects.some(q => p.x >= q.x && p.x < q.x + q.w && p.y >= q.y && p.y < q.y + q.h)).sort((a, b) => a.rects.reduce((n, q) => n + q.w * q.h, 0) - b.rects.reduce((n, q) => n + q.w * q.h, 0)), room = rooms[0]; if (room) {
             const inside = (x, y) => room.rects.some(q => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h), addBoundary = (ix, iy, ox, oy) => { if (has(ox, oy))
                 out.add(`${z}:${ox}:${oy}`);
             else if (has(ix, iy))
@@ -2069,7 +2070,7 @@ var PZODT;
             } if (fx >= 0)
             addRun(fx, p.y, 0, 1); if (fy >= 0)
             addRun(p.x, fy, 1, 0); return out; }
-        updateDynamicWallsAt(p) { const active = this.dynamicWallToggle.checked && this.editor.tool === 'pencil', cells = active ? this.frontWallCells(p) : new Set(), key = [...cells].sort().join('|'); if (key === this.dynamicWallRoomKey) return; this.dynamicWallRoomKey = key; this.renderer.setDynamicWallCells(cells); }
+        updateDynamicWallsAt(p) { const active = this.dynamicWallToggle.checked && this.editor.tool === 'pencil', cells = active ? this.frontRoomOccluderCells(p) : new Set(), key = [...cells].sort().join('|'); if (key === this.dynamicWallRoomKey) return; this.dynamicWallRoomKey = key; this.renderer.setDynamicWallCells(cells); }
         showEraseChoices(items, p) { this.pendingEraseCandidates = items; const box = el('eraseChoices'); box.replaceChildren(); el('eraseInfo').textContent = `Choose one or more objects to erase at ${p.x}, ${p.y}, Z ${this.map.currentLevel}.`; const confirm = el('eraseSelectedBtn'); confirm.disabled = true; items.forEach((item, i) => { const row = document.createElement('label'); row.className = 'eraseChoice'; const check = document.createElement('input'); check.type = 'checkbox'; check.value = String(i); check.onchange = () => { confirm.disabled = !box.querySelector('input[type=checkbox]:checked'); }; const cv = document.createElement('canvas'); cv.width = 68; cv.height = 64; const text = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small'); const match = this.catalog.matchesTile(item.name, false)[0]; title.textContent = match ? this.catalog.displayName(match.def, match.group) : item.name; meta.textContent = match ? `${item.name} · ${item.sourceLabel} · ${item.category}` : `${item.sourceLabel} · ${item.category}`; text.append(title, meta); row.append(check, cv, text); box.appendChild(row); this.drawCandidatePreview(cv, item).catch(() => { }); }); const d = el('eraseDialog'); if (!d.open)
             d.showModal(); }
         confirmEraseSelection() { const box = el('eraseChoices'), selected = [...box.querySelectorAll('input[type=checkbox]:checked')].map(x => this.pendingEraseCandidates[+x.value]).filter((x) => !!x); if (!selected.length)

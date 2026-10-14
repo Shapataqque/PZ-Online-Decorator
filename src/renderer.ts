@@ -127,12 +127,12 @@ namespace PZODT {
       const x0=cx*SPATIAL_CHUNK_SIZE,y0=cy*SPATIAL_CHUNK_SIZE,x1=Math.min(m.width,x0+SPATIAL_CHUNK_SIZE),y1=Math.min(m.height,y0+SPATIAL_CHUNK_SIZE),cmds:BuildCommand[]=[];
       const base=m.baseStacks.get(z);
       for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
-        const k=m.key(x,y),stack=base?.get(k);if(stack)for(let i=0;i<stack.length;i++){const n=stack[i],category=this.classify(n);if(category==='Wall'&&this.dynamicWallCells.has(`${z}:${x}:${y}`))continue;const a=this.assets.resolveAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,i),diag:x+y,ownerId:'base',category,lift:0,height:0});}
+        const k=m.key(x,y),stack=base?.get(k);if(stack)for(let i=0;i<stack.length;i++){const n=stack[i],category=this.classify(n);if((category==='Wall'||category==='Doors & Windows')&&this.dynamicWallCells.has(`${z}:${x}:${y}`))continue;const a=this.assets.resolveAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,i),diag:x+y,ownerId:'base',category,lift:0,height:0});}
       }
       for(let li=0;li<m.layers.length;li++){
         const l=m.layers[li];if(l.level!==z)continue;
         for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
-          const n=l.get(x,y,m.width);if(!n)continue;const category=this.classify(n);if(category==='Wall'&&this.dynamicWallCells.has(`${z}:${x}:${y}`))continue;const a=this.assets.resolveAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,1000+li),diag:x+y,ownerId:l.id,category,lift:0,height:l.placementHeight(x,y,m.width)});
+          const n=l.get(x,y,m.width);if(!n)continue;const category=this.classify(n);if((category==='Wall'||category==='Doors & Windows')&&this.dynamicWallCells.has(`${z}:${x}:${y}`))continue;const a=this.assets.resolveAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,1000+li),diag:x+y,ownerId:l.id,category,lift:0,height:l.placementHeight(x,y,m.width)});
         }
       }
       cmds.sort((a,b)=>a.order-b.order);

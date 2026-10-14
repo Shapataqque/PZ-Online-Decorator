@@ -129,3 +129,14 @@ body.lightMode .tutorialSteps code{background:#fff;border-color:#c7d1d8}
 
 
 .dynamicWallControl{display:flex;align-items:center;gap:5px;margin:12px 0 4px}.dynamicWallControl input{flex:0 0 auto}.dynamicWallControl span{color:#7f909c;font-size:10px}.debugInfoDialog{width:min(760px,94vw)}.debugInfoDialog .dialogBody{padding:0}.debugInfoDialog pre{margin:0;padding:14px 16px;max-height:68vh;overflow:auto;white-space:pre-wrap;word-break:break-word;font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:#b7c4cd;background:#0e1317}.debugInfoDialog .dialogActions{gap:7px}body.lightMode .debugInfoDialog pre{color:#425865;background:#fff}body.lightMode .dynamicWallControl span{color:#71828d}
+
+.tutorialChooseMediaBtn{display:inline-block;margin:9px 0 8px;padding:8px 12px;background:#176a9d;border-color:#319edc;color:#fff;font-weight:600}
+.tutorialChooseMediaBtn:hover{background:#1b80b8}
+.tutorialShortcut{display:inline-block;vertical-align:middle;white-space:nowrap;margin:0 3px;padding:4px 9px;border:1px solid #4988af;border-radius:5px;background:#203b4e;color:#edf6fc;font:700 17px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI Symbol","Segoe UI",sans-serif;letter-spacing:.045em}
+.dynamicWallControl{margin-bottom:3px}
+.dynamicWallControl .dynamicRoomLabel{color:#b3c0ca;font-size:11px}
+.dynamicWallControl .dynamicRoomLabel em{font-size:10px;font-style:normal;color:#91a2ae}
+.dynamicRoomHint{font-size:10px;color:#91a2ae;margin:0 0 10px 22px;line-height:1.35}
+body.lightMode .tutorialShortcut{color:#224256;background:#e6f2fa;border-color:#95bcd5}
+body.lightMode .dynamicWallControl .dynamicRoomLabel{color:#536671}
+body.lightMode .dynamicWallControl .dynamicRoomLabel em,body.lightMode .dynamicRoomHint{color:#6b7e8a}

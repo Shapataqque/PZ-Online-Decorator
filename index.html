@@ -17,7 +17,7 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Project Zomboid Base Planner &amp; Decoration Tool">
   <meta name="twitter:description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
-  <link rel="stylesheet" href="styles.css?v=20261014-6">
+  <link rel="stylesheet" href="styles.css?v=20261014-7">
 </head>
 <body class="mediaNeeded">
 <div data-nosnippet>
@@ -90,7 +90,8 @@
     <div id="orientationButtons" class="orientations"></div>
     <div id="placementHeightControls" class="placementHeights"></div>
     <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
-    <label class="check dynamicWallControl"><input id="dynamicWallToggle" type="checkbox"> Dynamic wall filter <span>· Pencil only</span></label>
+    <label class="check dynamicWallControl"><input id="dynamicWallToggle" type="checkbox"><span class="dynamicRoomLabel">Dynamic Room Filter <em>(in development)</em></span></label>
+    <div class="dynamicRoomHint">In Pencil mode, hides the front walls, doors, and windows of the room under your cursor.</div>
     <h3>View filters</h3>
     <div id="viewFilters" class="viewFilters"></div>
   </aside>
@@ -155,7 +156,7 @@
         <div class="row"><button id="exportFilterAuditBtn" type="button" disabled>Export Audit JSON</button></div>
       </section>
       <section><h4>Getting Started</h4>
-        <div class="hint">Windows and macOS setup instructions, media-folder selection, and the basic editing workflow.</div>
+        <div class="hint">Windows and macOS steps for finding and selecting the correct game media folder.</div>
         <div class="row"><button id="tutorialBtn" type="button">Getting Started</button></div>
       </section>
       <section><h4>Credits</h4><div class="row"><button id="creditsBtn" type="button">Credits</button></div></section>
@@ -172,29 +173,25 @@
   <div class="tutorialTabs" role="tablist" aria-label="Getting Started sections">
     <button type="button" class="tutorialTab active" data-tutorial-tab="windows" role="tab" aria-selected="true">Windows</button>
     <button type="button" class="tutorialTab" data-tutorial-tab="macos" role="tab" aria-selected="false">macOS / OS X</button>
-    <button type="button" class="tutorialTab" data-tutorial-tab="basic" role="tab" aria-selected="false">Basic Usage</button>
   </div>
   <div class="dialogBody tutorialBody">
     <section class="tutorialPanel active" data-tutorial-panel="windows">
       <ol class="tutorialSteps">
-        <li><b>Find your Project Zomboid installation</b><span>In Steam, open <strong>Library → Project Zomboid → Manage → Browse local files</strong>.</span></li>
-        <li><b>Select the correct <code>media</code> folder</b><span>The usual path is <code>C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\media</code>. In the browser folder picker, <strong>single-click the media folder, then click Upload</strong>. Double-clicking opens the folder instead of selecting it.</span></li>
-        <li><b>Wait for media indexing</b><span>PZ Decorator scans the selected game files locally in your browser. Your game files are not uploaded.</span></li>
+        <li><b>Find your Project Zomboid installation</b><span>In Steam, go to <strong>Library → Project Zomboid → Manage → Browse local files</strong>.</span></li>
+        <li><b>Choose the <code>media</code> folder</b><span>Click <strong>Choose Media Folder…</strong> below and select the <code>media</code> folder inside your Project Zomboid installation.</span>
+          <button id="tutorialChooseWindowsBtn" class="tutorialChooseMediaBtn" type="button">Choose Media Folder…</button>
+          <span>The usual path is <code>C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\media</code>. <strong>Single-click the media folder, then click Upload</strong>. Do not double-click it, or you will open the folder instead of selecting it.</span></li>
+        <li><b>Index, then load a location</b><span>Wait until media indexing finishes. Then click the blue <strong>Load World Location</strong> button in the top toolbar. Your game files stay on your computer.</span></li>
       </ol>
     </section>
     <section class="tutorialPanel" data-tutorial-panel="macos">
       <ol class="tutorialSteps">
-        <li><b>Find your Project Zomboid installation</b><span>In Steam, open <strong>Library → Project Zomboid → Manage → Browse local files</strong>.</span></li>
-        <li><b>Select the correct <code>media</code> folder</b><span>Do not select <code>Project Zomboid.app</code>. In Finder, right-click it and choose <strong>Show Package Contents</strong>, then open <code>Contents → Java → media</code>. The folder to select is <code>Project Zomboid.app/Contents/Java/media</code>.</span></li>
-        <li><b>If the browser cannot enter the app bundle</b><span>In the folder picker, press <strong>⌘⇧G</strong> and go directly to <code>…/Project Zomboid.app/Contents/Java/media</code>, then select the <code>media</code> folder.</span></li>
-        <li><b>Wait for media indexing</b><span>PZ Decorator scans the selected game files locally in your browser. Your game files are not uploaded.</span></li>
-      </ol>
-    </section>
-    <section class="tutorialPanel" data-tutorial-panel="basic">
-      <ol class="tutorialSteps">
-        <li><b>Load a world location</b><span>After indexing finishes, click <strong>Load World Location</strong>, enter World X / Y or use <strong>Choose from Map</strong>, choose the load mode, and load the location.</span></li>
-        <li><b>Edit the base</b><span>Choose objects from Furniture or Tiles. Use Pencil to place, Erase to remove, Picker to select existing objects, and <strong>R</strong> to rotate furniture.</span></li>
-        <li><b>Save / reopen as JSON</b><span>Use <strong>Save as .json</strong> to keep your project and <strong>Open .json file</strong> to continue later. The Project Zomboid media folder still needs to be selected when game assets are required.</span></li>
+        <li><b>Find your Project Zomboid installation</b><span>In Steam, go to <strong>Library → Project Zomboid → Manage → Browse local files</strong>.</span></li>
+        <li><b>Choose the <code>media</code> folder</b><span>Click <strong>Choose Media Folder…</strong> below. In Finder, right-click <code>Project Zomboid.app</code> and select <strong>Show Package Contents</strong>. Open <code>Contents → Java → media</code> and select that <code>media</code> folder—not the <code>.app</code> file.</span>
+          <button id="tutorialChooseMacBtn" class="tutorialChooseMediaBtn" type="button">Choose Media Folder…</button>
+          <span>The folder is usually inside <code>Project Zomboid.app/Contents/Java/media</code>. In the picker, select the <code>media</code> folder and confirm your selection.</span></li>
+        <li><b>Can't browse inside the app?</b><span>In the folder picker, press <strong>Command + Shift + G</strong> <kbd class="tutorialShortcut" aria-label="Command Shift G">⌘ ⇧ G</kbd>, then enter the full path ending in <code>/Project Zomboid.app/Contents/Java/media</code>.</span></li>
+        <li><b>Index, then load a location</b><span>Wait until media indexing finishes. Then click the blue <strong>Load World Location</strong> button in the top toolbar. Your game files stay on your computer.</span></li>
       </ol>
     </section>
   </div>
@@ -315,6 +312,6 @@
 <input id="mediaInput" type="file" webkitdirectory multiple hidden>
 <input id="jsonInput" type="file" accept=".json,application/json" hidden>
 <script src="config/release-config.js"></script>
-<script src="dist/app.js?v=20261014-6"></script>
+<script src="dist/app.js?v=20261014-7"></script>
 </body>
 </html>
