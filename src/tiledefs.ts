@@ -27,6 +27,7 @@ namespace PZODT {
       if(/(^|_)rugs?(_|$)/.test(n)||n.includes('floors_rugs'))return hit('Furniture','object-family','rugs');
       if(/(^|_)boulders?(_|$)/.test(n))return hit('Vegetation','object-family','boulders');
       if(n.includes('grime'))return hit('Grime','object-family','grime family');
+      if(catalogOverride?.category==='Grime')return hit('Grime','catalog-group',catalogOverride.rule);
       if(catalogOverride?.category==='Furniture'&&catalogOverride.rule.startsWith('Furniture layer:'))return hit('Furniture','catalog-group',catalogOverride.rule);
       if(n.includes('graffiti')||n.includes('wallcrack')||n.includes('streetcrack')||n.includes('messages_wall')||/(^|_)walls?_[a-z0-9_]*(decoration|trash)/.test(n)||/(^|_)overlay_/.test(n)||n.startsWith('d_trash_')||/(^|_)trash_walls?_/.test(n)||/(^|_)trash_0*1(?:_|$)/.test(n)||n.includes('trash&junk'))return hit('Decor / Overlay','object-family','decor/overlay family');
       if(n.includes('street_decoration')||n.includes('street_roadsigns'))return hit('Exterior','object-family','street fixture family');

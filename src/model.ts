@@ -14,7 +14,7 @@ namespace PZODT {
     setPlacementHeight(x:number,y:number,w:number,height=0):void{const k=y*w+x,h=Math.max(0,Math.min(512,Math.round(Number(height)||0)));if(h===0)this.placementHeights.delete(k);else this.placementHeights.set(k,h);}
   }
   export class PZMapModel{
-    width=64;height=64;tileWidth=64;tileHeight=32;cellsPerLevelY=3;currentLevel=0;properties:Record<string,string>={};
+    width=64;height=64;tileWidth=64;tileHeight=32;cellsPerLevelY=3;currentLevel=0;properties:Record<string,string>={};roomRegions:Array<{id:string;name:string;level:number;buildingIndex:number;rects:Array<{x:number;y:number;w:number;h:number}>}>=[];
     baseVisible=true;baseOpacity=1;baseLocked=false;baseStacks=new Map<number,Map<number,string[]>>();layers:UserLayerModel[]=[];activeTarget='base';
     constructor(w=64,h=64){this.width=w;this.height=h;}
     key(x:number,y:number):number{return y*this.width+x;}
@@ -28,7 +28,7 @@ namespace PZODT {
     deleteLayer(id:string):void{this.layers=this.layers.filter(l=>l.id!==id);if(this.activeTarget===id)this.activeTarget='base';}
     moveLayer(id:string,d:number):void{const i=this.layers.findIndex(l=>l.id===id);if(i<0)return;const j=Math.max(0,Math.min(this.layers.length-1,i+d));const [x]=this.layers.splice(i,1);this.layers.splice(j,0,x);}
     findStackLayer(category:ViewCategory,level:number,cells:Array<{x:number;y:number}>,create=true,preferTop=false):UserLayerModel|null{const candidates=this.layers.filter(l=>l.level===level&&l.category===category),ordered=preferTop?[...candidates].reverse():candidates;for(const l of ordered)if(cells.every(c=>!l.get(c.x,c.y,this.width)))return l;if(!create)return null;let n=1;let name:string=category;while(this.layers.some(l=>l.level===level&&l.name===name)){n++;name=`${category} ${n}`;}return this.addLayer(name,level,category);}
-    toJSON():any{return{format:'PZOnlineDecorationTool',version:4,width:this.width,height:this.height,tileWidth:this.tileWidth,tileHeight:this.tileHeight,cellsPerLevelY:this.cellsPerLevelY,currentLevel:this.currentLevel,properties:this.properties,baseVisible:this.baseVisible,baseOpacity:this.baseOpacity,baseLocked:this.baseLocked,activeTarget:this.activeTarget,baseStacks:[...this.baseStacks].map(([z,m])=>[z,[...m]]),layers:this.layers.map(l=>({id:l.id,name:l.name,level:l.level,visible:l.visible,opacity:l.opacity,locked:l.locked,category:l.category,cells:[...l.cells],placementHeights:[...l.placementHeights]}))};}
+    toJSON():any{return{format:'PZOnlineDecorationTool',version:4,width:this.width,height:this.height,tileWidth:this.tileWidth,tileHeight:this.tileHeight,cellsPerLevelY:this.cellsPerLevelY,currentLevel:this.currentLevel,properties:this.properties,roomRegions:this.roomRegions.map(r=>({id:r.id,name:r.name,level:r.level,buildingIndex:r.buildingIndex,rects:r.rects.map(q=>({...q}))})),baseVisible:this.baseVisible,baseOpacity:this.baseOpacity,baseLocked:this.baseLocked,activeTarget:this.activeTarget,baseStacks:[...this.baseStacks].map(([z,m])=>[z,[...m]]),layers:this.layers.map(l=>({id:l.id,name:l.name,level:l.level,visible:l.visible,opacity:l.opacity,locked:l.locked,category:l.category,cells:[...l.cells],placementHeights:[...l.placementHeights]}))};}
     static fromJSON(o:any):PZMapModel{
       const width=Math.max(1,Math.min(600,Math.trunc(Number(o.width)||64)));
       const height=Math.max(1,Math.min(600,Math.trunc(Number(o.height)||64)));
@@ -44,6 +44,8 @@ namespace PZODT {
         }
       }
       m.properties=props;
+      m.roomRegions=[];
+      if(Array.isArray(o.roomRegions)){for(const q of o.roomRegions.slice(0,20000)){if(!q||typeof q!=='object'||Array.isArray(q)||!Array.isArray(q.rects))continue;const level=Math.max(-64,Math.min(64,Math.trunc(Number(q.level)||0))),rects:Array<{x:number;y:number;w:number;h:number}>=[];for(const r of q.rects.slice(0,2048)){if(!r||typeof r!=='object'||Array.isArray(r))continue;const x=Math.trunc(Number(r.x)),y=Math.trunc(Number(r.y)),w=Math.trunc(Number(r.w)),h=Math.trunc(Number(r.h));if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(w)||!Number.isFinite(h)||w<1||h<1||x<0||y<0||x>=width||y>=height)continue;rects.push({x,y,w:Math.min(w,width-x),h:Math.min(h,height-y)});}if(rects.length)m.roomRegions.push({id:typeof q.id==='string'?q.id.slice(0,128):`room-${m.roomRegions.length}`,name:typeof q.name==='string'?q.name.slice(0,128):'Room',level,buildingIndex:Number.isInteger(+q.buildingIndex)?Math.max(-1,Math.min(100000,+q.buildingIndex)):-1,rects});}}
       m.baseVisible=true;m.baseOpacity=1;m.baseLocked=false;m.activeTarget='base';
       m.baseStacks=new Map((o.baseStacks||[]).map((q:any)=>[+q[0],new Map(q[1]||[])]));
       m.layers=[];

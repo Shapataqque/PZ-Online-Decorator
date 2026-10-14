@@ -51,6 +51,7 @@ var PZODT;
             this.cellsPerLevelY = 3;
             this.currentLevel = 0;
             this.properties = {};
+            this.roomRegions = [];
             this.baseVisible = true;
             this.baseOpacity = 1;
             this.baseLocked = false;
@@ -91,7 +92,7 @@ var PZODT;
             n++;
             name = `${category} ${n}`;
         } return this.addLayer(name, level, category); }
-        toJSON() { return { format: 'PZOnlineDecorationTool', version: 4, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: this.baseLocked, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementHeights: [...l.placementHeights] })) }; }
+        toJSON() { return { format: 'PZOnlineDecorationTool', version: 4, width: this.width, height: this.height, tileWidth: this.tileWidth, tileHeight: this.tileHeight, cellsPerLevelY: this.cellsPerLevelY, currentLevel: this.currentLevel, properties: this.properties, roomRegions: this.roomRegions.map(r => ({ id: r.id, name: r.name, level: r.level, buildingIndex: r.buildingIndex, rects: r.rects.map(q => ({ ...q })) })), baseVisible: this.baseVisible, baseOpacity: this.baseOpacity, baseLocked: this.baseLocked, activeTarget: this.activeTarget, baseStacks: [...this.baseStacks].map(([z, m]) => [z, [...m]]), layers: this.layers.map(l => ({ id: l.id, name: l.name, level: l.level, visible: l.visible, opacity: l.opacity, locked: l.locked, category: l.category, cells: [...l.cells], placementHeights: [...l.placementHeights] })) }; }
         static fromJSON(o) {
             const width = Math.max(1, Math.min(600, Math.trunc(Number(o.width) || 64)));
             const height = Math.max(1, Math.min(600, Math.trunc(Number(o.height) || 64)));
@@ -108,6 +109,24 @@ var PZODT;
                 }
             }
             m.properties = props;
+            m.roomRegions = [];
+            if (Array.isArray(o.roomRegions)) {
+                for (const q of o.roomRegions.slice(0, 20000)) {
+                    if (!q || typeof q !== 'object' || Array.isArray(q) || !Array.isArray(q.rects))
+                        continue;
+                    const level = Math.max(-64, Math.min(64, Math.trunc(Number(q.level) || 0))), rects = [];
+                    for (const r of q.rects.slice(0, 2048)) {
+                        if (!r || typeof r !== 'object' || Array.isArray(r))
+                            continue;
+                        const x = Math.trunc(Number(r.x)), y = Math.trunc(Number(r.y)), w = Math.trunc(Number(r.w)), h = Math.trunc(Number(r.h));
+                        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1 || x < 0 || y < 0 || x >= width || y >= height)
+                            continue;
+                        rects.push({ x, y, w: Math.min(w, width - x), h: Math.min(h, height - y) });
+                    }
+                    if (rects.length)
+                        m.roomRegions.push({ id: typeof q.id === 'string' ? q.id.slice(0, 128) : `room-${m.roomRegions.length}`, name: typeof q.name === 'string' ? q.name.slice(0, 128) : 'Room', level, buildingIndex: Number.isInteger(+q.buildingIndex) ? Math.max(-1, Math.min(100000, +q.buildingIndex)) : -1, rects });
+                }
+            }
             m.baseVisible = true;
             m.baseOpacity = 1;
             m.baseLocked = false;
@@ -596,6 +615,8 @@ var PZODT;
                 return hit('Vegetation', 'object-family', 'boulders');
             if (n.includes('grime'))
                 return hit('Grime', 'object-family', 'grime family');
+            if (catalogOverride?.category === 'Grime')
+                return hit('Grime', 'catalog-group', catalogOverride.rule);
             if (catalogOverride?.category === 'Furniture' && catalogOverride.rule.startsWith('Furniture layer:'))
                 return hit('Furniture', 'catalog-group', catalogOverride.rule);
             if (n.includes('graffiti') || n.includes('wallcrack') || n.includes('streetcrack') || n.includes('messages_wall') || /(^|_)walls?_[a-z0-9_]*(decoration|trash)/.test(n) || /(^|_)overlay_/.test(n) || n.startsWith('d_trash_') || /(^|_)trash_walls?_/.test(n) || /(^|_)trash_0*1(?:_|$)/.test(n) || n.includes('trash&junk'))
@@ -909,6 +930,31 @@ var PZODT;
                 min = Math.min(min, h.minLevel);
                 max = Math.max(max, h.maxLevel);
             } return { min: min === 99 ? 0 : min, max: max < 0 ? 0 : max }; }
+        async collectRoomRegions(ds, b) {
+            await this.geom(ds);
+            const cs = ds.cellSize, out = [];
+            for (let cx = Math.floor(b.x0 / cs); cx <= Math.floor(b.x1 / cs); cx++)
+                for (let cy = Math.floor(b.y0 / cs); cy <= Math.floor(b.y1 / cs); cy++) {
+                    const hf = ds.headers.get(key(cx, cy));
+                    if (!hf)
+                        continue;
+                    const h = await this.header(ds, hf, cx, cy);
+                    for (const r of h.rooms) {
+                        const rects = [];
+                        for (const q of r.rects) {
+                            const wx = cx * cs + q.x, wy = cy * cs + q.y, x0 = Math.max(wx, b.x0), y0 = Math.max(wy, b.y0), x1 = Math.min(wx + q.w - 1, b.x1), y1 = Math.min(wy + q.h - 1, b.y1);
+                            if (x0 <= x1 && y0 <= y1)
+                                rects.push({ x: x0 - b.x0, y: y0 - b.y0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
+                        }
+                        if (rects.length) {
+                            out.push({ id: `${cx},${cy}:${r.id}`, name: r.name || 'Room', level: r.level, buildingIndex: r.buildingIndex, rects });
+                            if (out.length > 50000)
+                                throw new Error('Imported area contains too many room regions.');
+                        }
+                    }
+                }
+            return out;
+        }
         async importLocation(o, progress) {
             const ds = this.datasets.get(o.datasetId);
             if (!ds)
@@ -942,6 +988,8 @@ var PZODT;
             const map = new PZODT.PZMapModel(w, h);
             map.currentLevel = Math.max(min, Math.min(max, 0));
             map.properties = { 'pzodt.worldOriginX': String(b.x0), 'pzodt.worldOriginY': String(b.y0), 'pzodt.dataset': ds.path };
+            progress?.('Reading room geometry…');
+            map.roomRegions = await this.collectRoomRegions(ds, b);
             const used = new Set();
             let squares = 0, sprites = 0;
             for (let z = min; z <= max; z++) {
@@ -1374,7 +1422,7 @@ var PZODT;
                 c.stroke();
                 c.setLineDash([]);
             }
-            const gridAlpha = Math.max(.055, Math.min(.13, .065 + this.camera.zoom * .07)); drawGrid(z, this.nightMode ? `rgba(190,210,220,${gridAlpha})` : `rgba(45,65,75,${gridAlpha})`);
+            const gridAlpha = Math.max(.04, Math.min(.105, .045 + this.camera.zoom * .04)); drawGrid(z, this.nightMode ? `rgba(190,210,220,${gridAlpha})` : `rgba(45,65,75,${gridAlpha})`);
             if (this.hover) {
                 if (z !== 0) {
                     const lower = z > 0 ? z - 1 : z + 1, lp = this.tileToWorld(this.hover.x, this.hover.y, lower), hp = this.tileToWorld(this.hover.x, this.hover.y, z);
@@ -1453,7 +1501,7 @@ var PZODT;
             this.onEraseCandidates = () => { };
             this.bind();
         }
-        setTool(t) { this.tool = t; if (t === 'rect' && this.selectedFurniture && (this.catalog.entry(this.selectedFurniture, this.furnitureOrient)?.cells.length ?? 0) !== 1) this.onStatus('Rectangle supports single-tile furniture objects only.'); this.refreshPlacementGhost(); this.onSelection(); }
+        setTool(t) { this.tool = t; if (t === 'rect' && this.selectedFurniture && (this.catalog.entry(this.selectedFurniture, this.furnitureOrient)?.cells.length ?? 0) !== 1) this.onStatus('Rectangle supports 1×1 objects only.'); this.refreshPlacementGhost(); this.onSelection(); }
         setPlacementHeight(height) { this.placementHeight = Math.max(0, Math.min(128, Math.round(Number(height) || 0))); this.refreshPlacementGhost(); this.onSelection(); }
         selectAsset(n) { this.selectedAsset = n; this.selectedFurniture = null; this.selectedContext = null; this.tool = 'pencil'; this.placementHeight = 0; this.refreshPlacementGhost(); this.onSelection(); }
         selectFurniture(d) { this.selectedFurniture = d; this.selectedAsset = null; this.selectedContext = null; this.tool = 'furniture'; this.placementHeight = 0; this.furnitureOrient = d.entries.find(e => e.orient === 'N')?.orient ?? d.entries[0]?.orient ?? 'N'; this.refreshPlacementGhost(); this.onSelection(); }
@@ -1622,7 +1670,7 @@ var PZODT;
                 this.onChanged();
             }
         }
-        rect(a, b) { const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y); if (this.selectedAsset) { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) this.paint({ x, y }, false); } else if (this.selectedFurniture) { const e = this.catalog.entry(this.selectedFurniture, this.furnitureOrient), single = e?.cells.length === 1 ? e.cells[0] : null; if (!single) { this.onStatus('Rectangle supports single-tile furniture objects only.'); return; } const [dx, dy, name] = single, m = this.map(); for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const tx = x + dx, ty = y + dy; if (tx < 0 || ty < 0 || tx >= m.width || ty >= m.height || !this.assetAvailable(name, tx, ty)) continue; const already = m.layers.some(l => l.level === m.currentLevel && l.get(tx, ty, m.width) === name) || m.stack(m.currentLevel, tx, ty).includes(name); if (already) continue; const target = m.findStackLayer('Furniture', m.currentLevel, [{ x: tx, y: ty }], true, true); if (target) this.layerChange(target, tx, ty, name, this.placementHeight); } } else return; this.renderer.request(); this.onChanged(); }
+        rect(a, b) { const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y); if (this.selectedAsset) { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) this.paint({ x, y }, false); } else if (this.selectedFurniture) { const e = this.catalog.entry(this.selectedFurniture, this.furnitureOrient), single = e?.cells.length === 1 ? e.cells[0] : null; if (!single) { this.onStatus('Rectangle supports 1×1 objects only.'); return; } const [dx, dy, name] = single, m = this.map(); for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const tx = x + dx, ty = y + dy; if (tx < 0 || ty < 0 || tx >= m.width || ty >= m.height || !this.assetAvailable(name, tx, ty)) continue; const already = m.layers.some(l => l.level === m.currentLevel && l.get(tx, ty, m.width) === name) || m.stack(m.currentLevel, tx, ty).includes(name); if (already) continue; const target = m.findStackLayer(this.classifier(name), m.currentLevel, [{ x: tx, y: ty }], true, true); if (target) this.layerChange(target, tx, ty, name, this.placementHeight); } } else return; this.renderer.request(); this.onChanged(); }
         candidatesAt(p, includeFiltered = false) { const m = this.map(), items = []; for (let i = m.layers.length - 1; i >= 0; i--) {
             const l = m.layers[i];
             if (l.level !== m.currentLevel)
@@ -1980,7 +2028,47 @@ var PZODT;
         showDebugInfo(item) { this.lastDebugText = JSON.stringify(this.debugPayload(item), null, 2); el('debugInfoContent').textContent = this.lastDebugText; const d = el('debugInfoDialog'); if (!d.open) d.showModal(); }
         async copyDebugInfo() { if (!this.lastDebugText) return; try { await navigator.clipboard.writeText(this.lastDebugText); this.setStatus('Tile debug copied to clipboard.'); } catch { const ta = document.createElement('textarea'); ta.value = this.lastDebugText; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); this.setStatus('Tile debug copied to clipboard.'); } }
         cellHasWall(x, y, z) { const m = this.map; if (x < 0 || y < 0 || x >= m.width || y >= m.height) return false; for (let i = m.layers.length - 1; i >= 0; i--) { const l = m.layers[i]; if (l.level !== z) continue; const n = l.get(x, y, m.width); if (n && this.classify(n) === 'Wall') return true; } return m.stack(z, x, y).some(n => this.classify(n) === 'Wall'); }
-        frontWallCells(p) { const out = new Set(), m = this.map, z = m.currentLevel; if (!p || p.x < 0 || p.y < 0 || p.x >= m.width || p.y >= m.height) return out; const has = (x, y) => this.cellHasWall(x, y, z), addRun = (x, y, dx, dy) => { if (!has(x, y)) return; out.add(`${z}:${x}:${y}`); for (const sign of [-1, 1]) { let gaps = 0; for (let i = 1; i <= 64; i++) { const qx = x + dx * i * sign, qy = y + dy * i * sign; if (qx < 0 || qy < 0 || qx >= m.width || qy >= m.height) break; if (has(qx, qy)) { out.add(`${z}:${qx}:${qy}`); gaps = 0; } else if (++gaps > 1) break; } } }; let fx = -1, fy = -1; for (let x = p.x + 1; x < m.width && x <= p.x + 64; x++) if (has(x, p.y)) { fx = x; break; } for (let y = p.y + 1; y < m.height && y <= p.y + 64; y++) if (has(p.x, y)) { fy = y; break; } if (fx >= 0) addRun(fx, p.y, 0, 1); if (fy >= 0) addRun(p.x, fy, 1, 0); return out; }
+        frontWallCells(p) { const out = new Set(), m = this.map, z = m.currentLevel; if (!p || p.x < 0 || p.y < 0 || p.x >= m.width || p.y >= m.height)
+            return out; const has = (x, y) => this.cellHasWall(x, y, z), rooms = m.roomRegions.filter(r => r.level === z && r.rects.some(q => p.x >= q.x && p.x < q.x + q.w && p.y >= q.y && p.y < q.y + q.h)).sort((a, b) => a.rects.reduce((n, q) => n + q.w * q.h, 0) - b.rects.reduce((n, q) => n + q.w * q.h, 0)), room = rooms[0]; if (room) {
+            const inside = (x, y) => room.rects.some(q => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h), addBoundary = (ix, iy, ox, oy) => { if (has(ox, oy))
+                out.add(`${z}:${ox}:${oy}`);
+            else if (has(ix, iy))
+                out.add(`${z}:${ix}:${iy}`); };
+            for (const q of room.rects) {
+                const rx = q.x + q.w - 1, by = q.y + q.h - 1;
+                for (let y = q.y; y < q.y + q.h; y++)
+                    if (!inside(rx + 1, y))
+                        addBoundary(rx, y, rx + 1, y);
+                for (let x = q.x; x < q.x + q.w; x++)
+                    if (!inside(x, by + 1))
+                        addBoundary(x, by, x, by + 1);
+            }
+            return out;
+        } const addRun = (x, y, dx, dy) => { if (!has(x, y))
+            return; out.add(`${z}:${x}:${y}`); for (const sign of [-1, 1]) {
+            let gaps = 0;
+            for (let i = 1; i <= 64; i++) {
+                const qx = x + dx * i * sign, qy = y + dy * i * sign;
+                if (qx < 0 || qy < 0 || qx >= m.width || qy >= m.height)
+                    break;
+                if (has(qx, qy)) {
+                    out.add(`${z}:${qx}:${qy}`);
+                    gaps = 0;
+                }
+                else if (++gaps > 1)
+                    break;
+            }
+        } }; let fx = -1, fy = -1; for (let x = p.x + 1; x < m.width && x <= p.x + 64; x++)
+            if (has(x, p.y)) {
+                fx = x;
+                break;
+            } for (let y = p.y + 1; y < m.height && y <= p.y + 64; y++)
+            if (has(p.x, y)) {
+                fy = y;
+                break;
+            } if (fx >= 0)
+            addRun(fx, p.y, 0, 1); if (fy >= 0)
+            addRun(p.x, fy, 1, 0); return out; }
         updateDynamicWallsAt(p) { const active = this.dynamicWallToggle.checked && this.editor.tool === 'pencil', cells = active ? this.frontWallCells(p) : new Set(), key = [...cells].sort().join('|'); if (key === this.dynamicWallRoomKey) return; this.dynamicWallRoomKey = key; this.renderer.setDynamicWallCells(cells); }
         showEraseChoices(items, p) { this.pendingEraseCandidates = items; const box = el('eraseChoices'); box.replaceChildren(); el('eraseInfo').textContent = `Choose one or more objects to erase at ${p.x}, ${p.y}, Z ${this.map.currentLevel}.`; const confirm = el('eraseSelectedBtn'); confirm.disabled = true; items.forEach((item, i) => { const row = document.createElement('label'); row.className = 'eraseChoice'; const check = document.createElement('input'); check.type = 'checkbox'; check.value = String(i); check.onchange = () => { confirm.disabled = !box.querySelector('input[type=checkbox]:checked'); }; const cv = document.createElement('canvas'); cv.width = 68; cv.height = 64; const text = document.createElement('span'), title = document.createElement('b'), meta = document.createElement('small'); const match = this.catalog.matchesTile(item.name, false)[0]; title.textContent = match ? this.catalog.displayName(match.def, match.group) : item.name; meta.textContent = match ? `${item.name} · ${item.sourceLabel} · ${item.category}` : `${item.sourceLabel} · ${item.category}`; text.append(title, meta); row.append(check, cv, text); box.appendChild(row); this.drawCandidatePreview(cv, item).catch(() => { }); }); const d = el('eraseDialog'); if (!d.open)
             d.showModal(); }
@@ -2338,6 +2426,19 @@ var PZODT;
                 for (const [k, v] of entries) {
                     if (k.length > 128 || ['__proto__', 'prototype', 'constructor'].includes(k) || typeof v !== 'string' || v.length > 2048)
                         throw new Error('Invalid project property.');
+                }
+            }
+            if (m.roomRegions !== undefined) {
+                if (!Array.isArray(m.roomRegions) || m.roomRegions.length > 20000)
+                    throw new Error('Invalid room geometry.');
+                let roomRects = 0;
+                for (const q of m.roomRegions) {
+                    if (!q || typeof q !== 'object' || Array.isArray(q) || typeof q.id !== 'string' || q.id.length > 128 || typeof q.name !== 'string' || q.name.length > 128 || !Number.isInteger(+q.level) || +q.level < -64 || +q.level > 64 || !Number.isInteger(+q.buildingIndex) || +q.buildingIndex < -1 || +q.buildingIndex > 100000 || !Array.isArray(q.rects) || q.rects.length > 2048)
+                        throw new Error('Invalid room geometry.');
+                    for (const r of q.rects) {
+                        if (!r || typeof r !== 'object' || Array.isArray(r) || !Number.isInteger(+r.x) || !Number.isInteger(+r.y) || !Number.isInteger(+r.w) || !Number.isInteger(+r.h) || +r.w < 1 || +r.h < 1 || +r.x < 0 || +r.y < 0 || +r.x >= w || +r.y >= h || +r.x + +r.w > w || +r.y + +r.h > h || ++roomRects > 100000)
+                            throw new Error('Invalid room geometry.');
+                    }
                 }
             }
             if (m.layers !== undefined && !Array.isArray(m.layers))
