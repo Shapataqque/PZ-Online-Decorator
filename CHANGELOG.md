@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 — 14 October 2026
+
+- Added an interactive world map picker for selecting locations visually, with zoom, pan, and area previews.
+- Added a Getting Started guide for Windows and macOS, with clearer media-folder selection instructions.
+- Improved the media setup workflow with direct folder selection and a highlighted Load World Location button.
+- Added an experimental Dynamic Room Filter that hides front-facing walls, doors, and windows while using Pencil mode.
+- Added a separate Grime view filter and improved object classification across all categories.
+- Reduced grid visibility.
+
 ## 1.2.0 — 10 October 2026
 
 - Moved media-folder selection to the main toolbar and improved local media indexing performance.

@@ -13,8 +13,8 @@ namespace PZODT {
   export function searchMatches(text:string,query:string):boolean{const hay=normalizeSearchText(text),tokens=normalizeSearchText(query).split(' ').filter(Boolean);return tokens.every(t=>hay.includes(t)||(SEARCH_SYNONYMS[t]??[]).some(s=>hay.includes(s)));}
   export type ToolName='pencil'|'eraser'|'rect'|'picker'|'pan'|'furniture';
   export type GraphicsQuality='low'|'medium'|'high';
-  export type ViewCategory='Floor'|'Wall'|'Doors & Windows'|'Furniture'|'Roof'|'Decor / Overlay'|'Roads & Ground'|'Vegetation'|'Fences & Railings'|'Exterior'|'Other';
-  export const VIEW_CATEGORIES:ViewCategory[]=['Floor','Wall','Doors & Windows','Furniture','Roof','Decor / Overlay','Roads & Ground','Vegetation','Fences & Railings','Exterior','Other'];
+  export type ViewCategory='Floor'|'Wall'|'Doors & Windows'|'Furniture'|'Roof'|'Grime'|'Decor / Overlay'|'Roads & Ground'|'Vegetation'|'Fences & Railings'|'Exterior'|'Other';
+  export const VIEW_CATEGORIES:ViewCategory[]=['Floor','Wall','Doors & Windows','Furniture','Roof','Grime','Decor / Overlay','Roads & Ground','Vegetation','Fences & Railings','Exterior','Other'];
   export interface AssetRef{name:string;sourceId:string;tilesetName:string;tileIndex:number;sx:number;sy:number;sw:number;sh:number;frameW:number;frameH:number;offsetX:number;offsetY:number;scale:number;}
   export interface ImageSourceRecord{id:string;label:string;width:number;height:number;blob:Blob;objectUrl:string;}
   export interface FurnitureEntry{orient:string;grime:boolean;cells:Array<[number,number,string]>;}

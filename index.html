@@ -17,12 +17,12 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Project Zomboid Base Planner &amp; Decoration Tool">
   <meta name="twitter:description" content="PZ Decorator is a free, open-source browser-based tool for planning and decorating Project Zomboid bases. Import real buildings from your game files, rearrange furniture, edit floors and walls, and save your designs without launching the game.">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261014-v130">
 </head>
 <body class="mediaNeeded">
 <div data-nosnippet>
 <header class="topbar">
-  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.2.0</button></div>
+  <div class="brand"><b>PZ Online Decoration Tool</b><button id="versionHistoryBtn" class="versionButton" type="button">1.3.0</button></div>
   <button id="newMapBtn">New</button>
   <button id="chooseMediaBtn" class="primary">Choose Media Folder…</button>
   <button id="loadLocationBtn" disabled>Load World Location</button>
@@ -89,6 +89,8 @@
     <div id="orientationButtons" class="orientations"></div>
     <div id="placementHeightControls" class="placementHeights"></div>
     <div class="zLevelCaption">Z level</div><div class="row zLevelRow"><button id="zDownBtn" class="iconbtn zStepBtn" type="button" title="Previous Z level" aria-label="Previous Z level">↓</button><select id="zLevel" aria-label="Z level"></select><button id="zUpBtn" class="iconbtn zStepBtn" type="button" title="Next Z level" aria-label="Next Z level">↑</button><button id="addLevelBtn">+ Level</button></div>
+    <label class="check dynamicWallControl"><input id="dynamicWallToggle" type="checkbox"><span class="dynamicRoomLabel">Dynamic Room Filter <em>(in development)</em></span></label>
+    <div class="dynamicRoomHint">In Pencil mode, hides the front walls, doors, and windows of the room under your cursor.</div>
     <h3>View filters</h3>
     <div id="viewFilters" class="viewFilters"></div>
   </aside>
@@ -105,6 +107,19 @@
   </div>
 
   <div class="dialogBody versionHistory">
+
+    <section>
+      <h4>1.3.0</h4>
+      <small>14 October 2026</small>
+      <ul>
+        <li>Added an interactive world map picker for selecting locations visually, with zoom, pan, and area previews.</li>
+        <li>Added a Getting Started guide for Windows and macOS, with clearer media-folder selection instructions.</li>
+        <li>Improved the media setup workflow with direct folder selection and a highlighted Load World Location button.</li>
+        <li>Added an experimental Dynamic Room Filter that hides front-facing walls, doors, and windows while using Pencil mode.</li>
+        <li>Added a separate Grime view filter and improved object classification across all categories.</li>
+        <li>Reduced grid visibility.</li>
+      </ul>
+    </section>
 
     <section>
       <h4>1.2.0</h4>
@@ -148,10 +163,47 @@
         <div class="hint">Low reduces canvas and GPU sprite-texture resolution for better performance on large imported buildings.</div>
         <label class="check"><input id="performanceStatsToggle" type="checkbox"> Show Performance Stats</label>
       </section>
+      <section><h4>Getting Started</h4>
+        <div class="hint">Windows and macOS steps for finding and selecting the correct game media folder.</div>
+        <div class="row"><button id="tutorialBtn" type="button">Getting Started</button></div>
+      </section>
       <section><h4>Credits</h4><div class="row"><button id="creditsBtn" type="button">Credits</button></div></section>
     </div>
     <div class="dialogActions"><button id="settingsDoneBtn" class="primary" type="button">Done</button></div>
   </form>
+</dialog>
+
+<dialog id="tutorialDialog" class="dialog tutorialDialog">
+  <div class="dialogTitle">
+    <div><b>Getting Started</b><small>Choose your platform, select the correct Project Zomboid media folder, then load and edit a location.</small></div>
+    <button id="tutorialCloseBtn" type="button">×</button>
+  </div>
+  <div class="tutorialTabs" role="tablist" aria-label="Getting Started sections">
+    <button type="button" class="tutorialTab active" data-tutorial-tab="windows" role="tab" aria-selected="true">Windows</button>
+    <button type="button" class="tutorialTab" data-tutorial-tab="macos" role="tab" aria-selected="false">macOS / OS X</button>
+  </div>
+  <div class="dialogBody tutorialBody">
+    <section class="tutorialPanel active" data-tutorial-panel="windows">
+      <ol class="tutorialSteps">
+        <li><b>Find your Project Zomboid installation</b><span>In Steam, go to <strong>Library → Project Zomboid → Manage → Browse local files</strong>.</span></li>
+        <li><b>Choose the <code>media</code> folder</b><span>Click <strong>Choose Media Folder…</strong> below and select the <code>media</code> folder inside your Project Zomboid installation.</span>
+          <button id="tutorialChooseWindowsBtn" class="tutorialChooseMediaBtn" type="button">Choose Media Folder…</button>
+          <span>The usual path is <code>C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\media</code>. <strong>Single-click the media folder, then click Upload</strong>. Do not double-click it, or you will open the folder instead of selecting it.</span></li>
+        <li><b>Index, then load a location</b><span>Wait until media indexing finishes. Then click the blue <strong>Load World Location</strong> button in the top toolbar. Your game files stay on your computer.</span></li>
+      </ol>
+    </section>
+    <section class="tutorialPanel" data-tutorial-panel="macos">
+      <ol class="tutorialSteps">
+        <li><b>Find your Project Zomboid installation</b><span>In Steam, go to <strong>Library → Project Zomboid → Manage → Browse local files</strong>.</span></li>
+        <li><b>Choose the <code>media</code> folder</b><span>Click <strong>Choose Media Folder…</strong> below. In Finder, right-click <code>Project Zomboid.app</code> and select <strong>Show Package Contents</strong>. Open <code>Contents → Java → media</code> and select that <code>media</code> folder—not the <code>.app</code> file.</span>
+          <button id="tutorialChooseMacBtn" class="tutorialChooseMediaBtn" type="button">Choose Media Folder…</button>
+          <span>The folder is usually inside <code>Project Zomboid.app/Contents/Java/media</code>. In the picker, select the <code>media</code> folder and confirm your selection.</span></li>
+        <li><b>Can't browse inside the app?</b><span>In the folder picker, press <strong>Command + Shift + G</strong> <kbd class="tutorialShortcut" aria-label="Command Shift G">⌘ ⇧ G</kbd>, then enter the full path ending in <code>/Project Zomboid.app/Contents/Java/media</code>.</span></li>
+        <li><b>Index, then load a location</b><span>Wait until media indexing finishes. Then click the blue <strong>Load World Location</strong> button in the top toolbar. Your game files stay on your computer.</span></li>
+      </ol>
+    </section>
+  </div>
+  <div class="dialogActions"><button id="tutorialDoneBtn" class="primary" type="button">Done</button></div>
 </dialog>
 
 <dialog id="creditsDialog" class="dialog creditsDialog">
@@ -176,6 +228,7 @@
       <section><h4>1. Location</h4>
         <label>Map dataset<select id="datasetSelect"><option value="">Choose media folder first</option></select></label>
         <div class="coords2"><label>World X<input id="worldX" type="number" value="6112"></label><label>World Y<input id="worldY" type="number" value="5210"></label></div>
+        <div class="mapChoiceRow"><button id="chooseFromMapBtn" type="button" disabled>Choose from Map…</button><span id="mapChoiceHint" class="hint">Choose and index the media folder first.</span></div>
       </section>
       <section><h4>2. Load</h4>
         <label>Mode<select id="loadMode"><option value="area" selected>Area around coordinate</option><option value="building">Building at coordinate</option><option value="cell">Entire map cell</option></select></label>
@@ -186,6 +239,21 @@
     </div>
     <div class="dialogActions"><button id="loadBtn" type="button" class="primary" disabled>Load Location</button></div>
   </form>
+</dialog>
+
+<dialog id="worldMapDialog" class="dialog worldMapDialog">
+  <div class="dialogTitle">
+    <div><b>Choose Location from Map</b><small>Local Project Zomboid worldmap.xml overview</small></div>
+    <button id="worldMapCloseBtn" type="button">×</button>
+  </div>
+  <div class="dialogBody worldMapBody">
+    <div class="worldMapHelp">Drag to pan · Mouse wheel to zoom · Click to choose World X / Y.</div>
+    <div class="worldMapViewport"><canvas id="worldMapCanvas" width="900" height="560" aria-label="Project Zomboid world map location picker"></canvas></div>
+    <div class="worldMapMeta"><span id="worldMapHover">Hover —</span><span id="worldMapSelection">Selected —</span></div>
+    <div class="worldMapLegend"><span><i class="wmWater"></i>Water</span><span><i class="wmRoad"></i>Roads</span><span><i class="wmBuilding"></i>Buildings</span><span><i class="wmRail"></i>Railways</span></div>
+    <div id="worldMapStatus" class="hint">The map is rendered from the selected local game files and is never uploaded.</div>
+  </div>
+  <div class="dialogActions"><button id="worldMapCancelBtn" type="button">Cancel</button><button id="worldMapUseBtn" class="primary" type="button">Use Location</button></div>
 </dialog>
 
 <dialog id="pickerDialog" class="dialog pickerDialog">
@@ -199,6 +267,7 @@
   </div>
   <div class="dialogActions"><button id="pickerCancelBtn" type="button">Cancel</button></div>
 </dialog>
+
 
 <dialog id="eraseDialog" class="dialog eraseDialog">
   <div class="dialogTitle">
@@ -241,6 +310,6 @@
 <input id="mediaInput" type="file" webkitdirectory multiple hidden>
 <input id="jsonInput" type="file" accept=".json,application/json" hidden>
 <script src="config/release-config.js"></script>
-<script src="dist/app.js?v=20261011-2"></script>
+<script src="dist/app.js?v=20261014-v130"></script>
 </body>
 </html>

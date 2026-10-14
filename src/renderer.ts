@@ -49,6 +49,7 @@ namespace PZODT {
     textures=new Map<string,Promise<GLTex>>();resolved=new Map<string,GLTex>();quality:GraphicsQuality='high';nightMode=true;raf=0;
     hover:{x:number;y:number}|null=null;
     private placementGhost:PlacementGhostCell[]=[];
+    private dynamicWallCells=new Set<string>();
     private ghostBitmaps=new Map<string,ImageBitmap>();
     private chunkCache=new Map<string,ChunkCache>();
     private dirtyChunks=new Set<string>();
@@ -85,6 +86,7 @@ namespace PZODT {
     setNightMode(enabled:boolean){this.nightMode=enabled;this.request();}
     setPlacementGhost(cells:PlacementGhostCell[]){this.placementGhost=cells;const m=this.map(),ox=Number(m.properties['pzodt.worldOriginX'])||0,oy=Number(m.properties['pzodt.worldOriginY'])||0;for(const c of cells){const a=this.assets.resolveAsset(c.name,ox+c.x,oy+c.y);if(!a||this.ghostBitmaps.has(a.sourceId))continue;this.assets.bitmap(a.sourceId).then(b=>{this.ghostBitmaps.set(a.sourceId,b);this.request();}).catch(()=>{});}this.request();}
     clearPlacementGhost(){if(!this.placementGhost.length)return;this.placementGhost=[];this.request();}
+    setDynamicWallCells(cells:Set<string>){let same=cells.size===this.dynamicWallCells.size;if(same)for(const k of cells)if(!this.dynamicWallCells.has(k)){same=false;break;}if(same)return;const changed=new Set<string>([...this.dynamicWallCells,...cells]);this.dynamicWallCells=new Set(cells);for(const k of changed){const [z,x,y]=k.split(':').map(Number);if(!Number.isFinite(z)||!Number.isFinite(x)||!Number.isFinite(y))continue;this.dirtyChunks.add(this.chunkKey(z,Math.floor(x/SPATIAL_CHUNK_SIZE),Math.floor(y/SPATIAL_CHUNK_SIZE)));}this.request();}
     resetTextures(){this.textureEpoch++;for(const t of this.resolved.values())this.gl.deleteTexture(t.tex);this.textures.clear();this.resolved.clear();this.request();}
     assetsChanged(){this.ghostBitmaps.clear();this.resetTextures();this.invalidateAllGeometry();}
     resize(){const r=this.canvas.getBoundingClientRect(),q=this.ratio(),w=Math.max(1,Math.round(r.width*q)),h=Math.max(1,Math.round(r.height*q));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.overlay.width=w;this.overlay.height=h;}this.gl.viewport(0,0,w,h);}
@@ -106,7 +108,7 @@ namespace PZODT {
     invalidateCell(z:number,x:number,y:number){const cx=Math.floor(x/SPATIAL_CHUNK_SIZE),cy=Math.floor(y/SPATIAL_CHUNK_SIZE),k=this.chunkKey(z,cx,cy);this.dirtyChunks.add(k);this.request();}
     invalidateChanges(changes:EditChange[]){for(const ch of changes)this.invalidateCell(ch.kind==='base'?ch.z:(this.map().layers.find(l=>l.id===ch.layerId)?.level??this.map().currentLevel),ch.x,ch.y);}
     invalidateAllGeometry(){for(const c of this.chunkCache.values())if(c.buffer)this.gl.deleteBuffer(c.buffer);this.chunkCache.clear();this.dirtyChunks.clear();this.cachedBatchCount=0;this.request();}
-    mapReplaced(){this.invalidateAllGeometry();}
+    mapReplaced(){this.dynamicWallCells.clear();this.invalidateAllGeometry();}
 
     private tileBounds(z:number){const m=this.map(),q=this.ratio(),pts=[[0,0],[this.canvas.width/q,0],[0,this.canvas.height/q],[this.canvas.width/q,this.canvas.height/q]].map(([x,y])=>this.screenToTile(x,y,z)),xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);return{minX:Math.max(0,Math.floor(Math.min(...xs))-2),maxX:Math.min(m.width-1,Math.ceil(Math.max(...xs))+2),minY:Math.max(0,Math.floor(Math.min(...ys))-2),maxY:Math.min(m.height-1,Math.ceil(Math.max(...ys))+2)};}
     private visibleChunkCoords(){const m=this.map(),cw=Math.ceil(m.width/SPATIAL_CHUNK_SIZE),ch=Math.ceil(m.height/SPATIAL_CHUNK_SIZE),out:Array<{z:number;cx:number;cy:number;key:string}>=[];for(const z of m.levels()){if(z>m.currentLevel)continue;const b=this.tileBounds(z),cx0=Math.max(0,Math.floor(b.minX/SPATIAL_CHUNK_SIZE)-1),cy0=Math.max(0,Math.floor(b.minY/SPATIAL_CHUNK_SIZE)-1),cx1=Math.min(cw-1,Math.floor(b.maxX/SPATIAL_CHUNK_SIZE)+1),cy1=Math.min(ch-1,Math.floor(b.maxY/SPATIAL_CHUNK_SIZE)+1);for(let cx=cx0;cx<=cx1;cx++)for(let cy=cy0;cy<=cy1;cy++)out.push({z,cx,cy,key:this.chunkKey(z,cx,cy)});}return out;}
@@ -125,12 +127,12 @@ namespace PZODT {
       const x0=cx*SPATIAL_CHUNK_SIZE,y0=cy*SPATIAL_CHUNK_SIZE,x1=Math.min(m.width,x0+SPATIAL_CHUNK_SIZE),y1=Math.min(m.height,y0+SPATIAL_CHUNK_SIZE),cmds:BuildCommand[]=[];
       const base=m.baseStacks.get(z);
       for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
-        const k=m.key(x,y),stack=base?.get(k);if(stack)for(let i=0;i<stack.length;i++){const n=stack[i],a=this.assets.resolveAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,i),diag:x+y,ownerId:'base',category:this.classify(n),lift:0,height:0});}
+        const k=m.key(x,y),stack=base?.get(k);if(stack)for(let i=0;i<stack.length;i++){const n=stack[i],category=this.classify(n);if((category==='Wall'||category==='Doors & Windows')&&this.dynamicWallCells.has(`${z}:${x}:${y}`))continue;const a=this.assets.resolveAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,i),diag:x+y,ownerId:'base',category,lift:0,height:0});}
       }
       for(let li=0;li<m.layers.length;li++){
         const l=m.layers[li];if(l.level!==z)continue;
         for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
-          const n=l.get(x,y,m.width);if(!n)continue;const a=this.assets.resolveAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,1000+li),diag:x+y,ownerId:l.id,category:this.classify(n),lift:0,height:l.placementHeight(x,y,m.width)});
+          const n=l.get(x,y,m.width);if(!n)continue;const category=this.classify(n);if((category==='Wall'||category==='Doors & Windows')&&this.dynamicWallCells.has(`${z}:${x}:${y}`))continue;const a=this.assets.resolveAsset(n,originX+x,originY+y);if(!a)continue;cmds.push({a,x,y,order:this.order(z,x,y,1000+li),diag:x+y,ownerId:l.id,category,lift:0,height:l.placementHeight(x,y,m.width)});
         }
       }
       cmds.sort((a,b)=>a.order-b.order);
@@ -169,7 +171,7 @@ namespace PZODT {
       const drawGrid=(level:number,style:string,dashed=false)=>{c.strokeStyle=style;c.lineWidth=(level===z&&z!==0?1.35:1)/this.camera.zoom;c.setLineDash(dashed?[5/this.camera.zoom,5/this.camera.zoom]:[]);c.beginPath();for(let y=b.minY;y<=b.maxY+1;y++){const a=this.tileToWorld(b.minX,y,level),d=this.tileToWorld(b.maxX+1,y,level);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}for(let x=b.minX;x<=b.maxX+1;x++){const a=this.tileToWorld(x,b.minY,level),d=this.tileToWorld(x,b.maxY+1,level);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}c.stroke();c.setLineDash([]);};
       c.clearRect(0,0,this.overlay.width,this.overlay.height);c.save();c.setTransform(this.camera.zoom,0,0,this.camera.zoom,this.camera.panX,this.camera.panY);
       if(z!==0){const lower=z>0?z-1:z+1;drawGrid(lower,this.nightMode?'rgba(155,175,185,.12)':'rgba(70,90,100,.13)',true);const corners:[[number,number],[number,number],[number,number],[number,number]]=[[b.minX,b.minY],[b.maxX+1,b.minY],[b.minX,b.maxY+1],[b.maxX+1,b.maxY+1]];c.strokeStyle=this.nightMode?'rgba(80,190,255,.25)':'rgba(25,125,185,.28)';c.lineWidth=1/this.camera.zoom;c.setLineDash([4/this.camera.zoom,4/this.camera.zoom]);c.beginPath();for(const [x,y] of corners){const a=this.tileToWorld(x,y,lower),d=this.tileToWorld(x,y,z);c.moveTo(a.x,a.y);c.lineTo(d.x,d.y);}c.stroke();c.setLineDash([]);}
-      drawGrid(z,this.nightMode?'rgba(190,210,220,.20)':'rgba(45,65,75,.20)');
+      const gridAlpha=Math.max(.04,Math.min(.105,.045+this.camera.zoom*.04));drawGrid(z,this.nightMode?`rgba(190,210,220,${gridAlpha})`:`rgba(45,65,75,${gridAlpha})`);
       if(this.hover){if(z!==0){const lower=z>0?z-1:z+1,lp=this.tileToWorld(this.hover.x,this.hover.y,lower),hp=this.tileToWorld(this.hover.x,this.hover.y,z);c.strokeStyle=this.nightMode?'rgba(95,200,255,.55)':'rgba(20,125,190,.60)';c.lineWidth=1.5/this.camera.zoom;c.setLineDash([4/this.camera.zoom,4/this.camera.zoom]);c.beginPath();c.moveTo(lp.x,lp.y+th/2);c.lineTo(hp.x,hp.y+th/2);c.stroke();c.setLineDash([]);c.strokeStyle=this.nightMode?'rgba(145,195,220,.32)':'rgba(40,100,130,.34)';diamond(this.hover.x,this.hover.y,lower);c.stroke();}
         const p=this.tileToWorld(this.hover.x,this.hover.y,z);c.fillStyle='rgba(60,165,255,.14)';c.strokeStyle='rgba(80,190,255,.9)';diamond(this.hover.x,this.hover.y,z);c.fill();c.stroke();}
       c.imageSmoothingEnabled=false;for(const g of this.placementGhost){const a=this.assets.resolveAsset(g.name,originX+g.x,originY+g.y);if(!a)continue;const bm=this.ghostBitmaps.get(a.sourceId);if(!bm)continue;const s=displayScale/(a.scale||1),fw=a.frameW*s,fh=a.frameH*s,p=this.tileToWorld(g.x,g.y,g.z),lift=this.placementLift(a,g.height??0)*displayScale,left=p.x-fw/2+a.offsetX*s,top=p.y+th-fh+a.offsetY*s-lift;c.globalAlpha=g.valid?.46:.22;c.drawImage(bm,a.sx,a.sy,a.sw,a.sh,left,top,a.sw*s,a.sh*s);if(!g.valid){c.globalAlpha=.9;c.strokeStyle='rgba(255,95,85,.95)';c.lineWidth=2/this.camera.zoom;diamond(g.x,g.y,g.z);c.stroke();}}c.globalAlpha=1;c.restore();

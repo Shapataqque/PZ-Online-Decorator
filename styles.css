@@ -106,3 +106,37 @@ body.lightMode .tab.active,body.lightMode [data-tool].active,body.lightMode .ori
 
 /* v1.1.12 selective erase */
 .eraseDialog{width:min(680px,92vw)}.eraseChoices{display:flex;flex-direction:column;gap:6px;margin-top:8px}.eraseChoice{display:grid!important;grid-template-columns:24px 68px minmax(0,1fr);gap:9px;align-items:center;padding:7px;border:1px solid #34414a;border-radius:5px;background:#22292f;cursor:pointer}.eraseChoice:hover{background:#2c3740;border-color:#4a90bb}.eraseChoice input{margin:0;justify-self:center}.eraseChoice canvas{width:68px;height:64px;background:#14191d;border:1px solid #303941;border-radius:4px;image-rendering:pixelated}.eraseChoice span,.eraseChoice b,.eraseChoice small{display:block;min-width:0}.eraseChoice b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.eraseChoice small{margin-top:3px;color:#8fa1ad;font-size:10px;word-break:break-word}.eraseDialog .dialogActions{gap:7px}body.lightMode .eraseChoice{background:#fff;border-color:#c3cdd5}body.lightMode .eraseChoice:hover{background:#e6f1f8;border-color:#4a98c8}body.lightMode .eraseChoice canvas{background:#f5f7f8;border-color:#c5cfd6}body.lightMode .eraseChoice small{color:#60717d}
+
+.tutorialDialog{width:min(820px,94vw)}
+.tutorialTabs{display:flex;gap:6px;padding:10px 16px 0;background:#171d22}
+.tutorialTab{flex:1;padding:8px 10px}
+.tutorialTab.active{background:#185b8d;border-color:#318aca}
+.tutorialBody{padding-top:8px}
+.tutorialPanel{display:none;border-bottom:0!important}
+.tutorialPanel.active{display:block}
+.tutorialSteps{margin:0;padding-left:22px}
+.tutorialSteps li{margin:0 0 14px;padding-left:4px}
+.tutorialSteps b,.tutorialSteps span{display:block}
+.tutorialSteps span{margin-top:4px;color:#a9b5be}
+.tutorialSteps code{font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;background:#10161b;border:1px solid #34414b;border-radius:4px;padding:1px 4px;word-break:break-all}
+body.lightMode .tutorialTabs{background:#f7f9fa}
+body.lightMode .tutorialTab.active{color:#fff;background:#176a9d;border-color:#176a9d}
+body.lightMode .tutorialSteps span{color:#536671}
+body.lightMode .tutorialSteps code{background:#fff;border-color:#c7d1d8}
+@media(max-width:700px){.tutorialTabs{flex-direction:column}.tutorialTab{width:100%}}
+
+.mapChoiceRow{display:flex;align-items:center;gap:9px;margin-top:2px}.mapChoiceRow .hint{margin:0;flex:1}.worldMapDialog{width:min(1000px,96vw)}.worldMapBody{padding-top:10px}.worldMapHelp{margin:0 0 8px;color:#9eacb6;font-size:11px}.worldMapViewport{border:1px solid #39464f;border-radius:6px;overflow:hidden;background:#11171a}.worldMapViewport canvas{display:block;width:100%;height:clamp(360px,62vh,620px);touch-action:none;cursor:crosshair}.worldMapMeta{display:flex;justify-content:space-between;gap:12px;margin-top:7px;font:12px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;color:#c0ccd4}.worldMapLegend{display:flex;flex-wrap:wrap;gap:13px;margin-top:7px;color:#9eacb6;font-size:11px}.worldMapLegend span{display:flex;align-items:center;gap:5px}.worldMapLegend i{display:inline-block;width:12px;height:8px;border:1px solid #ffffff33;border-radius:2px}.worldMapLegend .wmWater{background:#315d78}.worldMapLegend .wmRoad{background:#555d62}.worldMapLegend .wmBuilding{background:#8a8175}.worldMapLegend .wmRail{background:#9c8f6b}.worldMapDialog .dialogActions{gap:7px}body.lightMode .worldMapHelp,body.lightMode .worldMapLegend{color:#60717d}body.lightMode .worldMapViewport{border-color:#b8c4cc;background:#e8ece8}body.lightMode .worldMapMeta{color:#40535f}@media(max-width:700px){.mapChoiceRow{align-items:stretch;flex-direction:column}.worldMapMeta{flex-direction:column;gap:3px}.worldMapViewport canvas{height:52vh}}
+
+
+.dynamicWallControl{display:flex;align-items:center;gap:5px;margin:12px 0 4px}.dynamicWallControl input{flex:0 0 auto}.dynamicWallControl span{color:#7f909c;font-size:10px}body.lightMode .dynamicWallControl span{color:#71828d}
+
+.tutorialChooseMediaBtn{display:inline-block;margin:9px 0 8px;padding:8px 12px;background:#176a9d;border-color:#319edc;color:#fff;font-weight:600}
+.tutorialChooseMediaBtn:hover{background:#1b80b8}
+.tutorialShortcut{display:inline-block;vertical-align:middle;white-space:nowrap;margin:0 3px;padding:4px 9px;border:1px solid #4988af;border-radius:5px;background:#203b4e;color:#edf6fc;font:700 17px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI Symbol","Segoe UI",sans-serif;letter-spacing:.045em}
+.dynamicWallControl{margin-bottom:3px}
+.dynamicWallControl .dynamicRoomLabel{color:#b3c0ca;font-size:11px}
+.dynamicWallControl .dynamicRoomLabel em{font-size:10px;font-style:normal;color:#91a2ae}
+.dynamicRoomHint{font-size:10px;color:#91a2ae;margin:0 0 10px 22px;line-height:1.35}
+body.lightMode .tutorialShortcut{color:#224256;background:#e6f2fa;border-color:#95bcd5}
+body.lightMode .dynamicWallControl .dynamicRoomLabel{color:#536671}
+body.lightMode .dynamicWallControl .dynamicRoomLabel em,body.lightMode .dynamicRoomHint{color:#6b7e8a}
